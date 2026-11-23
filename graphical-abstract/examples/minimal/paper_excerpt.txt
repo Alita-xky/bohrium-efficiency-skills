@@ -1,0 +1,9 @@
+SYNTHETIC EXAMPLE MATERIAL (not a real paper; for demonstrating the skill interface only).
+
+Abstract. Drought stress reduces wheat grain yield, but how root hydraulic signalling contributes is unclear.
+
+Methods. We grew wheat in 24 pots under well-watered and drought regimes and measured root abscisic acid (ABA) and stomatal conductance daily for 14 days.
+
+Results. Drought raised root ABA from 12 to 41 ng/g. ABA inhibits stomatal opening; stomatal conductance fell by 38%. Grain yield decreased from 5.2 to 3.9 t/ha.
+
+Conclusion. Root-derived ABA links soil drying to stomatal closure and yield loss under drought.

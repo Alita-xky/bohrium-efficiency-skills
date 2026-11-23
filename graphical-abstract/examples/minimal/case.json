@@ -1,0 +1,5 @@
+{"case_id": "example-synthetic-001", "task": "Make a single-page graphical abstract from paper_excerpt.txt and yield.csv.",
+ "materials": ["paper_excerpt.txt", "yield.csv"],
+ "output_contract": {"editable_source": "path to layered SVG", "exports": "PNG/PDF paths with size and dpi",
+   "element_sources": "table element -> source locator", "checks": "layout/legend/number checks",
+   "uncertainty": "what could not be verified", "status": "complete|partial|failed"}}
