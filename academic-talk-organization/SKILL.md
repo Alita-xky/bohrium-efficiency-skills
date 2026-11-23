@@ -28,9 +28,14 @@ output_contract field names. The prepare output gives the paper map (sections, f
 crops, key sentences), template layouts and tools.
 
 ## 2. Read the evidence (2–4 calls)
-Key sentences from `/app/work/paper_map.json`, targeted `grep -n` in `/app/work/materials/*.txt`, one look at
-`/app/work/figs/fig_candidates.png`. Collect what this audience needs: the problem in their terms, the idea,
-2–3 results with numbers, limits, and answers to their likely doubts.
+- `python3 -c "import json;d=json.load(open('/app/work/paper_map.json'));[print(k['loc'],k['role'],k['text'][:230]) for k in d['key_sentences']];[print(f['ref'],f['page'],f.get('crop_png'),f.get('table_rows')) for f in d['figures_tables']]"`
+- `python3 $SKILL/scripts/paper_map.py find "parallel" "limitation" "Table 2" …` → verbatim sentences with `[pN:M]`
+  (one pattern per likely question of this audience).
+- One look at `/app/work/figs/fig_candidates.png` (crops of every Fig./Table; equations are in `paper_map.json`
+  → `equations`, crops `figs/eq*.png`).
+Collect what this audience needs: the problem in their terms, the idea, 2–3 results with numbers, limits, and
+answers to their likely doubts. If the paper states one number twice with different values (abstract vs text),
+report both (Q&A + uncertainty) — never pick silently.
 
 ## 3. `/app/work/facts.json` — the evidence table (1 call)
 Rows `{"id","kind","text","source":{"file","loc","ref","quote"}}` with **verbatim** quotes (≤ 30 words) and
@@ -48,6 +53,8 @@ Spec (template `$SKILL/templates/spec_template.json`, fields `references/formats
 - titles are claims; ≤ 5 short bullets; figures/tables are the paper's own (`ref` = its numbering, `kind`
   data|schematic); backup slides have `role:"backup"` and are referenced from `qa`;
 - wording follows evidence strength ("reduces … (Table 1)" vs "the authors suggest …").
+- tables from `table_rows` (check against the crop), equations as their crop (`"ref":"Eq. N"`), symbols with
+  `^`/`_` markup (`O(n^2 · d)`, `d_k`, `2.3 · 10^19`); field details in `references/formats.md`.
 
 ## 5. Build, check, render, look (2–4 calls)
 ```bash
@@ -76,7 +83,8 @@ plan, Q&A, timeline, deck, evidence map, render/version records, uncertainty, st
 | slot too long for the material | add a worked example or the method figure detail from the paper — not invented content |
 | question the paper cannot answer | answer point "not reported in the paper"; no speculation as fact |
 | paper lacks a figure for a claim | use its table or text quote; mark evidence_strength accordingly |
-| figure low resolution / formula as image | higher-dpi crop (`paper_map.py crop --dpi 300`); formulas as image crops |
+| figure low resolution / formula as image | higher-dpi crop (`paper_map.py crop --dpi 300`); formulas: `equations[]` crops, never retyped from the text layer |
+| paper contradicts itself (e.g. abstract 41.8 vs text 41.0) | use the table value on the slide, show both on a backup slide / Q&A, list in uncertainty |
 | template conflicts with content (no two-column layout etc.) | builder falls back and records it; keep template fonts/colours |
 | font missing / export fails / timeout | see render_report; deliver pptx + partial status; never fake previews |
 

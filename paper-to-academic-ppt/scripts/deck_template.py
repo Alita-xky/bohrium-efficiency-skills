@@ -17,7 +17,7 @@
            content preservation: every text paragraph, number, picture (by hash) and note of A found in B
 Rebuild route (true master/layout inheritance): to_spec -> deck_build --template T -> audit -> render -> preserve.
 """
-import argparse, collections, hashlib, json, os, re, shutil, sys, tempfile
+import argparse, csv, collections, hashlib, json, os, re, shutil, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pptkit as K  # noqa: E402
@@ -125,7 +125,7 @@ def cmd_inspect(a):
         print("master text sizes (pt): %s" % json.dumps(rep["masters"][0]["text_sizes_pt"]))
     for l in rep["layouts"]:
         print("  layout %d '%s' (%s) %s: %s" % (l["index"], l["name"], l["type"], l["kinds"],
-                                                ", ".join("%s/%d" % (p["type"], p["idx"]) for p in l["placeholders"])))
+                                                ", ".join("%s/%d%s" % (p["type"], p["idx"], " (ZERO-SIZE box in layout: repaired on build)" if p.get("fixed_box") else "") for p in l["placeholders"])))
     print("mapping: " + json.dumps({k: v["layout"] for k, v in rep["layout_mapping"].items()}, ensure_ascii=False))
     if rep["gaps"]:
         print("gaps: " + "; ".join(rep["gaps"]))
@@ -429,9 +429,12 @@ def cmd_to_spec(a):
                 fn = os.path.join(media, "s%02d_%s%s" % (s["index"], h, os.path.splitext(sh["image_part"])[1]))
                 with open(fn, "wb") as f:
                     f.write(data)
-                figs.append(dict(image=fn, ref=sh.get("descr") or sh["name"], caption="", kind="carried_over", sha256_10=h))
+                descr = sh.get("descr") or ""
+                if re.search(r"\.(png|jpe?g|gif|bmp|tiff?|emf|wmf|svg)$", descr, re.I) or not descr:
+                    descr = ""  # a file name or nothing is not a figure reference
+                figs.append(dict(image=fn, ref=descr, caption="", kind="carried_over", sha256_10=h, origin="picture '%s'" % sh["name"]))
             elif sh["kind"] == "table":
-                tables.append(dict(rows=sh["table"], ref=sh["name"]))
+                tables.append(dict(rows=sh["table"], ref="", origin="table '%s'" % sh["name"]))  # shape names are not paper numbers
             elif sh["kind"] in ("chart", "graphic", "group") or (sh["kind"] == "shape" and not sh.get("text", "").strip()):
                 if sh["kind"] == "shape":
                     continue
@@ -449,13 +452,29 @@ def cmd_to_spec(a):
                         except Exception:
                             crop = None
                 if crop:
-                    figs.append(dict(image=crop, ref=sh["name"], caption="", kind="raster_of_%s" % sh["kind"]))
+                    fg = dict(image=crop, ref="", caption="", kind="raster_of_%s" % sh["kind"], origin="%s '%s'" % (sh["kind"], sh["name"]))
+                    if sh.get("chart_part"):
+                        try:
+                            rows, ckind = K.chart_table(pkg, sh["chart_part"])
+                            csvp = os.path.join(media, "s%02d_%s_data.csv" % (s["index"], re.sub(r"\W", "_", sh["name"])))
+                            with open(csvp, "w", newline="", encoding="utf-8") as f:
+                                csv.writer(f).writerows(rows)
+                            fg.update(data_csv=csvp, chart_type=ckind,
+                                      note="native %s shown as an image of the original render; its data are in data_csv "
+                                           "(re-create it as an editable chart in PowerPoint if needed)" % ckind)
+                            dropped.append(dict(slide=s["index"], shape=sh["name"], kind="chart (editability)",
+                                                reason="carried as image; data exported to %s" % os.path.basename(csvp)))
+                        except Exception as e:
+                            fg["note"] = "chart data not readable: %r" % (e,)
+                    figs.append(fg)
                 else:
                     dropped.append(dict(slide=s["index"], shape=sh["name"], kind=sh["kind"],
                                         reason="native %s cannot be rebuilt; pass --previews to carry it as an image" % sh["kind"]))
-            elif re.match(r"^Caption \d+", sh["name"]) and sh.get("text", "").strip():
-                captions.append(sh["text"].strip())
-            elif sh["name"].startswith("Source Note") and sh.get("text", "").strip():
+            elif sh.get("text", "").strip() and (re.match(r"^Caption \d+", sh["name"]) or (sh["kind"] == "textbox" and re.match(
+                    r"^\s*(Fig(?:ure)?\.?|Table|Tab\.|图|表)\s*\d+", sh["text"]))):
+                captions.append(sh["text"].strip())  # "Figure 1: ..." text box under a picture = its caption
+            elif sh.get("text", "").strip() and (sh["name"].startswith("Source Note") or (sh["kind"] == "textbox" and re.match(
+                    r"^\s*(来源|数据来源|出处|Source|Sources|Data source)\s*[:：]", sh["text"]))):
                 sp["source_note"] = sh["text"].strip()
             elif sh.get("text", "").strip():
                 extra.append(sh)
@@ -484,6 +503,9 @@ def cmd_to_spec(a):
             v["caption_text"] = cap
             m = re.match(r"^((?:Fig(?:ure)?\.?|Table|Tab\.|图|表)\s*\d+)", cap)
             v["ref"] = m.group(1) if m else v.get("ref")
+        m = re.search(r"((?:Fig(?:ure)?\.?|Table|Tab\.|图|表)\s*\d+)", sp.get("source_note", ""))
+        if m and len(visuals) == 1 and not visuals[0].get("ref"):
+            visuals[0]["ref"] = m.group(1)  # "来源：Table 2（论文第 8 页）" names the visual
         for cap in captions[len(visuals):]:
             sp.setdefault("bullets", []).append(dict(text=cap, level=0, origin="caption text box"))
         if s["notes"].strip():
@@ -491,6 +513,7 @@ def cmd_to_spec(a):
         slides.append(sp)
     spec = dict(meta=dict(title=inv["slides"][0]["title"] if inv["slides"] else "", mode="template",
                           source_deck=os.path.abspath(a.pptx), source_sha256=K.sha256(a.pptx),
+                          math_markup=False,  # carried text stays literal ("d_k" is not turned into a subscript)
                           note="generated by deck_template.py to_spec: text copied exactly; set roles/layouts, then deck_build --template"),
                 footer=dict(text=max(set(footers), key=footers.count) if footers else "", slide_numbers=True),
                 slides=slides, not_carried_over=dropped)
@@ -509,7 +532,7 @@ def deck_content(path):
     paras, notes, nums, imgs = [], [], [], set()
     for s in inv["slides"]:
         for sh in s["shapes"]:
-            if sh.get("ph_type") in ("sldNum", "dt") or sh["name"].startswith(("Slide Number", "Source Note")):
+            if sh.get("ph_type") in ("sldNum", "dt") or sh["name"].startswith("Slide Number"):
                 continue
             for line in (sh.get("text") or "").split("\n"):
                 t = re.sub(r"\s+", " ", line).strip()

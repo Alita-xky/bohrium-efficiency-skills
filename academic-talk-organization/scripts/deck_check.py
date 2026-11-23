@@ -65,11 +65,29 @@ def to_float(tok):
     return round(v * (10 ** int(e)) if e else v, 6)
 
 
+SCI_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s?[·×x*]\s?10\s?(?:\^\{?|\*\*)([-−]?\d{1,3})\}?")
+SCI_MAT_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s?[·×]\s?10\^?([-−]?\d{1,3})(?![\d.])")  # PDF text: "2.3 · 1019"
+
+
+def sci_value(m):
+    try:
+        return float("%se%d" % (m.group(1), int(m.group(2).replace("−", "-"))))
+    except (ValueError, OverflowError):
+        return None
+
+
 def numbers_in(text):
-    t = REF_RE.sub(" ", str(text))
+    """numbers on a slide; '2.3 · 10^19' / '2.3×10^{19}' count as ONE value (2.3e19), not 2.3, 10 and 19"""
+    out = []
+    def _sci(m):
+        v = sci_value(m)
+        if v is not None:
+            out.append((m.group(0).strip(), v))
+        return " "
+    t = SCI_RE.sub(_sci, str(text))
+    t = REF_RE.sub(" ", t)
     t = re.sub(r"(^|\s)\(?\d{1,2}\)\s", " ", t)  # list markers (1) 2)
     t = re.sub(r"\*\*", "", t)
-    out = []
     for m in NUM_RE.finditer(t):
         v = to_float(m.group(0))
         if v is not None:
@@ -239,6 +257,10 @@ def main():
             if v is not None:
                 all_nums.setdefault(v, []).append("%s:%s" % (f, t))
                 all_nums.setdefault(abs(v), []).append("%s:%s" % (f, t))
+        for m in list(SCI_MAT_RE.finditer(x)) + list(SCI_RE.finditer(x)):  # scientific notation, superscript flattened
+            v = sci_value(m)
+            if v is not None:
+                all_nums.setdefault(v, []).append("%s:%s" % (f, t))
     captions = {}
     pm = None
     if a.paper_map and os.path.exists(a.paper_map):
@@ -338,7 +360,10 @@ def main():
                 if where and all(w.startswith(META_FILES) for w in where) and v not in derived:
                     add("warn", "number", "number %s (%s) appears only in case.json/task.md, not in the paper/data" % (tok, what), i, what)
                 num_rows.append(dict(value=tok, item=what, found_at=(where or [])[:3], derived=v in derived and not where))
-                if not ok:
+                if not ok and a.mode == "template":  # carried text must not be changed: report, do not "fix"
+                    add("warn", "number", "number %s (%s) from the source deck is not in the paper/data: keep it, list it "
+                        "in uncertainty as unverified (or as a conflict if the paper gives another value)" % (tok, what), i, what)
+                elif not ok:
                     add("fail", "number", "number %s (%s) is not in any material; use the paper's value or declare it in "
                         "slide.derived with formula" % (tok, what), i, what)
         # figure / table references
@@ -394,8 +419,8 @@ def main():
         notes = str(sl.get("notes", "")).strip()
         if role not in ("title", "section") or a.mode == "talk":
             if not notes:
-                add("fail" if role not in ("section", "backup", "appendix", "references") else "warn", "notes",
-                    "no speaker notes", i)
+                add("fail" if role not in ("section", "backup", "appendix", "references") and a.mode not in ("template", "edit") else "warn",
+                    "notes", "no speaker notes" + (" (source deck had none; add only if the task asks)" if a.mode == "template" else ""), i)
             elif len(notes) < 30:
                 add("warn", "notes", "very short notes (%d chars)" % len(notes), i)
             else:

@@ -25,7 +25,7 @@ fonts replaced and pictures lost after PDF export. This Skill makes template app
 | `SKILL.md` | the 6-step procedure (budget-aware) + exception table |
 | `scripts/deck_prepare.py` | one-call setup: classify inputs, extract text, paper map, template/deck inventory, tools, fonts |
 | `scripts/extract_materials.py` | text extraction with `[pN:M]` locators (pdftotext → PyMuPDF → pdfplumber → OCR), tables, page previews |
-| `scripts/paper_map.py` | sections, captions, figure/table crop candidates (+ overview image), key sentences; `crop` sub-command |
+| `scripts/paper_map.py` | sections (two-column aware), captions, figure/table crops (caption above or below, running heads excluded), table cells `table_rows` (super/subscripts kept), numbered display-equation crops, key sentences, overview image (also without PIL/matplotlib); `crop` and `find` (verbatim sentences + `[pN:M]`) sub-commands |
 | `scripts/deck_build.py` | spec → .pptx (python-pptx or stdlib backend), font fitting ladder, charts from CSV, tables, figures, notes |
 | `scripts/deck_render.py` | .pptx → PDF → PNGs + contact sheet; layout and font checks |
 | `scripts/deck_check.py` | spec (or existing .pptx) vs materials audit; writes the evidence map |
@@ -84,3 +84,6 @@ python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/outp
 ## Maintenance
 Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,
 ppt_template, ppt_edit); only SKILL.md, templates, references and examples differ.
+
+## Tested on real papers (dogfooding log, 2026-11)
+Run on two arXiv papers as the evaluator would (case.json + task.md + PDF, procedure followed literally): a two-column ICML paper with equations and tables above/below captions, and a single-column NeurIPS paper with scientific-notation tables and an internal number conflict (41.8 vs 41.0 BLEU). Fixed from that run: column-interleaved text extraction, zero crops on PDFs whose math fonts emit control characters, table captions below tables, running heads in crops, garbled formulas (now equation crops), sub/superscripts, exponent checking (2.3 · 10^19 vs 10^18), contract fields such as `editable_deck` mapped to the wrong record, template text boxes/captions/charts in `to_spec`, zero-size layout placeholders, edit rounds that flagged requested font changes and pre-existing issues as failures, and stdlib-only runs without contact sheets or charts.

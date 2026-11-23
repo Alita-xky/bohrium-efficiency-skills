@@ -59,14 +59,14 @@ RULES = [
     ("status", r"^status$|状态"),
     ("uncertainty", r"uncertain|limit|caveat|risk|unknown|不确定|局限|限制|风险"),
     ("evidence", r"evidence|source|mapping|map|trace|citation|provenance|grounding|证据|来源|映射|溯源|引用"),
-    ("version", r"version|change|edit|log|record|history|diff|修改|版本|记录|变更"),
+    ("version", r"version|change|edit(?!able)|log|record|history|diff|修改|版本|记录|变更"),
     ("render", r"render|export|preview|pdf|png|image|导出|渲染|预览"),
     ("qa", r"(^|[^a-z])qa([^a-z]|$)|q&a|question|answer|问答|追问"),
     ("plan", r"talk_plan|plan|goal|audience|occasion|计划|目标|听众|受众"),
     ("timeline", r"time|timeline|schedule|budget|pacing|时长|时间"),
     ("notes", r"note|script|speaker|transcript|讲稿|备注|讲解"),
-    ("outline", r"outline|storyline|structure|narrative|story|plan|主线|大纲|结构|叙事|页序"),
-    ("template", r"template|format|style|layout|compliance|consisten|模板|格式|版式|一致"),
+    ("outline", r"outline|storyline|structure|narrative|(?<!hi)story|plan|主线|大纲|结构|叙事|页序"),
+    ("template", r"template|format|style|layout|compliance|consisten|preserv|模板|格式|版式|一致|保留"),
     ("deck", r"deck|pptx|ppt|slide|presentation|editable|file|artifact|output|演示|幻灯|文件"),
 ]
 
@@ -132,10 +132,23 @@ def main():
     unc += [x for x in (rr.get("font_notes") or [])][:5]
     if rr.get("status") != "ok":
         unc += ["render %s: %s" % (x["level"], x["msg"]) for x in rr.get("issues", []) if x["level"] == "fail"][:10]
-    status = a.status or ("complete" if (deck and pdf and cr.get("status") == "pass" and rr.get("status") == "ok") else "partial")
+    rs = jload(os.path.join(od, "round_summary.json"))  # edit rounds: judge only what this task changed
+    render_ok = rr.get("status") == "ok"
+    if rs and "new_render_fails" in rs:
+        render_ok = not rs["new_render_fails"] and (comp or {}).get("status", "pass") == "pass" and not rs.get("ops_errors")
+        if rs.get("pre_existing_render_fails"):
+            unc.append("%d render finding(s) already present in the input deck (v0) on slides/shapes the instructions did not "
+                       "address; left unchanged on purpose" % rs["pre_existing_render_fails"])
+        unc = [u for u in unc if not u.startswith("render fail")]
+    status = a.status or ("complete" if (deck and pdf and cr.get("status") == "pass" and render_ok) else "partial")
     if not deck:
         status = "failed"
     notes_n = sum(1 for p in rr.get("per_slide", []) if p.get("notes_chars"))
+    spec = jload(os.path.join(a.work, "spec.json"))
+    slide_map = []  # output slide -> source slide (origin) -> template layout
+    for i, p in enumerate(rr.get("per_slide", []) or [], 1):
+        sl = ((spec or {}).get("slides") or [])[i - 1] if spec and i <= len(spec.get("slides") or []) else {}
+        slide_map.append(dict(slide=i, id=sl.get("id"), origin=sl.get("origin"), title=p.get("title"), layout=p.get("layout")))
     val = {
         "deck": dict(pptx=deck, pdf=pdf, previews=previews, contact_sheet=rr.get("contact_sheet"), n_slides=rr.get("n_slides"),
                      template=(br.get("template") or {}).get("path"), backend=br.get("backend"), outline=P("slides_outline.md")),
@@ -154,7 +167,10 @@ def main():
                          rate_before=(jload(os.path.join(od, "compliance_before.json")) or {}).get("compliance_rate"),
                          fix_log=P("fix_log.json"),
                          template=(br.get("template") or {}).get("path"), layouts_used=sorted({p["layout"] for p in rr.get("per_slide", []) if p.get("layout")}),
-                         preserve=P("preserve.json")),
+                         slide_layout_map=slide_map or None,
+                         preserve=P("preserve.json"), preserve_status=(pres or {}).get("status"),
+                         text_preserved_rate=(pres or {}).get("text_preserved_rate"),
+                         not_carried_over=(spec or {}).get("not_carried_over") or None),
         "qa": dict(questions=(plan or {}).get("qa"), talk_plan_md=P("talk_plan.md")) if (plan or {}).get("qa") else None,
         "plan": dict(talk_plan_json=P("talk_plan.json"), talk_plan_md=P("talk_plan.md"), goal=(plan or {}).get("goal"),
                      audience=(plan or {}).get("audience"), duration_min=(plan or {}).get("duration_min"),
@@ -165,8 +181,12 @@ def main():
     }
     fill = {}
     mapping = {}
+    deck_head = re.compile(r"^(deck|pptx?|slides?|presentation|file|演示文件|演示|幻灯片?|文件|ppt文件)$", re.I)
     for f in fields:
         hits = [key for key, rx in RULES if re.search(rx, f, re.I) and val.get(key) not in (None, [], {})]
+        head = [t for t in re.split(r"[_\-\s./]+|(?<=[a-z])(?=[A-Z])", str(f)) if t][-1:] or [""]
+        if deck_head.match(head[0]) or re.search(r"(可编辑|编辑后|修改后|适配后).*(演示|幻灯|ppt|文件)", str(f), re.I):
+            hits = ["deck"]  # the noun decides: editable_deck / revised_deck / adapted_pptx / slides -> the deck itself
         if not hits:
             continue
         if len(hits) > 1 and hits[0] not in ("status", "uncertainty"):

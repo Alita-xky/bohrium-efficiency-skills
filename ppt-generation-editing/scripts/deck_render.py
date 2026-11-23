@@ -27,7 +27,7 @@ def norm(s):
     return re.sub(r"\s+", "", str(s)).lower()
 
 
-def contact_sheet(pngs, out, cols=4, thumb_w=420):
+def contact_sheet(pngs, out, cols=4, thumb_w=420, pdf_for_sheet=None):
     if not pngs:
         return None
     try:
@@ -66,7 +66,16 @@ def contact_sheet(pngs, out, cols=4, thumb_w=420):
         plt.close(fig)
         return out
     except Exception:
-        return None
+        pass
+    pdf = (pdf_for_sheet or [None])[0]
+    if pdf and os.path.exists(pdf):  # stdlib fallback: thumbnails straight from the PDF (PPM -> PNG, no PIL)
+        try:
+            n = len(pngs)
+            return K.sheet_from_pdf(pdf, list(range(1, n + 1)), out, cols=cols, width=thumb_w,
+                                    labels={i: "slide %d" % i for i in range(1, n + 1)})
+        except Exception:
+            return None
+    return None
 
 
 def pdf_to_pngs(pdf, outdir, dpi):
@@ -315,7 +324,7 @@ def main():
     else:
         issues.append(dict(level="fail", slide=None, shape=None, msg="PDF export failed: " + log))
     shutil.rmtree(tmpdir, ignore_errors=True)
-    sheet = contact_sheet(pngs, os.path.join(a.outdir, "previews", "contact_sheet.png")) if pngs else None
+    sheet = contact_sheet(pngs, os.path.join(a.outdir, "previews", "contact_sheet.png"), pdf_for_sheet=[pdf_path]) if pngs else None
     fails = [x for x in issues if x["level"] == "fail"]
     status = "render_failed" if not pdf_path else ("needs_fix" if fails else "ok")
     font_notes = [x["msg"] for x in issues if "font '" in x["msg"]]

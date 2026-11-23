@@ -35,9 +35,13 @@ for data tables. Look once at the starting deck's contact sheet if layout matter
 ## 3. Write `/app/work/ops.json` (1 call)
 One op per change, in order (template: `$SKILL/templates/ops_template.json`; cookbook:
 `references/edit_rules.md`; full op list in the header of `scripts/deck_edit.py`). Each op gets
-`"reason": "instruction k: …"` and, for content, `"src": ["paper.pdf p5:2 Table 1"]`. Text ops first, then
-moves/deletes (or address with `slide_id`). Relative image/CSV paths resolve against ops.json's folder, the
-deck's folder and /input.
+`"reason": "instruction k: …"` and, for content, `"src": ["paper.pdf p5:2 Table 1"]`. Address slides by
+`slide_id` (from the inventory; stable across moves — every op accepts it) or put text ops before moves/inserts.
+Relative image/CSV paths resolve against ops.json's folder, the deck's folder and /input. Typical mappings:
+wrong number → `replace_text` (works inside tables); "fonts: Chinese X, Latin Y" → `apply_theme` + `set_font
+{slide:"all", font:Y, ea_font:X}` (covers titles, bodies and table cells); "title on one line" → shorter
+`set_text` (+ `set_font size` if still 2 lines); new table slide → `add_slide` with `table.rows` taken from
+`paper_map.json` `table_rows` (symbols as `ε_HOMO`, `bohr^3`) and `notes`.
 
 ## 4. Run the round (1 call) — complete deliverable after this
 ```bash
@@ -50,8 +54,10 @@ XML engine (`--engine pptx` to use python-pptx for text ops) → `/app/output/de
 (text diff per shape, moved/added/removed slides, % pixels changed per slide vs the previous version); runs
 `deck_check --pptx` (every number on every slide found in the materials, slide text matched to paper paragraphs
 → `evidence_map.json/.md`); audits the master/theme against v0 (`compliance.json`); snapshots `versions/v1.pptx`.
-Check the printed summary: `ops_errors` empty, `slides_changed` = the slides you meant, render/check/template
-`ok/pass`. Open `previews/contact_sheet.png` once.
+Check the printed summary: `ops_errors` empty, `slides_changed` = the slides you meant, "render: 0 new
+failure(s)", check/template `pass`. Findings already present in v0 and theme/font changes the instructions asked
+for are reclassified (pre-existing / intended), so only regressions FAIL; style warnings on slides the
+instructions do not address are not yours to fix (leave them). Open `previews/contact_sheet.png` once.
 
 ## 5. Iterate or roll back (0–2 calls)
 Wrong or incomplete? Write `/app/work/ops2.json` and run `round --pptx /app/output/deck.pptx --ops /app/work/ops2.json …`

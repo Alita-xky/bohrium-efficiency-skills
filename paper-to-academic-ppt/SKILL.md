@@ -24,16 +24,19 @@ mkdir -p /app/work /app/output
 cat task.md /input/task.md 2>/dev/null | head -150; python3 -c "import json;print(json.dumps(json.load(open('/input/case.json')),ensure_ascii=False,indent=1)[:5000])"
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
 ```
-It extracts all text with paragraph locators (`materials/*.txt`, tags `[p3:12]`), maps the paper
+It extracts all text in reading order with paragraph locators (`materials/*.txt`, tags `[p3:12]`; two-column
+papers come out column by column; `materials/layout/*.layout.txt` keeps table rows aligned), maps the paper
 (`paper_map.json`: sections with roles, every Figure/Table caption with page + crop box + a ready PNG crop,
-where each figure is discussed, key sentences), inspects a template (`template_report.json`) and a starting
-deck, and lists tools (python-pptx or the stdlib writer is chosen automatically). Note from task.md: slide
-limits, minutes, audience, language, template, and the **output_contract** field names.
+**table cells** `table_rows`, numbered display **equations** with crops, where each figure is discussed, 40 key
+sentences), inspects a template (`template_report.json`) and a starting deck, and lists tools (python-pptx or
+the stdlib writer is chosen automatically). Note from task.md: slide limits, minutes, audience, language,
+template, and the **output_contract** field names.
 
 ## 2. Read the evidence (2–4 calls)
-- `python3 -c "import json;d=json.load(open('/app/work/paper_map.json'));[print(k['loc'],k['role'],k['text']) for k in d['key_sentences']]"`
-- `grep -n -i "contribution\|we propose\|limitation\|table [0-9]\|outperform" /app/work/materials/*.txt | head -60`,
-  then read only the paragraphs you need (`sed -n`), especially the result table text.
+- Key sentences + tables in one call:
+  `python3 -c "import json;d=json.load(open('/app/work/paper_map.json'));[print(k['loc'],k['role'],k['text'][:230]) for k in d['key_sentences']];[print(f['ref'],f['page'],f.get('crop_png'),f.get('table_rows')) for f in d['figures_tables']]"`
+- Verbatim quotes with locators: `python3 $SKILL/scripts/paper_map.py find "we propose" "outperform" "limitation" "Table 2"`
+  (prints `[pN:M] file :: sentence` — paste these into facts.json).
 - Look once at `/app/work/figs/fig_candidates.png` (red boxes = auto crops of each Fig./Table). If a box is
   wrong, fix it in the spec (`bbox` page fractions) or with `paper_map.py crop`.
 Fill the five slots of `references/storyline.md` (problem, gap/idea, method, evidence, limits+take-home).
@@ -51,9 +54,12 @@ Start from `$SKILL/templates/spec_template.json`; full field list in `references
   results → limitations → conclusion (→ backup). Titles are **claims**, not topics.
 - Each slide: `sources` (fact ids) and per-bullet `src`; ≤ 5 short bullets; `notes` = what to say that is not
   on the slide + transition (never the bullets again).
-- Paper figures: `"figure":{"pdf":"/input/paper.pdf","page":P,"bbox":[...from paper_map...],"ref":"Fig. N","caption":"<first sentence, verbatim>","kind":"data|schematic","src":[...]}`
-  (or `"image": crop_png`). Keep the paper's numbering. Tables: copy cells exactly into `"table":{"rows":…}` or
-  show the table crop. Charts only from input CSV/XLSX (`"chart"`), labelled "redrawn from data".
+- Paper figures: `"figure":{"image":"<crop_png from paper_map>","ref":"Fig. N","caption":"<first sentence, verbatim>","kind":"data|schematic","src":[...]}`
+  (or `"pdf"`+`"page"`+`"bbox"`). Keep the paper's numbering. Tables: start from `table_rows` (check against the
+  crop; keep the rows/columns the claim needs) into `"table":{"rows":…}`, or show the table crop. Equations: the
+  crop `figs/eqA_B_pP.png` as a figure with `"ref":"Eq. N"` — never retype math from the text layer. Charts only
+  from input CSV/XLSX (`"chart"`), labelled "redrawn from data".
+- Symbols: `ε_HOMO`, `x^2`, `2.3 · 10^19` render as real sub/superscripts (`\_` = literal underscore).
 - Numbers exactly as in the paper (precision, unit). Computed values → `derived` with formula.
 - Chinese task → Chinese slide text, `meta.lang:"zh"`, technical terms/numbers unchanged.
 - Long spec? Write slides 1–7 in spec.json and the rest in spec2.json (`--spec` twice).
@@ -87,14 +93,16 @@ add them with `--set`, otherwise make_result marks them `not_provided` (never fa
 | PDF has no text layer / scanned | extract_materials OCRs (tesseract); cite OCR text as lower confidence; check numbers against page images |
 | PDF encrypted / unreadable | try `qpdf --decrypt in.pdf out.pdf`; else build from other materials, `status: partial` |
 | figure crop wrong / caption not found | set `bbox` by hand (look at the page PNG) or `paper_map.py crop`; whole page as last resort |
-| formula only as image | crop it as an image; do not retype unless the text layer has it |
+| formula only as image / garbled in text | use the `equations[]` crop (or `paper_map.py crop`); never retype it from the text layer |
+| table cells look wrong (merged/missing cells) | `table_rows` is a candidate: compare with the crop, fix cells by hand, or show the crop (`kind: table_image`) |
+| two-column paper, quote "not found" | quote from `paper_map.py find` output (reading-order text); deck_check suggests the right `[pN:M]` |
 | value requested but not in paper | fact with `not_in_materials`; slide says "not reported"; listed in uncertainty |
 | text overflow FAIL | shorten to phrases / split slide; never below 12 pt body |
 | table too large | keep key rows/columns (say so in caption) or show the paper's table crop |
 | slide limit exceeded | merge minor results, move details to notes; drop backup first |
 | template lacks a layout / placeholders | builder falls back (recorded in build_report); never draw fake title boxes |
 | font missing | render_report shows requested vs embedded fonts; keep template fonts, note substitution |
-| python-pptx missing / fails | stdlib OOXML writer is used automatically (same XML, same render) |
+| python-pptx missing / fails | stdlib OOXML writer is used automatically (same XML, same render); contact sheets and crop overviews are drawn without PIL/matplotlib |
 | soffice missing / export fails | deliver the .pptx, status `partial`, report the missing renderer; no fake previews |
 | running out of time | run deck_make + deck_fill + make_result with what exists (`status: partial`) |
 

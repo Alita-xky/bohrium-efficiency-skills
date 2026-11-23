@@ -168,7 +168,8 @@ class XmlBackend:
         return s["next_id"] - 1
 
     def ph_text(self, s, ph, paras, name, anchor=None):
-        s["shapes"].append(K.ph_sp_xml(self._id(s), name, ph["attrs"], paras, anchor=anchor))
+        s["shapes"].append(K.ph_sp_xml(self._id(s), name, ph["attrs"], paras, box=ph["box"] if ph.get("fixed_box") else None,
+                                       anchor=anchor))
 
     def textbox(self, s, box, paras, name, anchor="t", fill=None, line=None):
         s["shapes"].append(K.textbox_xml(self._id(s), name, box, paras, anchor, fill, line))
@@ -243,10 +244,12 @@ class PptxBackend:
                 target = shp
                 break
         if target is None:  # footer-type placeholders are not cloned by python-pptx
-            self._append(s, K.ph_sp_xml(2, name, ph["attrs"], paras, anchor=anchor))
+            self._append(s, K.ph_sp_xml(2, name, ph["attrs"], paras, box=ph["box"] if ph.get("fixed_box") else None, anchor=anchor))
             return
         el = target._element
         target.name = name
+        if ph.get("fixed_box"):
+            K.set_xfrm(el, ph["box"])
         old = el.find(K.P + "txBody")
         new = self._frag(K.txbody_xml(paras, "ph", anchor=anchor, autofit=None))
         if old is not None:
@@ -550,10 +553,33 @@ def place_chart(be, s, ch, box, ctx, rep, tag, num):
         be.picture(s, out, area, "Chart %d" % num, "chart from %s (%s vs %s)" % (os.path.basename(ch["csv"]), ch.get("y"), ch.get("x")))
         entry.update(png=out, spec=out[:-4] + ".json", box_in=[K.to_in(v) for v in area])
     except Exception as e:
-        be.textbox(s, area, [dict(text="Chart failed: %r" % (e,), bullet=False, color="C00000", size=14)], "Chart %d (failed)" % num,
-                   anchor="ctr", line="C00000")
-        rep["warnings"].append("FAIL chart %s: %r" % (tag, e))
-        entry["error"] = repr(e)
+        fallback = None
+        if isinstance(e, ImportError) and ch.get("csv") and os.path.exists(ch["csv"]):
+            try:  # no plotting library: show the same data as a native (editable) table instead of a broken box
+                with open(ch["csv"], newline="", encoding="utf-8-sig") as f:
+                    data = list(csv.reader(f))
+                cols = [ch.get("x")] + list(ch.get("y") if isinstance(ch.get("y"), list) else [ch.get("y")])
+                if ch.get("err"):
+                    cols += list(ch["err"] if isinstance(ch["err"], list) else [ch["err"]])
+                idx = [data[0].index(c) for c in cols if c in data[0]]
+                rows = [[r[i] if i < len(r) else "" for i in idx] for r in data[:16]]
+                hl = [[i, j] for i, r in enumerate(rows) if i and r and r[0] in [str(v) for v in (ch.get("highlight") or [])]
+                      for j in range(len(r))]
+                place_table(be, s, dict(rows=rows, ref=ch.get("ref"), caption=(ch.get("caption") or "") +
+                                        " (data table: chart renderer unavailable)", highlight=hl), box, ctx, rep, tag, num)
+                rep["warnings"].append("chart %s shown as a data table (%r): install matplotlib for the plotted chart" % (tag, e))
+                entry.update(fallback="table", error=repr(e))
+                fallback = True
+            except Exception as e2:
+                e = e2
+        if not fallback:
+            be.textbox(s, area, [dict(text="Chart failed: %r" % (e,), bullet=False, color="C00000", size=14)], "Chart %d (failed)" % num,
+                       anchor="ctr", line="C00000")
+            rep["warnings"].append("FAIL chart %s: %r" % (tag, e))
+            entry["error"] = repr(e)
+        else:
+            rep["visuals"].append(entry)
+            return
     if cap:
         be.textbox(s, [box[0], area[1] + area[3], box[2], cap_h], [dict(text=cap, size=12, color="404040", bullet=False,
                                                                          align="center")], "Caption %d" % num)
@@ -585,12 +611,12 @@ def place_table(be, s, tb, box, ctx, rep, tag, num):
     if tb.get("caption"):
         cap = (cap + ": " if cap else "") + tb["caption"]
     cap = tb.get("caption_text") or cap
-    cap_h = int((12 * 1.25 + 8) * EMU_PT) if cap else 0
+    cap_h = int((12 * 1.25 * min(3, K.wrap_count(cap, box[2] / EMU_PT - 15, 12)) + 8) * EMU_PT) if cap else 0  # long captions wrap
     area = [box[0], box[1] + cap_h, box[2], box[3] - cap_h]
     ncol = max(len(r) for r in rows)
     pad = 0.15 * 72
     chosen = None
-    for size in (18, 16, 14, 13, 12, 11, 10):
+    for size in ((24, 22, 20) if len(rows) <= 8 else ()) + (18, 16, 14, 13, 12, 11, 10):
         nat = [max(K.text_em(str(r[c]) if c < len(r) else "") for r in rows) * size + pad + 4 for c in range(ncol)]
         avail = area[2] / EMU_PT
         if sum(nat) <= avail:
@@ -644,7 +670,7 @@ def put_text(be, s, cat, lay, ph, paras, name, ctx, rep, min_pt=None, anchor=Non
     if ph["type"] in ("title", "ctrTitle"):
         mn = max(18, ctx.min_title_pt)
         bpt = 0
-        lf = 1.12
+        lf = None  # same line-height estimate as deck_render (1.32 CJK / 1.2 Latin): no "fits here, overflows there"
     else:
         mn = min_pt or ctx.min_body_pt
         bpt = 22.0 if (bullets and ph["type"] in ("obj", "body")) else 0
@@ -817,6 +843,8 @@ def make_ctx(cat, spec, outdir):
     ctx = Ctx()
     ctx.master = 0
     ctx.content = K.content_area(cat)
+    if meta.get("math_markup") is False:  # literal ^ and _ (template adaptation keeps text exactly)
+        K.MATH_MARKUP = False
     ctx.lang = meta.get("lang") or ("zh" if any(K.has_cjk(sl.get("title", "")) for sl in spec.get("slides", [])) else "en")
     ctx.lab = LABELS.get(ctx.lang, LABELS["en"])
     ctx.min_body_pt = float(meta.get("min_body_pt", 12))

@@ -14,7 +14,8 @@ All paths may be absolute or relative to the JSON file's folder. Text is UTF-8; 
 ]}
 ```
 - `loc` is the paragraph tag printed by extract_materials (`[p3:12]` = page 3, paragraph 12). For CSV data use `row0`, `row3`.
-- `quote` must be copied character for character (`grep -n "keyword" /app/work/materials/*.txt`). deck_check
+- `quote` must be copied character for character: `python3 $SKILL/scripts/paper_map.py find "keyword" "regex2"` prints
+  matching sentences with their `[pN:M]` tag (or `grep -n` in `/app/work/materials/*.txt`). deck_check
   fails a quote that is not in the materials and suggests the right locator when it is elsewhere.
 - Something the task asks for but the materials do not contain: `"status": "not_in_materials"`; never invent it.
 
@@ -37,11 +38,12 @@ the template's master, layouts, fonts and colours are used as they are.
 | `role` | title, outline, motivation, problem, background, method, setup, results, analysis, discussion, limitations, conclusion, qa, backup, section, references |
 | `title` | the slide's claim (one sentence) — or the deck title on the title slide |
 | `subtitle` | string or list (title / section slides) |
-| `bullets` | list of `"text"` or `{"text", "level": 0-2, "src": ["F3"]}`; `**x**` = emphasis (bold, accent colour) |
+| `bullets` | list of `"text"` or `{"text", "level": 0-2, "src": ["F3"]}`; `**x**` = emphasis (bold, accent colour); `x^2`, `x^{l+1}`, `10^-4` = superscript, `ε_HOMO`, `d_{model}` = subscript (also in table cells; `\_` keeps a literal underscore; `meta.math_markup: false` turns it off) |
 | `figure` | `{"pdf", "page", "bbox":[x0,y0,x1,y1] page fractions}` or `{"image": "path.png"}` plus `"ref": "Fig. 3"`, `"caption"` (verbatim, may be shortened to its first sentence), `"kind": "data|schematic|photo|table_image"`, `"src"` |
 | `figures` | list of figure dicts shown side by side (2–4) |
 | `chart` | `{"csv", "x", "y": [cols], "kind": "bar|line|scatter|barh", "err", "xlabel", "ylabel" (with unit), "labels": true, "highlight": [x values], "series_labels": {col: name}, "ref", "caption", "src"}` — only from data files in the inputs |
-| `table` | `{"rows": [[header…], [cells…]]}` or `{"csv", "columns", "max_rows"}`, plus `"ref"`, `"caption"`, `"highlight": [[r,c]]`, `"src"` |
+| `table` | `{"rows": [[header…], [cells…]]}` or `{"csv", "columns", "max_rows"}`, plus `"ref"`, `"caption"`, `"highlight": [[r,c]]`, `"src"`. Paper tables: start from `paper_map.json` → `figures_tables[].table_rows` (cells read from the PDF, super/subscripts as `^`/`_`), check them against the crop, keep the rows/columns you need |
+| equations | a display equation is shown as its crop: `"figure": {"image": "figs/eq3_6_p2.png", "ref": "Eq. 3-6", "kind": "schematic", "caption": "…"}` (`paper_map.json` → `equations[]`); the PDF text layer garbles math, so never retype it from `materials/*.txt` |
 | `left`, `right` | two-column slide: each `{"heading", "bullets"}` or with a `figure`/`chart`/`table` |
 | `arrange` | `right` (visual left, text right; default) or `below`; `visual_share` 0.5–0.8 |
 | `layout` | force a kind: title, section, bullets, two_column, figure, figures, chart, table, blank |

@@ -33,7 +33,11 @@ broken templates and notes that repeat the slide.
   never re-draw from numbers read off a figure.
 - Tables: copy cells exactly; highlight the row/column the claim is about; keep units in the header.
 - Low resolution (< 96 px per inch on the slide) is reported; prefer a higher-dpi crop.
-- Formulas that exist only as images: crop them as images; do not retype them unless the text layer has them.
+- Formulas: show the paper's display equation as its crop (`paper_map.json` → `equations`, ref "Eq. N"); the text
+  layer of a PDF garbles math (`kxi − xj k2` for ‖x_i − x_j‖²), so never copy a formula from `materials/*.txt`. Short
+  inline symbols may be typed with `^`/`_` markup (`ε_HOMO`, `O(n^2 · d)`, `2.3 · 10^19`).
+- Scientific notation: write `2.3 · 10^19` (rendered as a superscript); deck_check compares it as the single value
+  2.3e19 with the PDF's flattened `2.3 · 1019`, so a wrong exponent fails.
 
 ## 5. Story order
 Paper talks: title → motivation/problem → (gap/idea) → method (1–3 slides) → setup → results (2–4 slides,

@@ -179,15 +179,17 @@ def set_paragraphs(el, paras, mk):
             p.append(np_)
         elif lvl:
             p.append(mk('<a:pPr lvl="%d"/>' % lvl))
-        for t, em in K.inline_runs(q["text"]):
+        for t, em, base in K.inline_runs(q["text"], scripts=True):
             r = mk("<a:r><a:t></a:t></a:r>")
             if rpr is not None:
                 nr = copy.deepcopy(rpr)
                 if em:
                     nr.set("b", "1")
+                if base:
+                    nr.set("baseline", str(base))
                 r.insert(0, nr)
-            elif em:
-                r.insert(0, mk('<a:rPr lang="en-US" b="1"/>'))
+            elif em or base:
+                r.insert(0, mk('<a:rPr lang="en-US"%s%s/>' % (' b="1"' if em else "", ' baseline="%d"' % base if base else "")))
             r.find(A + "t").text = t
             rp = r.find(A + "rPr")
             if rp is not None and K.has_cjk(t) and not str(rp.get("lang", "")).startswith(("zh", "ja", "ko")):
@@ -296,8 +298,8 @@ class XmlEngine:
         return changes
 
     def op_set_text(self, op):
-        if op.get("shape") is None or op.get("slide") in (None, "all"):
-            raise OpError("set_text needs slide and shape")
+        if op.get("shape") is None or (op.get("slide") in (None, "all") and op.get("slide_id") is None):
+            raise OpError("set_text needs slide (or slide_id) and shape")
         s, e = self.targets(op)[0]
         before = text_of(e)
         paras = op.get("paragraphs") or [dict(text=t) for t in str(op.get("text", "")).split("\n")]
@@ -877,6 +879,7 @@ def cmd_round(a):
     ref = a.template_ref or os.path.join(vdir, "v0.pptx")
     summary["template_audit"], aud_out = _run([os.path.join(here, "deck_template.py"), "audit", "--pptx", out, "--template", ref,
                                                "--out", os.path.join(a.outdir, "compliance.json")])
+    summary["template_audit"] = classify_audit(a, here, vdir, ref, summary["template_audit"])
     cmd_snapshot(argparse.Namespace(pptx=out, dir=vdir, label=label, note=a.note or "edit round %s" % label, parent=prev["label"]))
     if os.path.isdir(os.path.join(a.outdir, "previews")):
         dst = os.path.join(vdir, "%s_render" % label, "previews")
@@ -893,14 +896,80 @@ def cmd_round(a):
                check=(summary.get("check") or {}).get("status"), template=(summary["template_audit"] or {}).get("status"),
                contact_sheet=summary["render"].get("contact_sheet"), rollback="cp %s %s" % (prev["file"], out))
     print(json.dumps(res, ensure_ascii=False))
-    if a.materials:
+    if a.materials:  # style warnings about slides the instructions did not touch are not shown (see check_report.json)
+        nw = 0
         for line in chk_out.splitlines():
-            if line.strip().startswith(("FAIL", "WARN")):
-                print("  check " + line.strip())
-    for line in aud_out.splitlines():
-        if line.strip().startswith("FAIL"):
-            print("  template " + line.strip())
+            t = line.strip()
+            if t.startswith("FAIL") or (t.startswith("WARN") and " number " in t):
+                print("  check " + t)
+            elif t.startswith("WARN"):
+                nw += 1
+        if nw:
+            print("  check: %d style warnings (notes/density/claim titles) in check_report.json - change only slides the "
+                  "instructions address" % nw)
+    try:  # render failures that v0 already had are not regressions of this round
+        r0 = json.load(open(os.path.join(vdir, "v0_render", "render_report.json"), encoding="utf-8"))
+        r1 = json.load(open(os.path.join(a.outdir, "render_report.json"), encoding="utf-8"))
+        old = {re.sub(r"\d+", "#", x["msg"]) + str(x.get("shape")) for x in r0.get("issues", []) if x["level"] == "fail"}
+        new = [x for x in r1.get("issues", []) if x["level"] == "fail" and re.sub(r"\d+", "#", x["msg"]) + str(x.get("shape")) not in old]
+        print("  render: %d new failure(s) this round%s" % (len(new), "".join("\n    FAIL slide %s %s: %s" % (
+            x.get("slide"), x.get("shape") or "", x["msg"]) for x in new)))
+        n_old = sum(1 for x in r1.get("issues", []) if x["level"] == "fail") - len(new)
+        res.update(new_render_fails=[dict(slide=x.get("slide"), shape=x.get("shape"), msg=x["msg"]) for x in new],
+                   pre_existing_render_fails=n_old)
+    except Exception:
+        pass
+    with open(os.path.join(a.outdir, "round_summary.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, ensure_ascii=False, indent=1)
+    comp = json.load(open(os.path.join(a.outdir, "compliance.json"), encoding="utf-8"))
+    for x in comp.get("issues", []):
+        if x["level"] == "fail":
+            print("  template FAIL slide %s %s: %s" % (x.get("slide"), x.get("shape") or "", x["msg"]))
+    if comp.get("n_intended") or comp.get("n_pre_existing"):
+        print("  template: %d issue(s) requested by the instructions, %d already in v0 (kept as warn, not regressions)"
+              % (comp.get("n_intended", 0), comp.get("n_pre_existing", 0)))
     return 0
+
+
+def classify_audit(a, here, vdir, ref, summary):
+    """edit rounds: an audit finding is a regression only if it is new. Findings already present in v0 are
+    'pre-existing'; theme/font findings caused by apply_theme / set_font ops of this task are 'intended'."""
+    cp = os.path.join(a.outdir, "compliance.json")
+    base_p = os.path.join(vdir, "compliance_v0.json")
+    try:
+        if not os.path.exists(base_p):
+            _run([os.path.join(here, "deck_template.py"), "audit", "--pptx", os.path.join(vdir, "v0.pptx"), "--template", ref,
+                  "--out", base_p])
+        comp = json.load(open(cp, encoding="utf-8"))
+        base = json.load(open(base_p, encoding="utf-8")) if os.path.exists(base_p) else {"issues": []}
+        ops = json.load(open(a.ops, encoding="utf-8"))
+        ops = ops.get("ops", ops) if isinstance(ops, dict) else ops
+        theme_op = any(o.get("op") == "apply_theme" for o in ops)
+        font_op = any(o.get("op") == "set_font" and (o.get("font") or o.get("ea_font")) for o in ops)
+        size_op = any(o.get("op") == "set_font" and o.get("size") for o in ops)
+        seen = {(x.get("rule"), re.sub(r"slide \d+", "", x["msg"])) for x in base.get("issues", [])}
+        n_int = n_pre = 0
+        for x in comp.get("issues", []):
+            if x["level"] != "fail":
+                continue
+            key = (x.get("rule"), re.sub(r"slide \d+", "", x["msg"]))
+            if (x.get("rule") == "theme" and theme_op) or (x.get("rule") == "hard_font" and (font_op or size_op)):
+                x["level"], x["class"] = "info", "intended (requested font/theme change)"
+                n_int += 1
+            elif key in seen:
+                x["level"], x["class"] = "warn", "pre-existing in v0"
+                n_pre += 1
+            else:
+                x["class"] = "regression"
+        fails = [x for x in comp.get("issues", []) if x["level"] == "fail"]
+        comp.update(status="pass" if not fails else "needs_fix", n_fail=len(fails), n_intended=n_int, n_pre_existing=n_pre,
+                    note="edit mode: fails are only new findings (regressions); intended and pre-existing findings are kept, reclassified")
+        with open(cp, "w", encoding="utf-8") as f:
+            json.dump(comp, f, ensure_ascii=False, indent=1)
+        summary = dict(summary or {}, status=comp["status"], fails=len(fails))
+    except Exception as e:  # keep the raw audit
+        summary = dict(summary or {}, classify_error=repr(e))
+    return summary
 
 
 def main():

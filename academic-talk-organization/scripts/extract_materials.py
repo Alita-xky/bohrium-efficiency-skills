@@ -5,7 +5,8 @@ Usage:
   python3 extract_materials.py --input /input --task task.md --work /app/work [--render-pages 4]
 
 Writes /app/work/materials/:
-  <name>.txt            text per file, paragraphs tagged  [p3:12]  (page 3, paragraph 12)
+  <name>.txt            text per file in reading order, paragraphs tagged  [p3:12]  (page 3, paragraph 12)
+  layout/<name>.layout.txt  PDF text with columns aligned (=== page N ===), for reading table rows
   pages/<name>-<n>.png  low-res renders of the first PDF pages (to look at original figures)
   materials_index.json  one row per input file: type, pages, columns, sizes, extraction method, problems
 Nothing is summarised or guessed: it only copies what the files contain and records what failed.
@@ -35,10 +36,12 @@ def tag_paragraphs(pages):
 
 
 def pdf_text(path):
+    # reading-order mode (no -layout): two-column papers come out column by column. -layout would glue the
+    # left and right column into one line, which breaks quotes, headings and captions.
     if shutil.which("pdftotext"):
-        rc, out, err = run(["pdftotext", "-layout", path, "-"])
+        rc, out, err = run(["pdftotext", path, "-"])
         if rc == 0 and out.strip():
-            return out.split("\f"), "pdftotext"
+            return out.split("\f"), "pdftotext (reading order)"
     try:
         import fitz  # PyMuPDF
         doc = fitz.open(path)
@@ -88,6 +91,15 @@ def main():
                             texts.append(out)
                         pages, row["method"] = texts, "ocr"
                 open(os.path.join(mdir, name + ".txt"), "w", encoding="utf-8").write(tag_paragraphs(pages))
+                if row.get("method", "").startswith("pdftotext"):
+                    # column-aligned copy for reading tables (cells of one row stay on one line)
+                    rc, lay, _ = run(["pdftotext", "-layout", p, "-"])
+                    if rc == 0 and lay.strip():
+                        os.makedirs(os.path.join(mdir, "layout"), exist_ok=True)
+                        lp = os.path.join(mdir, "layout", name + ".layout.txt")
+                        open(lp, "w", encoding="utf-8").write("".join(
+                            "=== page %d ===\n%s\n" % (i, pg) for i, pg in enumerate(lay.split("\f"), 1) if pg.strip()))
+                        row["layout_text"] = lp
                 if shutil.which("pdftoppm") and a.render_pages > 0:
                     run(["pdftoppm", "-r", "60", "-png", "-l", str(a.render_pages), p,
                          os.path.join(mdir, "pages", os.path.splitext(name)[0])])

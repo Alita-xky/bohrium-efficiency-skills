@@ -42,8 +42,13 @@ stretched pictures, off-slide shapes. Rules and fixes: `references/template_rule
 | **A rebuild** (default when a draft deck must move to the template; always if slide size/master differ) | draft deck + template | `deck_template.py to_spec --pptx <deck> --out /app/work/spec.json --previews /app/work/start_render/previews` → open spec.json, set `role` per slide, split slides that will overflow, optionally `layout_name`; keep all text exactly |
 | **B generate** | paper/materials + template, no deck | write facts.json + spec.json as in `templates/spec_template.json` (claims, sources, notes) |
 | **C repair in place** | deck already on the template's master; only formatting drifted | `deck_template.py fix --pptx <deck> --template <t> --out /app/output/deck.pptx --log /app/output/fix_log.json` |
-to_spec copies text, levels, pictures (exported), tables, captions, notes and footer text exactly; charts/
-SmartArt are carried as cropped images from the renders (listed under `not_carried_over` otherwise).
+to_spec copies text, levels, pictures (exported), tables, notes and footer text exactly; "Figure N: …" text
+boxes become the visual's caption, "来源/Source: …" boxes its source note; shape names (Picture 2, Table 5) are
+never used as paper references. Charts/SmartArt are carried as cropped images from the renders, a native chart's
+data are also written to `deck_media/sNN_<chart>_data.csv` and listed in `not_carried_over` (editability lost:
+say so in uncertainty). Text stays literal (`meta.math_markup: false`: "d_k" is not turned into a subscript).
+After to_spec: set `role` per slide, split any slide with > 6 bullets or a title > 2 lines into two slides (copy
+the text, add "（续）"/"(cont.)" to the second title, note the split in uncertainty).
 
 ## 4. Build + check + render + audit + preservation (1 call; routes A/B)
 ```bash
@@ -55,20 +60,24 @@ never below 12 pt), renders PDF + PNGs + contact sheet, writes `compliance.json`
 (every paragraph, number, picture and note of the source deck present). For route C run `deck_template.py audit`
 and `deck_render.py` on the fixed deck. Fix FAILs (shorten/split, change layout), re-run at most twice, look
 at `previews/contact_sheet.png` once: same title position on all slides, nothing cut, pictures not stretched.
+In template mode a number of the draft that is not in the paper is a WARN (keep it; report it in uncertainty as
+unverified, or as a conflict if the paper gives another value) — never "fix" the draft's content silently.
 
 ## 5. Records and result.json (1–2 calls)
 ```bash
 python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
 python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
 ```
-Contract fields about template/format/compliance get compliance before/after, rates, fix log, layouts used and
-preservation; others get the deck, evidence map (auto-matched to the paper for carried content), render and
+Contract fields about template/format/compliance/layout mapping get compliance before/after, rates, fix log,
+layouts used, `slide_layout_map` (output slide → source slide → template layout) and preservation status; others get the deck, evidence map (auto-matched to the paper for carried content), render and
 version records (template sha256, fonts requested vs embedded, tools). Add unmapped fields with `--set`.
 
 ## Exception handling
 | Situation | Action |
 |---|---|
 | template lacks a layout kind | builder falls back (recorded); or pick another with `layout_name`; never edit the master |
+| layout placeholder with zero size (template defect, flagged "ZERO-SIZE" by prepare) | builder gives that slide placeholder the master's box (inheritance kept, defect listed in uncertainty) |
+| native chart in the draft | image of the original render + data CSV; state "chart no longer editable, data in …csv" |
 | placeholder missing (no body / no title) | content placed in the template's text area as text boxes + warning; title box flagged |
 | text overflows the placeholder | ladder shrink to ≥ 12 pt; if still FAIL split the slide (content preserved across slides) |
 | template font not installed / CJK font missing | keep theme font names; render_report shows substitute; for Chinese set an installed `ea` font via `deck_edit.py` `apply_theme` and record it |

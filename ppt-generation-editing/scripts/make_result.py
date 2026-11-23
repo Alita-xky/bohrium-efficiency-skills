@@ -87,6 +87,13 @@ def main():
         r = json.load(open(rp, encoding="utf-8"))
         render = dict(status=r.get("status"), fonts=r.get("fonts"), font_notes=r.get("font_notes"),
                       issues=[i for i in r.get("issues", []) if i.get("level") == "fail"][:20])
+    rsp = os.path.join(a.outdir, "round_summary.json")  # edit task: only failures introduced by the edits count
+    if os.path.exists(rsp) and render.get("status") == "needs_fix":
+        rs = json.load(open(rsp, encoding="utf-8"))
+        if "new_render_fails" in rs and not rs["new_render_fails"]:
+            render["status"] = "ok_pre_existing_only"
+            render["note"] = "%s render finding(s) were already in the input deck and are outside the edit instructions" % rs.get(
+                "pre_existing_render_fails")
 
     result = {"case_id": case_id}
     missing = []

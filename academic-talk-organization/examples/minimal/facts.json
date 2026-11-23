@@ -18,7 +18,7 @@
    "text": "fine-tuning overfits below 10 h",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p1:2",
+    "loc": "p1:1",
     "ref": "Abstract",
     "quote": "Fine-tuning large speech encoders for low-resource languages is expensive and overfits when fewer than 10 hours of labelled audio are available."
    }
@@ -84,7 +84,7 @@
    "text": "1/5/10/50 h, WER on official test sets",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p2:4",
+    "loc": "p2:6",
     "ref": "Sec. 3",
     "quote": "We train on 1, 5, 10 and 50 hours per language and report WER on the official test sets."
    }
@@ -95,7 +95,7 @@
    "text": "Table 1 values at 10 h",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p2:4",
+    "loc": "p2:6",
     "ref": "Table 1",
     "quote": "Table 1: Average WER (%) on five languages, 10 h of training data."
    }
@@ -106,7 +106,7 @@
    "text": "Fig. 2: best at 1 h and 5 h, within 0.3 points at 50 h",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p3:4",
+    "loc": "p3:8",
     "ref": "Fig. 2",
     "quote": "GateLite is best at 1 h and 5 h; at 50 h the two methods are within 0.3 points."
    }
@@ -117,7 +117,7 @@
    "text": "read speech only",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p3:5",
+    "loc": "p3:9",
     "ref": "Sec. 4",
     "quote": "GateLite was evaluated only on read speech; spontaneous speech was not tested."
    }
@@ -128,7 +128,7 @@
    "text": "6% latency",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p3:5",
+    "loc": "p3:9",
     "ref": "Sec. 4",
     "quote": "Routing adds 6% inference latency on a single GPU."
    }
@@ -139,7 +139,7 @@
    "text": "-3.5 WER points with 3.1% parameters",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p3:5",
+    "loc": "p3:10",
     "ref": "Sec. 5",
     "quote": "Sparse gated adapters cut WER by 3.5 points on average at 10 hours of data while training 3.1% of the parameters."
    }
@@ -150,7 +150,7 @@
    "text": "benefit shrinks with more data",
    "source": {
     "file": "paper_synthetic.pdf",
-    "loc": "p3:5",
+    "loc": "p3:10",
     "ref": "Sec. 5",
     "quote": "The benefit shrinks as training data grows and is negligible at 50 hours."
    }

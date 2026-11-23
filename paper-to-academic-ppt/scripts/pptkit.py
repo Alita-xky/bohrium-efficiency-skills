@@ -749,13 +749,18 @@ def catalog(pkg):
                        name=csld.get("name") if csld is not None else "", ltype=lroot.get("type"), placeholders=[])
             for p in _placeholders(lroot):
                 q = {k: v for k, v in p.items() if k != "el"}
+                if q["box"] is not None and (q["box"][2] <= 0 or q["box"][3] <= 0):
+                    q["degenerate_box"] = list(q["box"])  # zero width/height in the layout: a template defect
+                    q["box"], q["fixed_box"] = None, True
                 if q["box"] is None:
                     mt = PH_MAP_TO_MASTER.get(q["type"], "body")
                     for mpp in mphs:
-                        if mpp["type"] == mt and mpp["box"]:
+                        if mpp["type"] == mt and mpp["box"] and mpp["box"][2] > 0 and mpp["box"][3] > 0:
                             q["box"] = mpp["box"]
                             q["inherited"] = True
                             break
+                if q.get("fixed_box") and q["box"] is None:
+                    q["box"] = [int(0.05 * cat["slide_w"]), int(0.15 * cat["slide_h"]), int(0.9 * cat["slide_w"]), int(0.7 * cat["slide_h"])]
                 lay["placeholders"].append(q)
             lay["kinds"] = classify_layout(lay)
             minfo["layouts"].append(lay["gindex"])
@@ -983,6 +988,14 @@ def inventory(pkg, cat=None):
                 sh["text"] = "\n".join(p["text"] for p in paras)
                 sizes = [p["size"] for p in paras if p["text"].strip()]
                 sh["min_font_pt"] = min(sizes) if sizes else None
+            if sh["kind"] == "chart":
+                for x in el.iter():
+                    rid = x.get(R + "id")
+                    if x.tag.endswith("}chart") and rid:
+                        rr = {r["Id"]: r for r in pkg.rels(s["part"])}
+                        if rid in rr:
+                            sh["chart_part"] = pkg.resolve(s["part"], rr[rid]["Target"])
+                        break
             if tag == "pic":
                 blip = el.find(P + "blipFill/" + A + "blip")
                 if blip is not None:
@@ -1044,25 +1057,56 @@ def color_xml(c):
     return ""
 
 
-def inline_runs(text):
-    """'**x**' marks emphasis (bold + accent2). Returns [(text, emphasised)]"""
+MATH_MARKUP = os.environ.get("DECK_MATH_MARKUP", "1") != "0"
+_SCRIPT_RE = re.compile(r"(?<=[0-9A-Za-zα-ωΑ-Ωϵ∆Δ)\]}'’*])([\^_])(\{[^{}]{1,16}\}|[-−+]?[0-9A-Za-zα-ωΑ-Ω]{1,6})")
+
+
+def script_runs(text):
+    """x^2, x^{l+1}, 10^-4 -> superscript; h_i, x_{ij}, ε_HOMO -> subscript. Returns [(text, baseline)] with baseline
+    30000 (super), -25000 (sub) or 0. \\^ and \\_ stay literal; DECK_MATH_MARKUP=0 switches it off.
+    Text that looks like a file name or path (fig1_p1.png, a/b_c) is left unchanged."""
+    t = str(text)
+    if not MATH_MARKUP or ("^" not in t and "_" not in t) or re.search(r"[/\\]\w+_|\w+_\w+\.\w{2,4}\b", t):
+        return [(t.replace("\\^", "^").replace("\\_", "_"), 0)]
+    out, pos = [], 0
+    for m in _SCRIPT_RE.finditer(t):
+        if m.start() > 0 and t[m.start() - 1] == "\\":
+            continue
+        if m.start() > pos:
+            out.append((t[pos:m.start()], 0))
+        body = m.group(2)
+        body = body[1:-1] if body.startswith("{") else body
+        out.append((body, 30000 if m.group(1) == "^" else -25000))
+        pos = m.end()
+    if pos < len(t):
+        out.append((t[pos:], 0))
+    return [(x.replace("\\^", "^").replace("\\_", "_"), b) for x, b in out if x]
+
+
+def inline_runs(text, scripts=False):
+    """'**x**' marks emphasis (bold + accent2). Returns [(text, emphasised)], or with scripts=True
+    [(text, emphasised, baseline)] where ^/_ markup became super/subscript runs (see script_runs)."""
     parts = re.split(r"(\*\*[^*]+\*\*)", str(text))
     out = []
     for p in parts:
         if not p:
             continue
-        if p.startswith("**") and p.endswith("**") and len(p) > 4:
-            out.append((p[2:-2], True))
+        em = p.startswith("**") and p.endswith("**") and len(p) > 4
+        t = p[2:-2] if em else p
+        if scripts:
+            out += [(x, em, b) for x, b in script_runs(t)]
         else:
-            out.append((p, False))
+            out.append((t, em))
     return out
 
 
-def rpr_xml(text, size=None, bold=None, italic=None, color=None, tag="a:rPr"):
+def rpr_xml(text, size=None, bold=None, italic=None, color=None, tag="a:rPr", baseline=0):
     lang = 'lang="zh-CN" altLang="en-US"' if has_cjk(text) else 'lang="en-US"'
     attrs = [lang]
     if size:
         attrs.append('sz="%d"' % int(round(float(size) * 100)))
+    if baseline:
+        attrs.append('baseline="%d"' % int(baseline))
     if bold is not None:
         attrs.append('b="%d"' % (1 if bold else 0))
     if italic:
@@ -1101,10 +1145,10 @@ def para_xml(p, mode="ph", emph_color="accent2"):
         for seg_i, line in enumerate(str(p.get("text", "")).split("\n")):
             if seg_i:
                 runs.append("<a:br>%s</a:br>" % rpr_xml(line, p.get("size")))
-            for t, em in inline_runs(line):
+            for t, em, base in inline_runs(line, scripts=True):
                 runs.append("<a:r>%s<a:t>%s</a:t></a:r>" % (
                     rpr_xml(t, p.get("size"), True if (em or p.get("bold")) else None, p.get("italic"),
-                            emph_color if em and not p.get("color") else p.get("color")), xt(t)))
+                            emph_color if em and not p.get("color") else p.get("color"), baseline=base), xt(t)))
     end = rpr_xml(p.get("text", ""), p.get("size"), tag="a:endParaRPr")
     return "<a:p>%s%s%s</a:p>" % (ppr, "".join(runs), end)
 
@@ -1129,6 +1173,20 @@ def txbody_xml(paras, mode="ph", anchor=None, autofit="none", insets=True, wrap=
 def xfrm_xml(box, tag="a:xfrm"):
     x, y, cx, cy = [int(v) for v in box]
     return '<%s><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></%s>' % (tag, x, y, cx, cy, tag)
+
+
+def set_xfrm(el, box):
+    """give a placeholder shape an explicit position (used when the layout's own box is degenerate)"""
+    sp = el.find(P + "spPr")
+    if sp is None:
+        sp = el.makeelement(P + "spPr", {})
+        el.insert(2 if len(el) > 2 else len(el), sp)
+    for x in sp.findall(A + "xfrm"):
+        sp.remove(x)
+    x = sp.makeelement(A + "xfrm", {})
+    x.append(x.makeelement(A + "off", {"x": str(int(box[0])), "y": str(int(box[1]))}))
+    x.append(x.makeelement(A + "ext", {"cx": str(int(box[2])), "cy": str(int(box[3]))}))
+    sp.insert(0, x)
 
 
 def ph_sp_xml(sid, name, ph_attrs, paras, box=None, anchor=None):
@@ -1176,9 +1234,11 @@ def table_xml(sid, name, box, rows, col_w, row_h, size_pt, header=True, highligh
             al = "ctr" if (aligns is None and ci > 0) else ((aligns or ["l"] * len(col_w))[ci] if aligns else "l")
             ps = []
             for line in str(val).split("\n"):
-                ps.append('<a:p><a:pPr algn="%s"/><a:r>%s<a:t>%s</a:t></a:r></a:p>' % (
-                    al, rpr_xml(line, size_pt, bold=True if (is_h or em) else None,
-                                color="FFFFFF" if is_h else ("accent2" if em else None)), xt(line)))
+                rs = "".join('<a:r>%s<a:t>%s</a:t></a:r>' % (
+                    rpr_xml(t, size_pt, bold=True if (is_h or em) else None,
+                            color="FFFFFF" if is_h else ("accent2" if em else None), baseline=base), xt(t))
+                    for t, base in (script_runs(line) or [(line, 0)]))
+                ps.append('<a:p><a:pPr algn="%s"/>%s</a:p>' % (al, rs))
             fill = '<a:solidFill><a:schemeClr val="accent1"/></a:solidFill>' if is_h else (
                 '<a:solidFill><a:srgbClr val="F2F4F7"/></a:solidFill>' if ri % 2 == 0 else '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>')
             borders = "".join(border % (s, s) for s in ("L", "R", "T", "B"))
@@ -1632,3 +1692,166 @@ if __name__ == "__main__":
             print(l["gindex"], l["name"], l["ltype"], l["kinds"], [(p["type"], p["idx"]) for p in l["placeholders"]])
     else:
         print("usage: pptkit.py template out.pptx | catalog deck.pptx")
+
+
+# ---------------------------------------------------------------- stdlib image sheets (no PIL / matplotlib needed)
+_FONT5x7 = {  # 5x7 bitmap glyphs, rows top->bottom, 5 bits each (labels are drawn upper-case)
+    "0": "0E 11 13 15 19 11 0E", "1": "04 0C 04 04 04 04 0E", "2": "0E 11 01 02 04 08 1F", "3": "1F 02 04 02 01 11 0E",
+    "4": "02 06 0A 12 1F 02 02", "5": "1F 10 1E 01 01 11 0E", "6": "06 08 10 1E 11 11 0E", "7": "1F 01 02 04 08 08 08",
+    "8": "0E 11 11 0E 11 11 0E", "9": "0E 11 11 0F 01 02 0C", "A": "0E 11 11 1F 11 11 11", "B": "1E 11 11 1E 11 11 1E",
+    "C": "0E 11 10 10 10 11 0E", "D": "1E 11 11 11 11 11 1E", "E": "1F 10 10 1E 10 10 1F", "F": "1F 10 10 1E 10 10 10",
+    "G": "0E 11 10 17 11 11 0F", "H": "11 11 11 1F 11 11 11", "I": "0E 04 04 04 04 04 0E", "J": "07 02 02 02 02 12 0C",
+    "K": "11 12 14 18 14 12 11", "L": "10 10 10 10 10 10 1F", "M": "11 1B 15 15 11 11 11", "N": "11 11 19 15 13 11 11",
+    "O": "0E 11 11 11 11 11 0E", "P": "1E 11 11 1E 10 10 10", "Q": "0E 11 11 11 15 12 0D", "R": "1E 11 11 1E 14 12 11",
+    "S": "0F 10 10 0E 01 01 1E", "T": "1F 04 04 04 04 04 04", "U": "11 11 11 11 11 11 0E", "V": "11 11 11 11 11 0A 04",
+    "W": "11 11 11 15 15 15 0A", "X": "11 11 0A 04 0A 11 11", "Y": "11 11 0A 04 04 04 04", "Z": "1F 01 02 04 08 10 1F",
+    ".": "00 00 00 00 00 0C 0C", "-": "00 00 00 1F 00 00 00", " ": "00 00 00 00 00 00 00", ":": "00 0C 0C 00 0C 0C 00",
+}
+
+
+def read_ppm(path):
+    """P6 (RGB) or P5 (gray) netpbm file as (w, h, bytearray RGB)"""
+    data = open(path, "rb").read()
+    parts, i = [], 0
+    while len(parts) < 4:
+        while data[i:i + 1].isspace():
+            i += 1
+        if data[i:i + 1] == b"#":
+            i = data.index(b"\n", i) + 1
+            continue
+        j = i
+        while not data[j:j + 1].isspace():
+            j += 1
+        parts.append(data[i:j])
+        i = j
+    i += 1
+    w, h = int(parts[1]), int(parts[2])
+    px = bytearray(data[i:i + w * h * (3 if parts[0] == b"P6" else 1)])
+    if parts[0] == b"P5":
+        px = bytearray(b for g in px for b in (g, g, g))
+    return w, h, px
+
+
+def write_png(path, w, h, rgb):
+    import zlib
+    raw = b"".join(b"\x00" + bytes(rgb[y * w * 3:(y + 1) * w * 3]) for y in range(h))
+    def chunk(t, d):
+        c = struct.pack(">I", len(d)) + t + d
+        return c + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+                chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
+    return path
+
+
+class Canvas:
+    def __init__(self, w, h, bg=(255, 255, 255)):
+        self.w, self.h = w, h
+        self.px = bytearray(bytes(bg) * (w * h))
+
+    def paste(self, x, y, w, h, rgb):
+        for r in range(min(h, self.h - y)):
+            o = ((y + r) * self.w + x) * 3
+            n = min(w, self.w - x) * 3
+            self.px[o:o + n] = rgb[r * w * 3:r * w * 3 + n]
+
+    def rect(self, x0, y0, x1, y1, col=(220, 30, 30), lw=2, fill=False):
+        x0, y0 = max(0, int(x0)), max(0, int(y0))
+        x1, y1 = min(self.w - 1, int(x1)), min(self.h - 1, int(y1))
+        c = bytes(col)
+        for y in range(y0, y1 + 1):
+            if fill or y - y0 < lw or y1 - y < lw:
+                o = (y * self.w + x0) * 3
+                self.px[o:o + (x1 - x0 + 1) * 3] = c * (x1 - x0 + 1)
+            else:
+                for x in list(range(x0, min(x0 + lw, x1 + 1))) + list(range(max(x1 - lw + 1, x0), x1 + 1)):
+                    o = (y * self.w + x) * 3
+                    self.px[o:o + 3] = c
+
+    def text(self, x, y, s, col=(0, 0, 0), scale=2, bg=None):
+        s = str(s).upper()
+        if bg:
+            self.rect(x - 2, y - 2, x + len(s) * 6 * scale + 1, y + 7 * scale + 1, bg, fill=True)
+        for k, ch in enumerate(s):
+            rows = _FONT5x7.get(ch, _FONT5x7[" "]).split()
+            for ry, hx in enumerate(rows):
+                bits = int(hx, 16)
+                for rx in range(5):
+                    if bits & (1 << (4 - rx)):
+                        self.rect(x + (k * 6 + rx) * scale, y + ry * scale, x + (k * 6 + rx) * scale + scale - 1,
+                                  y + ry * scale + scale - 1, col, fill=True)
+
+    def save(self, path):
+        return write_png(path, self.w, self.h, self.px)
+
+
+def pdf_page_ppm(pdf, page, out_base, width=None, dpi=None):
+    """render one PDF page as PPM via pdftoppm; returns (w, h, rgb) or None"""
+    if not shutil.which("pdftoppm"):
+        return None
+    cmd = ["pdftoppm", "-f", str(page), "-l", str(page), "-singlefile"]
+    cmd += (["-scale-to-x", str(width), "-scale-to-y", "-1"] if width else ["-r", str(dpi or 50)])
+    rc, _, _ = run(cmd + [pdf, out_base], timeout=120)
+    p = out_base + ".ppm"
+    if rc != 0 or not os.path.exists(p):
+        return None
+    try:
+        return read_ppm(p)
+    finally:
+        os.remove(p)
+
+
+def sheet_from_pdf(pdf, pages, out_png, cols=4, width=400, labels=None, boxes=None):
+    """stdlib contact sheet: PDF pages as thumbnails in a grid, optional labels and red boxes
+    (boxes: {page: [(x0,y0,x1,y1 fractions, label)]}). Returns out_png or None."""
+    tiles = []
+    tmp = tempfile.mkdtemp(prefix="sheet_")
+    try:
+        for i, pg in enumerate(pages):
+            t = pdf_page_ppm(pdf, pg, os.path.join(tmp, "t%d" % i), width=width)
+            if t:
+                tiles.append((pg, (labels or {}).get(pg, "page %d" % pg), t))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if not tiles:
+        return None
+    tw = max(t[2][0] for t in tiles)
+    th = max(t[2][1] for t in tiles)
+    cols = max(1, min(cols, len(tiles)))
+    rows = (len(tiles) + cols - 1) // cols
+    cv = Canvas(cols * (tw + 10) + 10, rows * (th + 30) + 10)
+    for k, (pg, lab, (w, h, rgb)) in enumerate(tiles):
+        r, c = divmod(k, cols)
+        x, y = 10 + c * (tw + 10), 10 + r * (th + 30)
+        cv.text(x, y + 2, lab, scale=2)
+        cv.paste(x, y + 20, w, h, rgb)
+        cv.rect(x, y + 20, x + w - 1, y + 20 + h - 1, (160, 160, 160), lw=1)
+        for (x0, y0, x1, y1, bl) in (boxes or {}).get(pg, []):
+            cv.rect(x + x0 * w, y + 20 + y0 * h, x + x1 * w, y + 20 + y1 * h, (220, 30, 30), lw=2)
+            cv.text(int(x + x0 * w) + 2, int(y + 20 + y0 * h) + 2, bl, col=(255, 255, 255), scale=1, bg=(220, 30, 30))
+    return cv.save(out_png)
+
+
+def chart_table(pkg, chart_part):
+    """categories x series values of a native chart (cached values in the chart XML) -> rows for a CSV"""
+    C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+    root = ET.fromstring(pkg.read(chart_part))
+    series = []
+    for ser in root.iter(C + "ser"):
+        tx = ser.find(C + "tx")
+        name = "".join(v.text or "" for v in tx.iter(C + "v")) if tx is not None else ""
+        def pts(tag):
+            el = ser.find(C + tag)
+            if el is None:
+                return {}
+            return {int(pt.get("idx", 0)): (pt.findtext(C + "v") or "") for pt in el.iter(C + "pt")}
+        series.append((name or "series %d" % (len(series) + 1), pts("cat") or pts("xVal"), pts("val") or pts("yVal")))
+    if not series:
+        return []
+    cats = series[0][1]
+    n = max([len(cats)] + [len(v) for _, _, v in series])
+    rows = [["category"] + [nm for nm, _, _ in series]]
+    for i in range(n):
+        rows.append([cats.get(i, str(i + 1))] + [v.get(i, "") for _, _, v in series])
+    kind = next((el.tag.split("}")[1] for el in root.iter() if el.tag.endswith("Chart") and el.tag != C + "chart"), "chart")
+    return rows, kind
