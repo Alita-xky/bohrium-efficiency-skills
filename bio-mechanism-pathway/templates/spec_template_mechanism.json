@@ -1,0 +1,219 @@
+{
+ "_comment": "TEMPLATE . Mechanism figure with compartments. Replace every TODO; delete unused elements; keep ids unique.",
+ "canvas": {
+  "width_in": 10,
+  "height_in": 6.5,
+  "dpi": 300,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "TODO short title in the paper's words",
+  "y": 0.04,
+  "source": {
+   "file": "TODO",
+   "loc": "TODO",
+   "quote": "TODO verbatim quote (relations/numbers)"
+  }
+ },
+ "panels": [
+  {
+   "id": "soil",
+   "role": "compartment",
+   "title": "TODO title",
+   "x": 0.03,
+   "y": 0.1,
+   "w": 0.3,
+   "h": 0.8,
+   "fill": "#FBF6EE",
+   "elements": [
+    {
+     "id": "drought",
+     "type": "entity",
+     "shape": "ellipse",
+     "label": "TODO label from the source",
+     "x": 0.1,
+     "y": 0.18,
+     "w": 0.8,
+     "h": 0.2,
+     "fill": "#FFF4E5",
+     "edge": "#E69F00",
+     "category": "Stimulus",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "aba_root",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.1,
+     "y": 0.58,
+     "w": 0.8,
+     "h": 0.2,
+     "fill": "#E9F6F1",
+     "edge": "#009E73",
+     "category": "Hormone",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "leaf",
+   "role": "compartment",
+   "title": "TODO title",
+   "x": 0.37,
+   "y": 0.1,
+   "w": 0.3,
+   "h": 0.8,
+   "fill": "#F3F8FD",
+   "elements": [
+    {
+     "id": "stomata",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.1,
+     "y": 0.58,
+     "w": 0.8,
+     "h": 0.2,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Physiological process",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "gs",
+     "type": "text",
+     "ha": "center",
+     "text": "TODO text from the source",
+     "x": 0.05,
+     "y": 0.82,
+     "w": 0.9,
+     "h": 0.08,
+     "size": 9.5,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "plant",
+   "role": "compartment",
+   "title": "TODO title",
+   "x": 0.71,
+   "y": 0.1,
+   "w": 0.26,
+   "h": 0.8,
+   "fill": "#FAF5FA",
+   "elements": [
+    {
+     "id": "yield",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.08,
+     "y": 0.58,
+     "w": 0.84,
+     "h": 0.2,
+     "fill": "#FBEFF5",
+     "edge": "#CC79A7",
+     "category": "Outcome",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "lg",
+     "type": "legend",
+     "x": 0.06,
+     "y": 0.08,
+     "w": 0.9,
+     "h": 0.4,
+     "size": 8,
+     "entries": [
+      {
+       "label": "TODO label from the source",
+       "color": "#E69F00"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#009E73"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#0072B2"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#CC79A7"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#333333",
+       "marker": "arrow_activates"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#D55E00",
+       "marker": "arrow_inhibits"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "arrows": [
+  {
+   "id": "r1",
+   "from": "drought",
+   "to": "aba_root",
+   "kind": "activates",
+   "label": "TODO label from the source",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "r2",
+   "from": "aba_root",
+   "to": "stomata",
+   "kind": "inhibits",
+   "color": "#D55E00",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "r3",
+   "from": "stomata",
+   "to": "yield",
+   "kind": "activates",
+   "label": "TODO label from the source",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  }
+ ],
+ "footnote": "TODO Source: <paper short ref>; data from <table/figure>."
+}

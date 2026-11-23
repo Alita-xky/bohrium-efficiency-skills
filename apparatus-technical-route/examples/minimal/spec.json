@@ -1,0 +1,192 @@
+{
+ "_comment": "SYNTHETIC EXAMPLE apparatus + technical route.",
+ "canvas": {
+  "width_in": 11,
+  "height_in": 5.5,
+  "dpi": 200,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "Experimental setup and technical route (synthetic example)",
+  "y": 0.05,
+  "source": {
+   "file": "paper_excerpt.txt",
+   "loc": "p1:3"
+  }
+ },
+ "panels": [
+  {
+   "id": "route",
+   "role": "route",
+   "title": "Technical route",
+   "x": 0.02,
+   "y": 0.12,
+   "w": 0.96,
+   "h": 0.62,
+   "fill": "#F7F9FC",
+   "elements": [
+    {
+     "id": "s1",
+     "type": "entity",
+     "label": "Grow wheat in 24 pots",
+     "x": 0.02,
+     "y": 0.3,
+     "w": 0.17,
+     "h": 0.4,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Step",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:3"
+     }
+    },
+    {
+     "id": "s2",
+     "type": "entity",
+     "label": "Impose well-watered / drought regimes",
+     "x": 0.23,
+     "y": 0.3,
+     "w": 0.17,
+     "h": 0.4,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Step",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:3"
+     }
+    },
+    {
+     "id": "s3",
+     "type": "entity",
+     "label": "Measure root ABA daily",
+     "x": 0.44,
+     "y": 0.3,
+     "w": 0.15,
+     "h": 0.4,
+     "fill": "#E9F6F1",
+     "edge": "#009E73",
+     "category": "Measurement",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:3"
+     }
+    },
+    {
+     "id": "s4",
+     "type": "entity",
+     "label": "Measure stomatal conductance daily",
+     "x": 0.62,
+     "y": 0.3,
+     "w": 0.16,
+     "h": 0.4,
+     "fill": "#E9F6F1",
+     "edge": "#009E73",
+     "category": "Measurement",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:3"
+     }
+    },
+    {
+     "id": "s5",
+     "type": "entity",
+     "label": "Grain yield after 14 days",
+     "x": 0.81,
+     "y": 0.3,
+     "w": 0.17,
+     "h": 0.4,
+     "fill": "#FBEFF5",
+     "edge": "#CC79A7",
+     "category": "Endpoint",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:3"
+     }
+    }
+   ],
+   "arrows": [
+    {
+     "id": "n1",
+     "from": "s1",
+     "to": "s2",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    },
+    {
+     "id": "n2",
+     "from": "s2",
+     "to": "s3",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    },
+    {
+     "id": "n3",
+     "from": "s3",
+     "to": "s4",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    },
+    {
+     "id": "n4",
+     "from": "s4",
+     "to": "s5",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    }
+   ]
+  }
+ ],
+ "elements": [
+  {
+   "id": "lg",
+   "type": "legend",
+   "x": 0.03,
+   "y": 0.8,
+   "w": 0.5,
+   "h": 0.16,
+   "size": 8,
+   "entries": [
+    {
+     "label": "Step",
+     "color": "#0072B2"
+    },
+    {
+     "label": "Measurement",
+     "color": "#009E73"
+    },
+    {
+     "label": "Endpoint",
+     "color": "#CC79A7"
+    }
+   ]
+  },
+  {
+   "id": "note",
+   "type": "text",
+   "text": "Instrument models and dimensions not reported in the source.",
+   "x": 0.55,
+   "y": 0.84,
+   "w": 0.43,
+   "h": 0.08,
+   "size": 9,
+   "style": "italic",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3"
+   }
+  }
+ ],
+ "footnote": "Synthetic example. Steps from paper_excerpt.txt [p1:3]."
+}

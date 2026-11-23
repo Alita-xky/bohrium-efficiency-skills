@@ -1,0 +1,205 @@
+{
+ "_comment": "SYNTHETIC EXAMPLE relationship schematic.",
+ "canvas": {
+  "width_in": 10,
+  "height_in": 6,
+  "dpi": 200,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "Study design and measured relations (synthetic example)",
+  "y": 0.04,
+  "source": {
+   "file": "paper_excerpt.txt",
+   "loc": "p1:3"
+  }
+ },
+ "elements": [
+  {
+   "id": "design",
+   "type": "entity",
+   "label": "24 pots, wheat",
+   "x": 0.04,
+   "y": 0.42,
+   "w": 0.18,
+   "h": 0.14,
+   "fill": "#F2F2F2",
+   "edge": "#555555",
+   "category": "Design",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3"
+   }
+  },
+  {
+   "id": "ww",
+   "type": "entity",
+   "label": "Well-watered",
+   "x": 0.3,
+   "y": 0.2,
+   "w": 0.18,
+   "h": 0.12,
+   "fill": "#E8F1FA",
+   "edge": "#0072B2",
+   "category": "Treatment",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3"
+   }
+  },
+  {
+   "id": "dr",
+   "type": "entity",
+   "label": "Drought",
+   "x": 0.3,
+   "y": 0.66,
+   "w": 0.18,
+   "h": 0.12,
+   "fill": "#FFF4E5",
+   "edge": "#E69F00",
+   "category": "Treatment",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3"
+   }
+  },
+  {
+   "id": "aba",
+   "type": "entity",
+   "label": "Root ABA",
+   "x": 0.58,
+   "y": 0.42,
+   "w": 0.16,
+   "h": 0.12,
+   "fill": "#E9F6F1",
+   "edge": "#009E73",
+   "category": "Measured variable",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3"
+   }
+  },
+  {
+   "id": "gs",
+   "type": "entity",
+   "label": "Stomatal conductance",
+   "x": 0.8,
+   "y": 0.2,
+   "w": 0.17,
+   "h": 0.14,
+   "fill": "#E9F6F1",
+   "edge": "#009E73",
+   "category": "Measured variable",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3"
+   }
+  },
+  {
+   "id": "yl",
+   "type": "entity",
+   "label": "Grain yield",
+   "x": 0.8,
+   "y": 0.66,
+   "w": 0.17,
+   "h": 0.12,
+   "fill": "#E9F6F1",
+   "edge": "#009E73",
+   "category": "Measured variable",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:4"
+   }
+  },
+  {
+   "id": "lg",
+   "type": "legend",
+   "x": 0.03,
+   "y": 0.82,
+   "w": 0.4,
+   "h": 0.15,
+   "size": 8,
+   "entries": [
+    {
+     "label": "Design",
+     "color": "#555555"
+    },
+    {
+     "label": "Treatment",
+     "color": "#0072B2"
+    },
+    {
+     "label": "Measured variable",
+     "color": "#009E73"
+    },
+    {
+     "label": "inhibits",
+     "color": "#D55E00",
+     "marker": "arrow_inhibits"
+    }
+   ]
+  }
+ ],
+ "arrows": [
+  {
+   "id": "a1",
+   "from": "design",
+   "to": "ww",
+   "kind": "next",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3",
+    "quote": "under well-watered and drought regimes"
+   }
+  },
+  {
+   "id": "a2",
+   "from": "design",
+   "to": "dr",
+   "kind": "next",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:3",
+    "quote": "under well-watered and drought regimes"
+   }
+  },
+  {
+   "id": "a3",
+   "from": "dr",
+   "to": "aba",
+   "kind": "activates",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:4",
+    "quote": "Drought raised root ABA from 12 to 41 ng/g"
+   }
+  },
+  {
+   "id": "a4",
+   "from": "aba",
+   "to": "gs",
+   "kind": "inhibits",
+   "color": "#D55E00",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:4",
+    "quote": "ABA inhibits stomatal opening"
+   }
+  },
+  {
+   "id": "a5",
+   "from": "dr",
+   "to": "yl",
+   "kind": "inhibits",
+   "color": "#D55E00",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:4",
+    "quote": "Grain yield decreased from 5.2 to 3.9 t/ha"
+   }
+  }
+ ],
+ "footnote": "Synthetic example. Source: paper_excerpt.txt."
+}

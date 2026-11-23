@@ -1,0 +1,212 @@
+{
+ "_comment": "TEMPLATE relationship schematic. Replace every TODO; delete unused elements; keep ids unique.",
+ "canvas": {
+  "width_in": 10,
+  "height_in": 6,
+  "dpi": 300,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "TODO short title in the paper's words",
+  "y": 0.04,
+  "source": {
+   "file": "TODO",
+   "loc": "TODO",
+   "quote": "TODO verbatim quote (relations/numbers)"
+  }
+ },
+ "elements": [
+  {
+   "id": "design",
+   "type": "entity",
+   "label": "TODO label from the source",
+   "x": 0.04,
+   "y": 0.42,
+   "w": 0.18,
+   "h": 0.14,
+   "fill": "#F2F2F2",
+   "edge": "#555555",
+   "category": "Design",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "ww",
+   "type": "entity",
+   "label": "TODO label from the source",
+   "x": 0.3,
+   "y": 0.2,
+   "w": 0.18,
+   "h": 0.12,
+   "fill": "#E8F1FA",
+   "edge": "#0072B2",
+   "category": "Treatment",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "dr",
+   "type": "entity",
+   "label": "TODO label from the source",
+   "x": 0.3,
+   "y": 0.66,
+   "w": 0.18,
+   "h": 0.12,
+   "fill": "#FFF4E5",
+   "edge": "#E69F00",
+   "category": "Treatment",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "aba",
+   "type": "entity",
+   "label": "TODO label from the source",
+   "x": 0.58,
+   "y": 0.42,
+   "w": 0.16,
+   "h": 0.12,
+   "fill": "#E9F6F1",
+   "edge": "#009E73",
+   "category": "Measured variable",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "gs",
+   "type": "entity",
+   "label": "TODO label from the source",
+   "x": 0.8,
+   "y": 0.2,
+   "w": 0.17,
+   "h": 0.14,
+   "fill": "#E9F6F1",
+   "edge": "#009E73",
+   "category": "Measured variable",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "yl",
+   "type": "entity",
+   "label": "TODO label from the source",
+   "x": 0.8,
+   "y": 0.66,
+   "w": 0.17,
+   "h": 0.12,
+   "fill": "#E9F6F1",
+   "edge": "#009E73",
+   "category": "Measured variable",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "lg",
+   "type": "legend",
+   "x": 0.03,
+   "y": 0.82,
+   "w": 0.4,
+   "h": 0.15,
+   "size": 8,
+   "entries": [
+    {
+     "label": "TODO label from the source",
+     "color": "#555555"
+    },
+    {
+     "label": "TODO label from the source",
+     "color": "#0072B2"
+    },
+    {
+     "label": "TODO label from the source",
+     "color": "#009E73"
+    },
+    {
+     "label": "TODO label from the source",
+     "color": "#D55E00",
+     "marker": "arrow_inhibits"
+    }
+   ]
+  }
+ ],
+ "arrows": [
+  {
+   "id": "a1",
+   "from": "design",
+   "to": "ww",
+   "kind": "next",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "a2",
+   "from": "design",
+   "to": "dr",
+   "kind": "next",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "a3",
+   "from": "dr",
+   "to": "aba",
+   "kind": "activates",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "a4",
+   "from": "aba",
+   "to": "gs",
+   "kind": "inhibits",
+   "color": "#D55E00",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  },
+  {
+   "id": "a5",
+   "from": "dr",
+   "to": "yl",
+   "kind": "inhibits",
+   "color": "#D55E00",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  }
+ ],
+ "footnote": "TODO Source: <paper short ref>; data from <table/figure>."
+}

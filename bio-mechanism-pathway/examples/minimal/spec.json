@@ -1,0 +1,213 @@
+{
+ "_comment": "SYNTHETIC EXAMPLE (interface demo, not a formal case result). Mechanism figure with compartments.",
+ "canvas": {
+  "width_in": 10,
+  "height_in": 6.5,
+  "dpi": 200,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "Drought → root ABA → stomatal closure (synthetic example)",
+  "y": 0.04,
+  "source": {
+   "file": "paper_excerpt.txt",
+   "loc": "p1:5"
+  }
+ },
+ "panels": [
+  {
+   "id": "soil",
+   "role": "compartment",
+   "title": "Soil / root",
+   "x": 0.03,
+   "y": 0.1,
+   "w": 0.3,
+   "h": 0.8,
+   "fill": "#FBF6EE",
+   "elements": [
+    {
+     "id": "drought",
+     "type": "entity",
+     "shape": "ellipse",
+     "label": "Soil drying (drought)",
+     "x": 0.1,
+     "y": 0.18,
+     "w": 0.8,
+     "h": 0.2,
+     "fill": "#FFF4E5",
+     "edge": "#E69F00",
+     "category": "Stimulus",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:3"
+     }
+    },
+    {
+     "id": "aba_root",
+     "type": "entity",
+     "label": "Root ABA ↑ (12 → 41 ng/g)",
+     "x": 0.1,
+     "y": 0.58,
+     "w": 0.8,
+     "h": 0.2,
+     "fill": "#E9F6F1",
+     "edge": "#009E73",
+     "category": "Hormone",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:4"
+     }
+    }
+   ]
+  },
+  {
+   "id": "leaf",
+   "role": "compartment",
+   "title": "Leaf (guard cells)",
+   "x": 0.37,
+   "y": 0.1,
+   "w": 0.3,
+   "h": 0.8,
+   "fill": "#F3F8FD",
+   "elements": [
+    {
+     "id": "stomata",
+     "type": "entity",
+     "label": "Stomatal opening",
+     "x": 0.1,
+     "y": 0.58,
+     "w": 0.8,
+     "h": 0.2,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Physiological process",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:4"
+     }
+    },
+    {
+     "id": "gs",
+     "type": "text",
+     "ha": "center",
+     "text": "conductance −38%",
+     "x": 0.05,
+     "y": 0.82,
+     "w": 0.9,
+     "h": 0.08,
+     "size": 9.5,
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:4"
+     }
+    }
+   ]
+  },
+  {
+   "id": "plant",
+   "role": "compartment",
+   "title": "Whole plant",
+   "x": 0.71,
+   "y": 0.1,
+   "w": 0.26,
+   "h": 0.8,
+   "fill": "#FAF5FA",
+   "elements": [
+    {
+     "id": "yield",
+     "type": "entity",
+     "label": "Grain yield ↓ (5.2 → 3.9 t/ha)",
+     "x": 0.08,
+     "y": 0.58,
+     "w": 0.84,
+     "h": 0.2,
+     "fill": "#FBEFF5",
+     "edge": "#CC79A7",
+     "category": "Outcome",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:4"
+     }
+    },
+    {
+     "id": "lg",
+     "type": "legend",
+     "x": 0.06,
+     "y": 0.08,
+     "w": 0.9,
+     "h": 0.4,
+     "size": 8,
+     "entries": [
+      {
+       "label": "Stimulus",
+       "color": "#E69F00"
+      },
+      {
+       "label": "Hormone",
+       "color": "#009E73"
+      },
+      {
+       "label": "Physiological process",
+       "color": "#0072B2"
+      },
+      {
+       "label": "Outcome",
+       "color": "#CC79A7"
+      },
+      {
+       "label": "activates",
+       "color": "#333333",
+       "marker": "arrow_activates"
+      },
+      {
+       "label": "inhibits",
+       "color": "#D55E00",
+       "marker": "arrow_inhibits"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "arrows": [
+  {
+   "id": "r1",
+   "from": "drought",
+   "to": "aba_root",
+   "kind": "activates",
+   "label": "raises",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:4",
+    "quote": "Drought raised root ABA from 12 to 41 ng/g"
+   }
+  },
+  {
+   "id": "r2",
+   "from": "aba_root",
+   "to": "stomata",
+   "kind": "inhibits",
+   "color": "#D55E00",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:4",
+    "quote": "ABA inhibits stomatal opening"
+   }
+  },
+  {
+   "id": "r3",
+   "from": "stomata",
+   "to": "yield",
+   "kind": "activates",
+   "label": "links to",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:5",
+    "quote": "Root-derived ABA links soil drying to stomatal closure and yield loss"
+   }
+  }
+ ],
+ "footnote": "Synthetic example. Relations quoted from paper_excerpt.txt [p1:4–5]."
+}

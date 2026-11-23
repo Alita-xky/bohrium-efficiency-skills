@@ -1,0 +1,72 @@
+{
+ "_comment": "SYNTHETIC EXAMPLE source_value_chart (two charts bound to CSV).",
+ "canvas": {
+  "width_in": 10,
+  "height_in": 5,
+  "dpi": 200,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "Drought effects on root ABA and grain yield (synthetic example)",
+  "y": 0.05,
+  "source": {
+   "file": "paper_excerpt.txt",
+   "loc": "p1:4"
+  }
+ },
+ "elements": [
+  {
+   "id": "c_aba",
+   "type": "chart",
+   "kind": "bar",
+   "x": 0.08,
+   "y": 0.16,
+   "w": 0.38,
+   "h": 0.62,
+   "data": {
+    "csv": "aba_timecourse.csv",
+    "x": "day",
+    "y": "root_aba_ng_g",
+    "group": "treatment"
+   },
+   "colors": [
+    "#0072B2",
+    "#E69F00"
+   ],
+   "legend_title": "Treatment",
+   "xlabel": "Day",
+   "ylabel": "Root ABA (ng/g)",
+   "title": "Root ABA",
+   "source": {
+    "file": "aba_timecourse.csv",
+    "loc": "all rows"
+   }
+  },
+  {
+   "id": "c_yield",
+   "type": "chart",
+   "kind": "bar",
+   "x": 0.58,
+   "y": 0.16,
+   "w": 0.38,
+   "h": 0.62,
+   "data": {
+    "csv": "yield.csv",
+    "x": "treatment",
+    "y": "yield_t_ha",
+    "err": "sd"
+   },
+   "color": "#6B7785",
+   "xlabel": "Treatment",
+   "ylabel": "Grain yield (t/ha)",
+   "title": "Grain yield (mean ± SD)",
+   "source": {
+    "file": "yield.csv",
+    "loc": "rows 1-2"
+   }
+  }
+ ],
+ "footnote": "Synthetic example. Data: aba_timecourse.csv, yield.csv; error bars = SD column of yield.csv."
+}
