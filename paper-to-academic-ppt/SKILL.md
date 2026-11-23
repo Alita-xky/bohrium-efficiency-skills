@@ -1,0 +1,106 @@
+---
+name: paper2ppt-evidence-deck
+description: "Turn a research paper (PDF + optional data/template) into an editable academic slide deck (.pptx) whose every slide is a claim tied to the paper's own figures, tables, sections and numbers, with speaker notes, real LibreOffice PDF/PNG renders, a page-level evidence map (verbatim quotes with page:paragraph locators), automatic number/figure/overflow/font checks and a contract-complete result.json. Use for any paper-to-slides, paper-to-PPT, journal-club or conference-talk deck task."
+---
+
+# Paper → evidence-bound academic deck
+
+Goal: a deck whose **main line follows the paper's contributions**, where **every slide can be traced** to a
+figure, table, section or data row of the paper, delivered as an **editable .pptx** (template placeholders,
+speaker notes) + **PDF/PNG renders**, an **evidence map** and an honest `result.json`.
+Correctness and traceability beat decoration.
+
+Budget: 64 requests / 900 s / 16k tokens per reply. Target ≈ 15 requests: one call per step, the spec in at
+most two writes. **Have a complete deliverable by step 5**, then improve once.
+
+```bash
+SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
+[ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
+mkdir -p /app/work /app/output
+```
+
+## 1. Prepare (1 call)
+```bash
+cat task.md /input/task.md 2>/dev/null | head -150; python3 -c "import json;print(json.dumps(json.load(open('/input/case.json')),ensure_ascii=False,indent=1)[:5000])"
+python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+```
+It extracts all text with paragraph locators (`materials/*.txt`, tags `[p3:12]`), maps the paper
+(`paper_map.json`: sections with roles, every Figure/Table caption with page + crop box + a ready PNG crop,
+where each figure is discussed, key sentences), inspects a template (`template_report.json`) and a starting
+deck, and lists tools (python-pptx or the stdlib writer is chosen automatically). Note from task.md: slide
+limits, minutes, audience, language, template, and the **output_contract** field names.
+
+## 2. Read the evidence (2–4 calls)
+- `python3 -c "import json;d=json.load(open('/app/work/paper_map.json'));[print(k['loc'],k['role'],k['text']) for k in d['key_sentences']]"`
+- `grep -n -i "contribution\|we propose\|limitation\|table [0-9]\|outperform" /app/work/materials/*.txt | head -60`,
+  then read only the paragraphs you need (`sed -n`), especially the result table text.
+- Look once at `/app/work/figs/fig_candidates.png` (red boxes = auto crops of each Fig./Table). If a box is
+  wrong, fix it in the spec (`bbox` page fractions) or with `paper_map.py crop`.
+Fill the five slots of `references/storyline.md` (problem, gap/idea, method, evidence, limits+take-home).
+
+## 3. Write `/app/work/facts.json` — the evidence table (1 call)
+Start from `$SKILL/templates/facts_template.json`. One row per fact that will appear on a slide:
+`{"id","kind","text","source":{"file","loc","ref","quote"}}`. **Copy quotes verbatim** (≤ 30 words) from
+`materials/*.txt`; `ref` = "Fig. 3" / "Table 2" / "Sec. 4.1" / "Abstract". A requested item that the paper
+does not contain gets `"status":"not_in_materials"` — it is reported, never invented.
+
+## 4. Write `/app/work/spec.json` (1–2 calls)
+Start from `$SKILL/templates/spec_template.json`; full field list in `references/formats.md`; rules in
+`references/slide_rules.md`. Essentials:
+- 10–15 slides unless the task fixes the count; roles in story order: title → motivation → method → (setup) →
+  results → limitations → conclusion (→ backup). Titles are **claims**, not topics.
+- Each slide: `sources` (fact ids) and per-bullet `src`; ≤ 5 short bullets; `notes` = what to say that is not
+  on the slide + transition (never the bullets again).
+- Paper figures: `"figure":{"pdf":"/input/paper.pdf","page":P,"bbox":[...from paper_map...],"ref":"Fig. N","caption":"<first sentence, verbatim>","kind":"data|schematic","src":[...]}`
+  (or `"image": crop_png`). Keep the paper's numbering. Tables: copy cells exactly into `"table":{"rows":…}` or
+  show the table crop. Charts only from input CSV/XLSX (`"chart"`), labelled "redrawn from data".
+- Numbers exactly as in the paper (precision, unit). Computed values → `derived` with formula.
+- Chinese task → Chinese slide text, `meta.lang:"zh"`, technical terms/numbers unchanged.
+- Long spec? Write slides 1–7 in spec.json and the rest in spec2.json (`--spec` twice).
+
+## 5. Build, check, render, look (2–4 calls) — a full deliverable exists after the first run
+```bash
+python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --outdir /app/output \
+  --mode paper --max-slides 15 [--template /input/<template>.pptx|.potx]
+```
+(`--materials` defaults to `/app/work/materials/*.txt` + input CSVs; `--paper-map` to `/app/work/paper_map.json`.)
+It runs deck_check (quotes verbatim, locators, every number in the materials, Fig./Table numbers exist,
+sources, story order, density, notes) → deck_build → deck_render (LibreOffice PDF, PNG per slide,
+`previews/contact_sheet.png`, overflow / < 12 pt / off-slide / stretched picture / fonts embedded) → template
+audit. Fix every **FAIL** in the spec and re-run (max twice). Open `previews/contact_sheet.png` once and check:
+crops show the right figure, nothing overflows, titles fit. Do not polish endlessly.
+
+## 6. Records and result.json (1–2 calls)
+```bash
+python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json \
+  [--uncertainty "Fig. 5 is a bitmap: values not re-checked"] [--set field=value]
+python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
+```
+deck_fill writes `version_record.json` (inputs + sha256, deck/PDF/PNGs, template, fonts requested vs embedded,
+tools, backend, re-run command) and maps every output_contract field to the produced files
+(deck, evidence map, render/version records, notes, uncertainty, status); unmapped fields are listed —
+add them with `--set`, otherwise make_result marks them `not_provided` (never fabricated).
+
+## Exception handling (decide, then state it in result.json → uncertainty)
+| Situation | Action |
+|---|---|
+| PDF has no text layer / scanned | extract_materials OCRs (tesseract); cite OCR text as lower confidence; check numbers against page images |
+| PDF encrypted / unreadable | try `qpdf --decrypt in.pdf out.pdf`; else build from other materials, `status: partial` |
+| figure crop wrong / caption not found | set `bbox` by hand (look at the page PNG) or `paper_map.py crop`; whole page as last resort |
+| formula only as image | crop it as an image; do not retype unless the text layer has it |
+| value requested but not in paper | fact with `not_in_materials`; slide says "not reported"; listed in uncertainty |
+| text overflow FAIL | shorten to phrases / split slide; never below 12 pt body |
+| table too large | keep key rows/columns (say so in caption) or show the paper's table crop |
+| slide limit exceeded | merge minor results, move details to notes; drop backup first |
+| template lacks a layout / placeholders | builder falls back (recorded in build_report); never draw fake title boxes |
+| font missing | render_report shows requested vs embedded fonts; keep template fonts, note substitution |
+| python-pptx missing / fails | stdlib OOXML writer is used automatically (same XML, same render) |
+| soffice missing / export fails | deliver the .pptx, status `partial`, report the missing renderer; no fake previews |
+| running out of time | run deck_make + deck_fill + make_result with what exists (`status: partial`) |
+
+## Final checklist
+1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/*.png`, `evidence_map.json/.md`, `check_report.json`,
+   `render_report.json`, `build_report.json`, `slides_outline.md`, `version_record.json`, `result.json`.
+2. check_report has no FAIL (or every remaining FAIL is listed in uncertainty with status `partial`).
+3. Every Fig./Table number on a slide is the paper's own; every number is in the materials.
+4. `result.json` has `case_id` and every contract field; status honest.

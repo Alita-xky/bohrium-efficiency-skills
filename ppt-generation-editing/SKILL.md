@@ -1,0 +1,88 @@
+---
+name: ppt-source-preserving-editor
+description: "Generate or revise an academic slide deck (.pptx) by instruction without rebuilding it: inventory shapes, apply addressed edits (fix numbers, compress/expand/translate/re-target text, insert paper figures or data tables, reorder/split/add backup slides, notes, theme changes) with python-pptx or a byte-preserving stdlib XML engine, keep numbered versions with rollback, a per-op change log with before/after and sources, per-slide text+pixel diffs, number/evidence checks against the paper, template-integrity audit, real PDF/PNG renders and a contract-complete result.json. Use for any PPT edit, revision, iteration or 'update these slides' task, and for generating a first version that will be revised."
+---
+
+# Source-preserving deck editor: addressed edits, versions, diffs, evidence
+
+Goal: the requested changes — **and only those** — applied to the given deck, every change **logged with
+reason, source and before/after**, every version **kept and reversible**, numbers **checked against the paper**,
+the template intact, and real renders of the result.
+
+Budget: 64 requests / 900 s / 16k tokens per reply. Target ≈ 12 requests; one edit round is one call.
+
+```bash
+SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
+[ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
+mkdir -p /app/work /app/output
+```
+
+## 1. Prepare (1 call)
+```bash
+cat task.md /input/task.md 2>/dev/null | head -150; python3 -c "import json;print(json.dumps(json.load(open('/input/case.json')),ensure_ascii=False,indent=1)[:5000])"
+python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+```
+For a starting deck it prints the **inventory**: every slide with `sld_id`, layout, and each shape's id, name,
+kind (placeholder type / textbox / picture / table), font size and text; it also renders the deck
+(`/app/work/start_render/previews/contact_sheet.png`). The paper (if any) is mapped as in paper2ppt
+(`paper_map.json`, crops of every Fig./Table). Number the instructions in task.md 1…n.
+
+## 2. Find the values you need (1–3 calls)
+For every instruction that changes content, find the exact source text: `grep -n` in
+`/app/work/materials/*.txt` (numbers must be copied exactly), the figure crop/bbox from paper_map.json, the CSV
+for data tables. Look once at the starting deck's contact sheet if layout matters.
+
+## 3. Write `/app/work/ops.json` (1 call)
+One op per change, in order (template: `$SKILL/templates/ops_template.json`; cookbook:
+`references/edit_rules.md`; full op list in the header of `scripts/deck_edit.py`). Each op gets
+`"reason": "instruction k: …"` and, for content, `"src": ["paper.pdf p5:2 Table 1"]`. Text ops first, then
+moves/deletes (or address with `slide_id`). Relative image/CSV paths resolve against ops.json's folder, the
+deck's folder and /input.
+
+## 4. Run the round (1 call) — complete deliverable after this
+```bash
+python3 $SKILL/scripts/deck_edit.py round --pptx /input/<deck>.pptx --ops /app/work/ops.json --outdir /app/output \
+  --materials /app/work/materials/*.txt /input/*.csv --note "instructions 1-6"
+```
+First round snapshots the input as `versions/v0.pptx` (+ renders); then applies the ops with the byte-preserving
+XML engine (`--engine pptx` to use python-pptx for text ops) → `/app/output/deck.pptx`
++ `edit_log.json` (per op: status, before/after, parts changed); renders PDF/PNGs; writes `slide_diff.json/.md`
+(text diff per shape, moved/added/removed slides, % pixels changed per slide vs the previous version); runs
+`deck_check --pptx` (every number on every slide found in the materials, slide text matched to paper paragraphs
+→ `evidence_map.json/.md`); audits the master/theme against v0 (`compliance.json`); snapshots `versions/v1.pptx`.
+Check the printed summary: `ops_errors` empty, `slides_changed` = the slides you meant, render/check/template
+`ok/pass`. Open `previews/contact_sheet.png` once.
+
+## 5. Iterate or roll back (0–2 calls)
+Wrong or incomplete? Write `/app/work/ops2.json` and run `round --pptx /app/output/deck.pptx --ops /app/work/ops2.json …`
+(→ v2, diff vs v1). A round that broke something: `cp /app/output/versions/v<N-1>.pptx /app/output/deck.pptx`
+and redo. No starting deck? Generate v0 first exactly like paper2ppt (facts.json + spec.json →
+`deck_make.py --outdir /app/work/gen`), then run rounds on `/app/work/gen/deck.pptx`.
+
+## 6. Records and result.json (1–2 calls)
+```bash
+python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
+python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
+```
+Change-log / version / diff fields get `edit_log.json`, `versions/versions.json` (with rollback commands),
+`slide_diff.*`; others get the deck, renders, evidence map, version_record.json. State in `--uncertainty` any
+instruction you could not do and why. Add unmapped contract fields with `--set field=value`.
+
+## Exception handling
+| Situation | Action |
+|---|---|
+| shape/slide not found (`ops_errors`) | re-read the inventory (`deck_edit.py inventory --pptx …`), fix the address, re-run the round |
+| instruction conflicts with the paper (e.g. "change 27.9 to 28") | keep the paper's value, report the conflict in uncertainty |
+| number in instruction not in materials | do not insert it unless the task explicitly provides it; flag in uncertainty |
+| text overflows after edit (render FAIL) | shorten, or `duplicate_slide` + split; do not shrink below 12 pt |
+| picture is a bitmap and values are asked | read only what the paper text/tables state; never estimate from pixels |
+| template slots insufficient for a new slide | `add_slide` uses the deck's own layouts (fallbacks recorded); never edit the master |
+| CJK text renders as blanks (render FAIL "without any CJK font") | the pptx is fine; report missing CJK font, status partial for previews |
+| python-pptx missing | ops run on the stdlib XML engine automatically |
+| .ppt / .odp input | deck_prepare converts with LibreOffice to .pptx first; edit the converted copy and say so |
+
+## Final checklist
+1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/`, `edit_log.json`, `slide_diff.json/.md`, `versions/`
+   (v0 … vN + versions.json), `evidence_map.*`, `check_report.json`, `compliance.json`, `version_record.json`, `result.json`.
+2. Every instruction maps to ≥ 1 logged op (or is explained in uncertainty); no unintended slide in slide_diff.
+3. No number on any slide is missing from the materials; template audit pass; `result.json` complete.

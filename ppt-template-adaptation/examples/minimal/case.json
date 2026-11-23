@@ -1,0 +1,9 @@
+{"case_id": "example-synthetic-tpl-001",
+ "note": "SYNTHETIC example case - illustrates the interface; not a formal test case",
+ "task": "Adapt draft_deck.pptx to the department template univ_template.potx: every slide must use the template's master and layouts, keep all text, numbers, figures and notes, fix formatting violations, export a PDF and report per-slide deviations.",
+ "materials": ["draft_deck.pptx", "univ_template.potx", "paper_synthetic.pdf", "wer_by_hours.csv"],
+ "output_contract": {"adapted_deck": "editable pptx on the template + PDF/PNG previews",
+                     "template_compliance": "per-slide deviations before/after, layouts used, fonts/colours",
+                     "evidence_map": "slide content -> paper locator",
+                     "render_and_version_record": "source files, template, exports, fonts, change log",
+                     "uncertainty": "what could not be verified", "status": "complete|partial|failed"}}

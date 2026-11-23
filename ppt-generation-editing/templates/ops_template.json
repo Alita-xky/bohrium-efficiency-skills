@@ -1,0 +1,13 @@
+{"_how": "List of ops applied in order (this object form with an 'ops' key is also accepted). Slides = position at the time the op runs, or 'slide_id' from the inventory. shape = name | id | 'title' | 'body'. Every op: 'reason' (instruction it implements); content ops: 'src' (paper locator). Delete examples you do not need.",
+ "ops": [
+  {"op": "replace_text", "slide": 4, "shape": "title", "find": "TODO wrong value", "replace": "TODO value from the paper", "reason": "instruction 1", "src": ["TODO.pdf pN:M Table K"]},
+  {"op": "set_text", "slide": 2, "shape": "body", "paragraphs": ["TODO phrase", {"text": "TODO sub-point", "level": 1}], "reason": "instruction 2"},
+  {"op": "set_notes", "slide": 3, "text": "TODO what to say that is not on the slide; transition.", "reason": "instruction 3"},
+  {"op": "set_font", "slide": 5, "shape": "body", "bold": true, "color": "accent2", "reason": "emphasis"},
+  {"op": "replace_image", "slide": 6, "shape": "Figure 1", "image": "/app/work/figs/fig3_p6.png", "fit": "contain", "reason": "instruction 4", "src": ["TODO.pdf p6 Fig. 3"]},
+  {"op": "add_slide", "position": 8, "slide": {"id": "B1", "role": "backup", "title": "TODO", "table": {"csv": "/input/TODO.csv", "ref": "TODO"}, "notes": "TODO"}, "reason": "instruction 5"},
+  {"op": "duplicate_slide", "slide": 7, "to": 8, "reason": "split slide 7"},
+  {"op": "move_slide", "slide": 9, "to": 6, "reason": "instruction 6"},
+  {"op": "delete_slide", "slide": 10, "reason": "instruction 7"},
+  {"op": "apply_theme", "fonts": {"ea": "Noto Sans CJK SC"}, "reason": "Chinese text needs an East-Asian theme font"}
+ ]}

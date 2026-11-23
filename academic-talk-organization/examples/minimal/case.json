@@ -1,0 +1,11 @@
+{"case_id": "example-synthetic-talk-001",
+ "note": "SYNTHETIC example case - illustrates the interface; not a formal test case",
+ "task": "Organise an 8-minute lab-meeting talk on paper_synthetic.pdf for speech-recognition colleagues who know CTC but not mixture-of-experts. Goal: the group can decide whether to try GateLite for its own low-resource languages. 8-10 main slides plus up to 2 backup slides; prepare likely questions.",
+ "materials": ["paper_synthetic.pdf", "wer_by_hours.csv"],
+ "constraints": {"minutes": 8, "slides": "8-10 + 2 backup", "audience": "speech-recognition lab, knows CTC, not MoE", "language": "en"},
+ "output_contract": {"talk_plan": "goal, audience, section time budget, key messages, transitions",
+                     "deck": "editable pptx with speaker notes + PDF/PNG previews",
+                     "evidence_map": "slide -> paper locator with verbatim quotes",
+                     "qa_preparation": "likely questions with answer points, evidence and backup slides",
+                     "render_and_version_record": "source files, exports, fonts/template, change log",
+                     "uncertainty": "what could not be verified", "status": "complete|partial|failed"}}

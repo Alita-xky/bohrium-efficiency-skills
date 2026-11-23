@@ -1,0 +1,170 @@
+{
+ "_note": "SYNTHETIC example evidence table for paper_synthetic.pdf (made-up paper). One row per fact that appears on a slide; quotes are verbatim from materials/paper_synthetic.pdf.txt.",
+ "facts": [
+  {
+   "id": "F0",
+   "kind": "meta",
+   "text": "title and authors",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p1:1",
+    "ref": "Title",
+    "quote": "GateLite: Sparse Gated Adapters for Low-Resource Speech"
+   }
+  },
+  {
+   "id": "F1",
+   "kind": "claim",
+   "text": "fine-tuning overfits below 10 h",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p1:2",
+    "ref": "Abstract",
+    "quote": "Fine-tuning large speech encoders for low-resource languages is expensive and overfits when fewer than 10 hours of labelled audio are available."
+   }
+  },
+  {
+   "id": "F2",
+   "kind": "context",
+   "text": "300M encoder overfits; dense adapters spend capacity on every frame",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p1:2",
+    "ref": "Sec. 1",
+    "quote": "Full fine-tuning of a 300M-parameter encoder overfits when only a few hours of transcribed speech exist, and dense adapters spend capacity on every frame even when most frames are easy."
+   }
+  },
+  {
+   "id": "F3",
+   "kind": "claim",
+   "text": "three contributions",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p1:2",
+    "ref": "Sec. 1",
+    "quote": "Our contributions are: (1) a sparse gated adapter that routes each frame to 2 of 8 small experts;"
+   }
+  },
+  {
+   "id": "F4",
+   "kind": "method",
+   "text": "adapter after each of 24 layers, 8 experts width 64, top-2 routing",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p2:1",
+    "ref": "Sec. 2",
+    "quote": "Each block holds 8 bottleneck experts of width 64; a router selects the top-2 experts per frame (Figure 1)."
+   }
+  },
+  {
+   "id": "F5",
+   "kind": "method",
+   "text": "load-balancing loss weight 0.01",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p2:1",
+    "ref": "Sec. 2",
+    "quote": "A load-balancing loss with weight 0.01 keeps expert usage uniform."
+   }
+  },
+  {
+   "id": "F6",
+   "kind": "method",
+   "text": "only adapters and CTC head trained",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p2:1",
+    "ref": "Sec. 2",
+    "quote": "Only the adapters and the CTC head are trained; the encoder stays frozen."
+   }
+  },
+  {
+   "id": "F7",
+   "kind": "method",
+   "text": "1/5/10/50 h, WER on official test sets",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p2:4",
+    "ref": "Sec. 3",
+    "quote": "We train on 1, 5, 10 and 50 hours per language and report WER on the official test sets."
+   }
+  },
+  {
+   "id": "F8",
+   "kind": "result",
+   "text": "Table 1 values at 10 h",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p2:4",
+    "ref": "Table 1",
+    "quote": "Table 1: Average WER (%) on five languages, 10 h of training data."
+   }
+  },
+  {
+   "id": "F9",
+   "kind": "result",
+   "text": "Fig. 2: best at 1 h and 5 h, within 0.3 points at 50 h",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p3:4",
+    "ref": "Fig. 2",
+    "quote": "GateLite is best at 1 h and 5 h; at 50 h the two methods are within 0.3 points."
+   }
+  },
+  {
+   "id": "F10",
+   "kind": "limitation",
+   "text": "read speech only",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p3:5",
+    "ref": "Sec. 4",
+    "quote": "GateLite was evaluated only on read speech; spontaneous speech was not tested."
+   }
+  },
+  {
+   "id": "F11",
+   "kind": "limitation",
+   "text": "6% latency",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p3:5",
+    "ref": "Sec. 4",
+    "quote": "Routing adds 6% inference latency on a single GPU."
+   }
+  },
+  {
+   "id": "F12",
+   "kind": "result",
+   "text": "-3.5 WER points with 3.1% parameters",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p3:5",
+    "ref": "Sec. 5",
+    "quote": "Sparse gated adapters cut WER by 3.5 points on average at 10 hours of data while training 3.1% of the parameters."
+   }
+  },
+  {
+   "id": "F13",
+   "kind": "result",
+   "text": "benefit shrinks with more data",
+   "source": {
+    "file": "paper_synthetic.pdf",
+    "loc": "p3:5",
+    "ref": "Sec. 5",
+    "quote": "The benefit shrinks as training data grows and is negligible at 50 hours."
+   }
+  },
+  {
+   "id": "F14",
+   "kind": "data",
+   "text": "per-hour WER values behind Fig. 2",
+   "source": {
+    "file": "wer_by_hours.csv",
+    "loc": "row0",
+    "ref": "Fig. 2 data",
+    "quote": "hours,full_finetune_wer,gatelite_wer"
+   }
+  }
+ ]
+}

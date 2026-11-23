@@ -1,0 +1,581 @@
+#!/usr/bin/env python3
+"""deck_check.py - audit a deck spec against the source materials and write the page-level evidence map.
+
+Usage:
+  python3 deck_check.py --spec /app/work/spec.json [--spec part2.json] --facts /app/work/facts.json \
+      --materials '/app/work/materials/*.txt' /input/*.csv [--paper-map /app/work/paper_map.json] \
+      --mode paper|talk|template|edit [--min-slides 8] [--max-slides 15] [--duration-min 15] [--plan talk_plan.json] \
+      --out /app/output/check_report.json --map /app/output/evidence_map.json
+
+FAIL (must fix before delivery)                       WARN (fix if cheap, else report)
+- fact quote not found verbatim in the materials       - fact locator points to another paragraph (suggests one)
+- slide without any source / unknown fact id           - title is a topic label, not a claim
+- number on a slide that is in no material             - > 6 bullets, long bullets, notes repeat the slide
+- Fig./Table number that has no caption in the paper   - figure page differs from its caption page
+- chart CSV/column missing, TODO text left             - numeric claim backed only by a schematic figure
+- content slide without speaker notes                  - limitations slide missing (paper/talk)
+- slide count outside limits; required story parts     - order not motivation -> method -> results -> conclusion
+  missing (paper/talk); talk time budget off by >10%
+Writes evidence_map.json + evidence_map.md: every slide item -> fact -> file/locator/verbatim quote + check result.
+"""
+import argparse, csv, glob, json, os, re, sys
+from difflib import SequenceMatcher
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pptkit as K  # noqa: E402
+
+NUM_RE = re.compile(r"(?<![A-Za-z_\d.])[-+−]?\d+(?:,\d{3})*(?:\.\d+)?(?:\s?[×x]\s?10\^?[-−]?\d+|e[-−]?\d+)?")
+REF_RE = re.compile(r"(Fig(?:ure)?s?\.?|Tables?|Tab\.|Sec(?:tion)?s?\.?|§|Eqs?\.?|Equations?|Appendix|Alg(?:orithm)?s?\.?|"
+                    r"Steps?|Stages?|Parts?|pp?\.|pages?|Ref\.?|slides?|图|表|第|公式)\s*\(?\d+(?:[.\-–]\d+)*[a-z]?\)?", re.I)
+CAPREF_RE = re.compile(r"(Fig(?:ure)?s?\.?|Tables?|Tab\.|图|表)\s*(\d+)", re.I)
+RANK = {"title": 0, "outline": 1, "agenda": 1, "overview": 1, "motivation": 2, "background": 2, "problem": 2, "context": 2,
+        "related": 2, "question": 2, "goal": 2, "method": 3, "approach": 3, "setup": 3, "design": 3, "data": 3,
+        "results": 4, "result": 4, "experiment": 4, "evaluation": 4, "analysis": 4, "ablation": 4, "evidence": 4,
+        "discussion": 5, "limitations": 6, "limitation": 6, "future": 7, "conclusion": 7, "takeaway": 7,
+        "qa": 8, "questions": 8, "thanks": 8, "backup": 9, "appendix": 9, "references": 9}
+NO_SOURCE_NEEDED = {"title", "section", "outline", "agenda", "qa", "questions", "thanks", "references"}
+GENERIC = {"introduction", "intro", "background", "motivation", "method", "methods", "methodology", "approach", "results",
+           "result", "experiments", "experiment", "evaluation", "discussion", "conclusion", "conclusions", "summary",
+           "outline", "agenda", "overview", "limitations", "future work", "related work", "q&a", "questions", "thanks",
+           "thank you", "引言", "背景", "研究背景", "方法", "实验", "结果", "实验结果", "讨论", "结论", "总结", "目录", "致谢", "展望"}
+META_FILES = ("case.json", "task.md")
+TODO_RE = re.compile(r"\b(TODO|TBD|FIXME|lorem ipsum|XXX)\b|\?\?\?|<placeholder>", re.I)
+
+
+def norm_text(s):
+    s = str(s)
+    for a, b in (("ﬁ", "fi"), ("ﬂ", "fl"), ("ﬀ", "ff"), ("ﬃ", "ffi"), ("’", "'"), ("‘", "'"), ("“", '"'), ("”", '"'),
+                 ("–", "-"), ("—", "-"), ("−", "-"), (" ", " "), (" ", " ")):
+        s = s.replace(a, b)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def variants(s):
+    s = norm_text(s)
+    return {s, re.sub(r"(\w)- (\w)", r"\1\2", s), re.sub(r"(\w)- (\w)", r"\1-\2", s)}
+
+
+def to_float(tok):
+    t = tok.replace("−", "-").replace(",", "").replace(" ", "")
+    m = re.match(r"^([-+]?\d+(?:\.\d+)?)(?:[×x]10\^?([-]?\d+)|e([-]?\d+))?$", t)
+    if not m:
+        return None
+    v = float(m.group(1))
+    e = m.group(2) or m.group(3)
+    return round(v * (10 ** int(e)) if e else v, 6)
+
+
+def numbers_in(text):
+    t = REF_RE.sub(" ", str(text))
+    t = re.sub(r"(^|\s)\(?\d{1,2}\)\s", " ", t)  # list markers (1) 2)
+    t = re.sub(r"\*\*", "", t)
+    out = []
+    for m in NUM_RE.finditer(t):
+        v = to_float(m.group(0))
+        if v is not None:
+            out.append((m.group(0).strip(), v))
+    return out
+
+
+def load_materials(paths):
+    docs = []  # (file, tag, text)
+    for pat in paths:
+        for p in sorted(glob.glob(pat)) or ([pat] if os.path.exists(pat) else []):
+            name = os.path.basename(p)
+            try:
+                if p.lower().endswith((".csv", ".tsv")):
+                    with open(p, newline="", encoding="utf-8-sig") as f:
+                        rows = list(csv.reader(f, delimiter="\t" if p.lower().endswith(".tsv") else ","))
+                    for i, r in enumerate(rows):
+                        docs.append((name, "row%d" % i, ",".join(r)))
+                else:
+                    txt = open(p, encoding="utf-8", errors="ignore").read()
+                    parts = re.split(r"(?m)^\[(p\d+:\d+)\] ", txt)
+                    if len(parts) > 2:
+                        for i in range(1, len(parts) - 1, 2):
+                            docs.append((name, parts[i], parts[i + 1]))
+                    else:
+                        for i, para in enumerate(re.split(r"\n\s*\n", txt), 1):
+                            docs.append((name, "para%d" % i, para))
+            except OSError:
+                continue
+    return docs
+
+
+def slide_text_items(sl):
+    """[(what, text, src_ids)] of everything visible on the slide"""
+    items = []
+    base_src = list(sl.get("sources") or [])
+    if sl.get("title"):
+        items.append(("title", sl["title"], base_src))
+    sub = sl.get("subtitle")
+    for t in (sub if isinstance(sub, list) else ([sub] if sub else [])):
+        items.append(("subtitle", str(t), base_src))
+    for i, b in enumerate(sl.get("bullets") or [], 1):
+        if isinstance(b, dict):
+            items.append(("bullet %d" % i, b.get("text", ""), b.get("src") or base_src))
+        else:
+            items.append(("bullet %d" % i, str(b[0] if isinstance(b, (list, tuple)) else b), base_src))
+    for col in ("left", "right"):
+        c = sl.get(col) or {}
+        if c.get("heading"):
+            items.append((col + " heading", c["heading"], base_src))
+        for i, b in enumerate(c.get("bullets") or [], 1):
+            t = b.get("text", "") if isinstance(b, dict) else str(b)
+            items.append(("%s bullet %d" % (col, i), t, (b.get("src") if isinstance(b, dict) else None) or base_src))
+    for key, v in K.spec_visuals(sl):
+        src = v.get("src") or base_src
+        label = "%s %s" % (key, v.get("ref") or "")
+        if v.get("caption") or v.get("ref"):
+            items.append((label.strip() + " caption", ((v.get("ref") or "") + " " + (v.get("caption") or "")).strip(), src))
+        if key == "table":
+            rows = v.get("rows")
+            if not rows and v.get("csv") and os.path.exists(v["csv"]):
+                with open(v["csv"], newline="", encoding="utf-8-sig") as f:
+                    rows = list(csv.reader(f))
+            for r in rows or []:
+                items.append((label.strip() + " cells", " | ".join(str(c) for c in r), src))
+        if key == "chart":
+            items.append((label.strip() + " data", "CSV %s: x=%s y=%s" % (os.path.basename(str(v.get("csv"))), v.get("x"), v.get("y")), src))
+    return items
+
+
+def deck_to_spec(pptx):
+    """existing deck -> pseudo spec (title, text paragraphs, first table, notes) for auditing"""
+    inv = K.inventory(K.Package(pptx))
+    slides = []
+    for s in inv["slides"]:
+        sp = dict(id="slide%d" % s["index"], role="", title=s["title"], bullets=[], notes=s["notes"], sources=[])
+        for sh in s["shapes"]:
+            if sh.get("ph_type") in ("title", "ctrTitle", "ftr", "sldNum", "dt") or sh["name"].startswith(("Slide Number", "Source Note", "Footer")):
+                continue
+            if sh["kind"] == "table" and sh.get("table") and not sp.get("table"):
+                sp["table"] = dict(rows=sh["table"], ref=None)
+            for p in sh.get("paras", []):
+                if p["text"].strip():
+                    sp["bullets"].append(dict(text=p["text"], level=p["level"]))
+        slides.append(sp)
+    return dict(meta=dict(title=inv["slides"][0]["title"] if inv["slides"] else "", source_deck=os.path.abspath(pptx)), slides=slides)
+
+
+def _toks(s):
+    s = str(s).lower()
+    t = set(w for w in re.findall(r"[a-z][a-z0-9\-]{2,}|\d+(?:\.\d+)?", s))
+    cjk = re.sub(r"[^\u4e00-\u9fff]", "", s)
+    t |= {cjk[i:i + 2] for i in range(len(cjk) - 1)}
+    return t
+
+
+def auto_sources(spec, docs, only_missing=False):
+    """attach the best-matching material paragraph (token overlap >= 0.5) to each text item of a pseudo spec"""
+    dt = [(f, t, x, _toks(x)) for f, t, x in docs if not f.startswith(META_FILES)]
+    for sl in spec["slides"]:
+        if only_missing and (sl.get("sources") or any(isinstance(b, dict) and b.get("src") for b in sl.get("bullets") or [])):
+            continue
+        tb = dict(text=sl.get("title", ""))
+        sl["bullets"] = [b if isinstance(b, dict) else dict(text=str(b), level=0) for b in sl.get("bullets") or []]
+        for b in [tb] + sl["bullets"]:
+            tk = _toks(b["text"])
+            if len(tk) < 3:
+                continue
+            best = max(dt, key=lambda d: len(tk & d[3]) / float(len(tk)), default=None)
+            if best is None:
+                continue
+            sim = len(tk & best[3]) / float(len(tk))
+            if sim >= 0.5:
+                sents = re.split(r"(?<=[.!?。；;])\s+", best[2])
+                q = max(sents, key=lambda z: len(tk & _toks(z)))
+                b["src"] = [dict(file=best[0], loc=best[1], quote=norm_text(q)[:200], similarity=round(sim, 2), auto=True)]
+        if tb.get("src"):
+            sl["sources"] = tb["src"]
+    return spec
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--spec", action="append", default=[])
+    ap.add_argument("--pptx", default=None, help="audit an existing deck instead of a spec (sources are auto-matched)")
+    ap.add_argument("--facts", default=None)
+    ap.add_argument("--materials", nargs="+", default=["/app/work/materials/*.txt"])
+    ap.add_argument("--paper-map", default=None)
+    ap.add_argument("--mode", default="paper", choices=["paper", "talk", "template", "edit"])
+    ap.add_argument("--min-slides", type=int, default=None)
+    ap.add_argument("--max-slides", type=int, default=None)
+    ap.add_argument("--duration-min", type=float, default=None)
+    ap.add_argument("--plan", default=None)
+    ap.add_argument("--out", default="/app/output/check_report.json")
+    ap.add_argument("--map", default=None)
+    a = ap.parse_args()
+
+    spec = deck_to_spec(a.pptx) if a.pptx else None
+    if not a.spec and not a.pptx:
+        ap.error("give --spec or --pptx")
+    for p in a.spec:
+        d = json.load(open(p, encoding="utf-8"))
+        d = {"slides": d} if isinstance(d, list) else d
+        K.resolve_spec_paths(d.get("slides", []), os.path.dirname(os.path.abspath(p)))
+        if spec is None:
+            spec = d
+            spec.setdefault("slides", [])
+        else:
+            spec["slides"].extend(d.get("slides", []))
+            for k, v in d.items():
+                spec.setdefault(k, v)
+    meta = spec.get("meta", {})
+    facts = {}
+    if a.facts and os.path.exists(a.facts):
+        fd = json.load(open(a.facts, encoding="utf-8"))
+        rows = fd.get("facts", fd) if isinstance(fd, dict) else fd
+        rows = [dict(v, id=k) for k, v in rows.items()] if isinstance(rows, dict) else rows
+        facts = {r["id"]: r for r in rows if isinstance(r, dict) and r.get("id")}
+    docs = load_materials(a.materials)
+    normdocs = [(f, t, norm_text(x)) for f, t, x in docs]
+    if a.pptx or a.mode in ("template", "edit"):
+        auto_sources(spec, docs, only_missing=not a.pptx)
+    all_nums = {}
+    for f, t, x in docs:
+        for m in NUM_RE.finditer(x):
+            v = to_float(m.group(0))
+            if v is not None:
+                all_nums.setdefault(v, []).append("%s:%s" % (f, t))
+                all_nums.setdefault(abs(v), []).append("%s:%s" % (f, t))
+    captions = {}
+    pm = None
+    if a.paper_map and os.path.exists(a.paper_map):
+        pm = json.load(open(a.paper_map, encoding="utf-8"))
+        for c in pm.get("figures_tables", []):
+            captions[("table" if c["kind"] == "table" else "figure", re.sub(r"\D", "", c["label"].split()[-1]))] = c
+    else:
+        for f, t, x in docs:
+            for line in x.split("\n"):
+                m = re.match(r"^\s*(Figure|Fig\.?|Table|Tab\.?|图|表)\s*(\d+)\s*[:.：|]", line, re.I)
+                if m:
+                    kind = "table" if m.group(1).lower().startswith(("tab", "表")) else "figure"
+                    pg = re.match(r"p(\d+)", t)
+                    captions.setdefault((kind, m.group(2)), dict(label=line[:60], page=int(pg.group(1)) if pg else None, caption_loc=t))
+    issues = []
+
+    def add(level, check, msg, slide=None, item=None):
+        issues.append(dict(level=level, check=check, slide=slide, item=item, msg=msg))
+
+    # ---- facts
+    fact_status = {}
+    for fid, f in facts.items():
+        src = f.get("source", {}) or {}
+        q = src.get("quote", "")
+        st = dict(quote_found=None, loc_ok=None, found_at=[])
+        if f.get("status") == "not_in_materials":
+            st["not_in_materials"] = True
+        elif not q:
+            add("warn", "fact_quote", "fact %s has no verbatim quote" % fid)
+        else:
+            vs = variants(q)
+            hits = ["%s:%s" % (fn, tg) for fn, tg, x in normdocs if any(v in x or v in re.sub(r"(\w)- (\w)", r"\1\2", x) for v in vs)]
+            if not hits:  # quote may span two paragraphs: search the concatenated text of the file
+                joined = {}
+                for fn, tg, x in normdocs:
+                    joined.setdefault(fn, []).append(x)
+                for fn, xs in joined.items():
+                    blob = " ".join(xs)
+                    if any(v in blob or v in re.sub(r"(\w)- (\w)", r"\1\2", blob) for v in vs):
+                        hits.append("%s:(spans paragraphs)" % fn)
+            st["found_at"] = hits[:5]
+            st["quote_found"] = bool(hits)
+            if not hits:
+                best = 0.0
+                for fn, tg, x in normdocs:
+                    if len(x) > 20:
+                        r = SequenceMatcher(None, norm_text(q)[:200], x[:4000]).find_longest_match(0, min(200, len(norm_text(q))), 0, min(4000, len(x)))
+                        best = max(best, r.size / max(1, min(200, len(norm_text(q)))))
+                add("fail", "fact_quote", "fact %s quote not found verbatim in materials (longest match %.0f%%): copy it "
+                    "exactly from materials/*.txt" % (fid, best * 100))
+            else:
+                loc = str(src.get("loc", ""))
+                st["loc_ok"] = any(h.endswith(":" + loc) for h in hits) or not loc or "spans" in hits[0]
+                if not st["loc_ok"]:
+                    add("warn", "fact_loc", "fact %s locator %s does not hold the quote; found at %s" % (fid, loc, ", ".join(hits[:3])))
+        fact_status[fid] = st
+
+    # ---- slides
+    slides = spec.get("slides", [])
+    n = len(slides)
+    mn = a.min_slides or meta.get("min_slides")
+    mx = a.max_slides or meta.get("max_slides")
+    if mn and n < int(mn):
+        add("fail", "slide_count", "deck has %d slides, minimum is %s" % (n, mn))
+    if mx and n > int(mx):
+        add("fail", "slide_count", "deck has %d slides, maximum is %s" % (n, mx))
+    emap = []
+    titles = {}
+    for i, sl in enumerate(slides, 1):
+        role = str(sl.get("role", "")).lower()
+        sid = sl.get("id", "S%d" % i)
+        items = slide_text_items(sl)
+        all_src = set()
+        for _, _, s_ in items:
+            for x in s_ or []:
+                all_src.add(x if isinstance(x, str) else json.dumps(x, sort_keys=True))
+        if not all_src and role not in NO_SOURCE_NEEDED:
+            if a.pptx or a.mode in ("template", "edit"):
+                add("warn", "sources", "no material paragraph matches this slide's text (unsourced or rephrased content?)", i)
+            else:
+                add("fail", "sources", "slide has no sources (cite fact ids)", i)
+        for x in all_src:
+            if not x.startswith("{") and facts and x not in facts:
+                add("fail", "sources", "unknown fact id %s" % x, i)
+        text_blob = "\n".join(t for _, t, _ in items)
+        if TODO_RE.search(text_blob + " " + str(sl.get("notes", ""))):
+            add("fail", "todo", "template/TODO text left on slide", i)
+        # numbers
+        num_rows = []
+        derived = {to_float(str(d.get("value"))) for d in (sl.get("derived") or []) if isinstance(d, dict)}
+        for what, t, _ in items:
+            if what.endswith(" data"):
+                continue
+            for tok, v in numbers_in(t):
+                where = sorted(set(all_nums.get(v) or all_nums.get(abs(v)) or []), key=lambda w: w.startswith(META_FILES))
+                ok = bool(where) or v in derived
+                if where and all(w.startswith(META_FILES) for w in where) and v not in derived:
+                    add("warn", "number", "number %s (%s) appears only in case.json/task.md, not in the paper/data" % (tok, what), i, what)
+                num_rows.append(dict(value=tok, item=what, found_at=(where or [])[:3], derived=v in derived and not where))
+                if not ok:
+                    add("fail", "number", "number %s (%s) is not in any material; use the paper's value or declare it in "
+                        "slide.derived with formula" % (tok, what), i, what)
+        # figure / table references
+        for what, t, _ in items:
+            for m in CAPREF_RE.finditer(t):
+                kind = "table" if m.group(1).lower().startswith(("tab", "表")) else "figure"
+                if captions and (kind, m.group(2)) not in captions:
+                    add("fail", "fig_ref", "%s %s is cited but the paper has no such caption" % (m.group(1), m.group(2)), i, what)
+        for key, v in K.spec_visuals(sl):
+            if key == "chart":
+                if not v.get("csv") or not os.path.exists(v["csv"]):
+                    add("fail", "chart", "chart CSV missing: %s" % v.get("csv"), i)
+                else:
+                    with open(v["csv"], newline="", encoding="utf-8-sig") as f:
+                        cols = next(csv.reader(f), [])
+                    for c in [v.get("x")] + (v.get("y") if isinstance(v.get("y"), list) else [v.get("y")]):
+                        if c and c not in cols:
+                            add("fail", "chart", "column %s not in %s" % (c, os.path.basename(v["csv"])), i)
+            if key == "figure":
+                if v.get("image") and not os.path.exists(v["image"]):
+                    add("fail", "figure", "image not found: %s" % v["image"], i)
+                if v.get("pdf") and not os.path.exists(v["pdf"]):
+                    add("fail", "figure", "pdf not found: %s" % v["pdf"], i)
+                m = CAPREF_RE.search(str(v.get("ref", "")))
+                if m and captions:
+                    kind = "table" if m.group(1).lower().startswith(("tab", "表")) else "figure"
+                    c = captions.get((kind, m.group(2)))
+                    if c and v.get("page") and c.get("page") and int(v["page"]) != int(c["page"]):
+                        add("warn", "fig_page", "%s shown from page %s but its caption is on page %s" % (v["ref"], v["page"], c["page"]), i)
+                if not v.get("ref"):
+                    add("warn", "fig_ref", "figure without ref (Fig./Table number of the paper or 'new')", i)
+                if v.get("kind") == "schematic" and any(r["item"].startswith(("title", "bullet")) for r in num_rows) and \
+                        not any(k in ("chart", "table") for k, _ in K.spec_visuals(sl)) and role in ("results", "result", "evaluation"):
+                    add("warn", "schematic_as_data", "numeric result shown next to a schematic only: cite the data figure/table", i)
+        # titles, density, notes
+        title = str(sl.get("title", "")).strip()
+        if title:
+            titles.setdefault(title.lower(), []).append(i)
+        if role not in NO_SOURCE_NEEDED and role not in ("section", "backup", "appendix"):
+            words = len(title.split()) if not K.has_cjk(title) else len(re.sub(r"\s", "", title)) / 2.5
+            if title.lower().strip(" :.") in GENERIC or words < 4:
+                add("warn", "claim_title", "title '%s' is a topic label; write the slide's claim as the title" % title[:40], i)
+        bl = sl.get("bullets") or []
+        if len(bl) > 9:
+            add("fail", "density", "%d bullets (max 9; aim <= 6): split the slide" % len(bl), i)
+        elif len(bl) > 6:
+            add("warn", "density", "%d bullets (aim <= 6)" % len(bl), i)
+        for what, t, _ in items:
+            if what.startswith(("bullet", "left bullet", "right bullet")):
+                lim = 45 if K.has_cjk(t) else 110
+                if len(t) > lim:
+                    add("warn", "density", "long bullet (%d chars > %d): shorten to a phrase" % (len(t), lim), i, what)
+        notes = str(sl.get("notes", "")).strip()
+        if role not in ("title", "section") or a.mode == "talk":
+            if not notes:
+                add("fail" if role not in ("section", "backup", "appendix", "references") else "warn", "notes",
+                    "no speaker notes", i)
+            elif len(notes) < 30:
+                add("warn", "notes", "very short notes (%d chars)" % len(notes), i)
+            else:
+                tok_n = set(re.findall(r"\w+", notes.lower()))
+                tok_s = set(re.findall(r"\w+", text_blob.lower()))
+                if tok_n and len(tok_n & tok_s) / len(tok_n) > 0.8:
+                    add("warn", "notes_repeat", "notes mostly repeat the slide text: say what is NOT on the slide "
+                        "(why it matters, transition, caveat)", i)
+        # evidence map rows
+        rows = []
+        for what, t, src in items:
+            srcs = []
+            for x in src or []:
+                if isinstance(x, str):
+                    f = facts.get(x, {})
+                    s_ = f.get("source", {}) or {}
+                    st = fact_status.get(x, {})
+                    srcs.append(dict(fact=x, file=s_.get("file"), loc=s_.get("loc"), ref=s_.get("ref"), quote=s_.get("quote"),
+                                     quote_found=st.get("quote_found"), loc_ok=st.get("loc_ok"),
+                                     not_in_materials=st.get("not_in_materials", False)))
+                elif isinstance(x, dict):
+                    srcs.append(dict(x, fact=None, quote_found=x.get("auto") or x.get("quote_found"), loc_ok=True))
+            rows.append(dict(item=what, text=t, sources=srcs))
+        slide_issues = [x for x in issues if x["slide"] == i]
+        emap.append(dict(slide=i, id=sid, role=role, title=title, items=rows, numbers=num_rows,
+                         visuals=[dict(type=k, ref=v.get("ref"), page=v.get("page"), kind=v.get("kind"),
+                                       file=v.get("image") or v.get("pdf") or v.get("csv")) for k, v in K.spec_visuals(sl)],
+                         status="ok" if not any(x["level"] == "fail" for x in slide_issues) else "needs_fix",
+                         issues=[x["msg"] for x in slide_issues]))
+    for t, idx in titles.items():
+        if len(idx) > 1:
+            add("warn", "duplicate_title", "same title on slides %s" % idx)
+    # ---- story
+    if a.mode in ("paper", "talk"):
+        roles = [str(s.get("role", "")).lower() for s in slides]
+        need = {"motivation/problem/background": ("motivation", "problem", "background", "context", "question", "goal"),
+                "method": ("method", "approach", "setup", "design"), "results": ("results", "result", "experiment", "evaluation", "evidence", "analysis"),
+                "conclusion": ("conclusion", "takeaway")}
+        for k, alts in need.items():
+            if not any(r in alts for r in roles):
+                add("fail", "story", "no %s slide (set slide.role)" % k)
+        if not any(r in ("limitations", "limitation", "discussion") for r in roles):
+            add("warn", "story", "no limitations/discussion slide: state the paper's limits")
+        last = -1
+        for i, r in enumerate(roles, 1):
+            if r in ("section", "summary", "") or r not in RANK:
+                continue
+            if RANK[r] < last and RANK[r] < 8:
+                add("warn", "story_order", "slide %d role '%s' comes after a later-stage slide" % (i, r), i)
+            last = max(last, RANK[r])
+    # ---- talk plan
+    plan = json.load(open(a.plan, encoding="utf-8")) if a.plan and os.path.exists(a.plan) else (spec.get("plan") or {})
+    timeline = []
+    dur = a.duration_min or plan.get("duration_min") or meta.get("duration_min")
+    if a.mode == "talk":
+        for k in ("goal", "audience"):
+            if not (plan.get(k) or meta.get(k)):
+                add("fail", "talk_plan", "talk plan has no '%s'" % k)
+        main_slides = [s for s in slides if str(s.get("role", "")).lower() not in ("backup", "appendix")]
+        tot = sum(float(s.get("time_s", 0) or 0) for s in main_slides)
+        if dur:
+            if not tot:
+                add("fail", "time_budget", "no slide has time_s; budget %s min" % dur)
+            elif abs(tot - float(dur) * 60) > 0.1 * float(dur) * 60:
+                add("fail", "time_budget", "slide times sum to %.1f min, talk is %s min (allowed +-10%%)" % (tot / 60, dur))
+        for i, s in enumerate(slides, 1):
+            r = str(s.get("role", "")).lower()
+            if r in ("backup", "appendix"):
+                continue
+            if not s.get("time_s"):
+                add("warn", "time_budget", "slide has no time_s", i)
+            if r not in ("title", "section", "qa", "thanks") and not s.get("key_message"):
+                add("warn", "key_message", "no key_message", i)
+        with_tr = sum(1 for s in main_slides[:-1] if s.get("transition"))
+        if len(main_slides) > 2 and with_tr < 0.7 * (len(main_slides) - 1):
+            add("warn", "transitions", "only %d of %d slides have a transition sentence" % (with_tr, len(main_slides) - 1))
+        qa = plan.get("qa") or meta.get("qa") or []
+        ids = {s.get("id") for s in slides}
+        if len(qa) < 3:
+            add("fail", "qa", "Q&A preparation has %d questions (need >= 3 with answer points, evidence, backup slide)" % len(qa))
+        for q in qa:
+            for f in q.get("evidence", []):
+                if facts and f not in facts:
+                    add("fail", "qa", "Q&A evidence %s is not a fact id" % f)
+            b = q.get("backup_slide")
+            if b and b not in ids:
+                add("fail", "qa", "Q&A backup slide %s does not exist" % b)
+        for where, text in [("plan section %s" % sec.get("name"), str(sec.get("key_message", ""))) for sec in plan.get("sections", [])] + \
+                [("Q&A '%s'" % str(q.get("question"))[:40], " ".join(q.get("answer_points", []) if isinstance(q.get("answer_points"), list)
+                                                                   else [str(q.get("answer_points", ""))])) for q in qa]:
+            for tok, v in numbers_in(text):
+                if not (all_nums.get(v) or all_nums.get(abs(v))):
+                    add("fail", "number", "number %s in %s is not in any material" % (tok, where))
+        if not (plan.get("cuts") or meta.get("cuts")):
+            add("warn", "cuts", "no record of what was left out and why (plan.cuts)")
+        t = 0.0
+        for i, s in enumerate(slides, 1):
+            ts = float(s.get("time_s", 0) or 0)
+            timeline.append(dict(slide=i, id=s.get("id"), role=s.get("role"), start="%d:%02d" % (t // 60, t % 60), seconds=ts,
+                                 title=s.get("title", ""), key_message=s.get("key_message"), transition=s.get("transition")))
+            if str(s.get("role", "")).lower() not in ("backup", "appendix"):
+                t += ts
+    fails = [x for x in issues if x["level"] == "fail"]
+    rep = dict(status="needs_fix" if fails else "pass", mode=a.mode, n_slides=n, n_facts=len(facts),
+               facts_verified=sum(1 for s in fact_status.values() if s.get("quote_found")),
+               facts_not_in_materials=[k for k, s in fact_status.items() if s.get("not_in_materials")],
+               numbers_checked=sum(len(e["numbers"]) for e in emap), n_fail=len(fails), n_warn=len(issues) - len(fails),
+               issues=issues, timeline=timeline or None)
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+    with open(a.out, "w", encoding="utf-8") as f:
+        json.dump(rep, f, ensure_ascii=False, indent=1)
+    mp = a.map or os.path.join(os.path.dirname(os.path.abspath(a.out)), "evidence_map.json")
+    with open(mp, "w", encoding="utf-8") as f:
+        json.dump(dict(deck=meta.get("title"), n_slides=n, facts_file=a.facts, slides=emap,
+                       facts={k: dict(v, check=fact_status.get(k)) for k, v in facts.items()}), f, ensure_ascii=False, indent=1)
+    L = ["# Page-level evidence map", "", "Every slide item -> fact -> source file, locator ([pN:M] = page N paragraph M of the "
+         "extracted text) and the verbatim quote. `ok` = quote found verbatim at that locator.", ""]
+    for e in emap:
+        L.append("## Slide %d (%s, %s): %s" % (e["slide"], e["id"], e["role"] or "-", e["title"]))
+        L.append("")
+        L.append("| item | slide text | source | quote (verbatim) | check |")
+        L.append("|---|---|---|---|---|")
+        for r in e["items"]:
+            if not r["sources"]:
+                L.append("| %s | %s | - | - | no source |" % (r["item"], r["text"].replace("|", "/")[:90]))
+            for s_ in r["sources"]:
+                chk = ("auto-matched sim=%.2f" % s_["similarity"]) if s_.get("auto") else "ok" if s_.get("quote_found") and s_.get("loc_ok") is not False else (
+                    "loc?" if s_.get("quote_found") else ("NOT IN MATERIALS" if s_.get("not_in_materials") else "CHECK"))
+                L.append("| %s | %s | %s %s %s | %s | %s |" % (r["item"], r["text"].replace("|", "/")[:90], s_.get("ref") or "",
+                                                              s_.get("file") or "", s_.get("loc") or "",
+                                                              str(s_.get("quote") or "").replace("|", "/")[:160], chk))
+        if e["numbers"]:
+            L.append("")
+            L.append("numbers: " + "; ".join("%s -> %s" % (x["value"], (x["found_at"] or ["derived" if x["derived"] else "NOT FOUND"])[0])
+                                             for x in e["numbers"]))
+        if e["issues"]:
+            L.append("")
+            L.append("issues: " + " | ".join(e["issues"]))
+        L.append("")
+    if timeline:
+        L += ["## Talk timeline", "", "| start | s | slide | key message | transition |", "|---|---|---|---|---|"]
+        for t in timeline:
+            L.append("| %s | %d | %s %s | %s | %s |" % (t["start"], t["seconds"], t["slide"], t["title"][:50], t["key_message"] or "",
+                                                     t["transition"] or ""))
+    with open(mp[:-5] + ".md", "w", encoding="utf-8") as f:
+        f.write("\n".join(L) + "\n")
+    if a.mode == "talk" and (plan or meta.get("audience")):
+        T = ["# Talk plan", "", "- goal: %s" % (plan.get("goal") or meta.get("goal")), "- audience: %s" % json.dumps(
+            plan.get("audience") or meta.get("audience"), ensure_ascii=False), "- duration: %s min, %d slides (%d backup)" % (
+            dur, n, sum(1 for s in slides if str(s.get("role", "")).lower() in ("backup", "appendix"))), ""]
+        if plan.get("sections"):
+            T += ["## Sections and time budget", "", "| section | minutes | slides | key message | evidence strength |", "|---|---|---|---|---|"]
+            for sec in plan["sections"]:
+                T.append("| %s | %s | %s | %s | %s |" % (sec.get("name"), sec.get("minutes"), ", ".join(sec.get("slides", [])),
+                                                       sec.get("key_message", ""), sec.get("evidence_strength", "")))
+            T.append("")
+        if timeline:
+            T += ["## Slide timeline", "", "| start | sec | slide | title | key message | transition |", "|---|---|---|---|---|---|"]
+            for t in timeline:
+                T.append("| %s | %d | %s | %s | %s | %s |" % (t["start"], t["seconds"], t["slide"], t["title"][:60], t["key_message"] or "",
+                                                         t["transition"] or ""))
+            T.append("")
+        qa = plan.get("qa") or meta.get("qa") or []
+        if qa:
+            T += ["## Q&A preparation", "", "| question | answer points | evidence | backup slide |", "|---|---|---|---|"]
+            for q in qa:
+                T.append("| %s | %s | %s | %s |" % (q.get("question"), "; ".join(q.get("answer_points", [])) if isinstance(
+                    q.get("answer_points"), list) else q.get("answer_points"), ", ".join(q.get("evidence", [])), q.get("backup_slide") or "-"))
+            T.append("")
+        cuts = plan.get("cuts") or meta.get("cuts") or []
+        if cuts:
+            T += ["## What was left out and why", ""] + ["- %s: %s" % (c.get("content"), c.get("reason")) if isinstance(c, dict) else "- %s" % c for c in cuts]
+        with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), "talk_plan.md"), "w", encoding="utf-8") as f:
+            f.write("\n".join(T) + "\n")
+    print(json.dumps(dict(status=rep["status"], fails=len(fails), warns=rep["n_warn"], facts_verified="%d/%d" % (
+        rep["facts_verified"], len(facts)), numbers_checked=rep["numbers_checked"], evidence_map=mp), ensure_ascii=False))
+    for x in issues[:40]:
+        print("  %s %s slide %s: %s" % (x["level"].upper(), x["check"], x["slide"], x["msg"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

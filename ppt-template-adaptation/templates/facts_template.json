@@ -1,0 +1,10 @@
+{"_how": "One row per fact that will appear on a slide. quote = verbatim from /app/work/materials/*.txt (grep -n). loc = paragraph tag [pN:M] (or rowN for CSV). Delete this _how key or leave it; it is ignored.",
+ "facts": [
+  {"id": "F0", "kind": "meta", "text": "title, authors, venue", "source": {"file": "TODO.pdf", "loc": "p1:1", "ref": "Title", "quote": "TODO exact title line"}},
+  {"id": "F1", "kind": "claim", "text": "problem", "source": {"file": "TODO.pdf", "loc": "p1:2", "ref": "Abstract", "quote": "TODO"}},
+  {"id": "F2", "kind": "claim", "text": "key idea / contribution", "source": {"file": "TODO.pdf", "loc": "p1:3", "ref": "Sec. 1", "quote": "TODO"}},
+  {"id": "F3", "kind": "method", "text": "core mechanism", "source": {"file": "TODO.pdf", "loc": "p2:1", "ref": "Sec. 3 / Fig. 1", "quote": "TODO"}},
+  {"id": "F4", "kind": "result", "text": "headline number", "source": {"file": "TODO.pdf", "loc": "p5:2", "ref": "Table 1", "quote": "TODO"}},
+  {"id": "F5", "kind": "limitation", "text": "stated limitation", "source": {"file": "TODO.pdf", "loc": "p8:1", "ref": "Sec. 6", "quote": "TODO"}},
+  {"id": "F6", "kind": "result", "text": "conclusion sentence", "source": {"file": "TODO.pdf", "loc": "p8:3", "ref": "Sec. 7", "quote": "TODO"}}
+ ]}

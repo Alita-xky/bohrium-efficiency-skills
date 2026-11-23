@@ -1,0 +1,304 @@
+{
+ "meta": {
+  "title": "GateLite for our low-resource languages? (SYNTHETIC example)",
+  "mode": "talk",
+  "lang": "en",
+  "audience": "speech-recognition lab (knows CTC, not MoE)",
+  "duration_min": 8,
+  "max_slides": 12,
+  "note": "SYNTHETIC example spec - illustrates the interface only",
+  "goal": "decide whether to try GateLite",
+  "min_slides": 8
+ },
+ "footer": {
+  "text": "Lab meeting - synthetic example",
+  "slide_numbers": true
+ },
+ "slides": [
+  {
+   "id": "S1",
+   "role": "title",
+   "title": "GateLite: Sparse Gated Adapters for Low-Resource Speech Recognition",
+   "subtitle": [
+    "A. Example and B. Sample",
+    "Synthetic example paper - interface demo only"
+   ],
+   "sources": [
+    "F0"
+   ],
+   "notes": "Introduce the problem in one sentence: adapting big speech encoders when a language has only a few hours of data.",
+   "time_s": 20,
+   "transition": "Start from the data regime we all work in."
+  },
+  {
+   "id": "S2",
+   "role": "motivation",
+   "title": "Full fine-tuning overfits when a language has under 10 h of labelled speech",
+   "bullets": [
+    {
+     "text": "Encoders are pre-trained on high-resource data, then adapted per language",
+     "src": [
+      "F2"
+     ]
+    },
+    {
+     "text": "A 300M-parameter encoder overfits with only a few hours of transcribed speech",
+     "src": [
+      "F2"
+     ]
+    },
+    {
+     "text": "Dense adapters spend capacity on every frame, even the easy ones",
+     "src": [
+      "F2"
+     ]
+    }
+   ],
+   "sources": [
+    "F1",
+    "F2"
+   ],
+   "notes": "Stress the data regime: under 10 hours. Ask the audience how many of their languages fall below that.",
+   "transition": "So how do we adapt cheaply without overfitting?",
+   "time_s": 55,
+   "key_message": "Below 10 h of labelled speech, full fine-tuning overfits"
+  },
+  {
+   "id": "S3",
+   "role": "method",
+   "title": "GateLite routes each frame to 2 of 8 small adapter experts",
+   "bullets": [
+    "Sparse gated adapter: **2 of 8** experts active per frame",
+    "Load-balancing regulariser keeps expert usage uniform",
+    "Evaluated on five languages with 1 to 50 h of training data"
+   ],
+   "sources": [
+    "F3"
+   ],
+   "notes": "These are the three contributions as the paper states them; the next slide shows the block.",
+   "time_s": 60,
+   "key_message": "Only 2 of 8 small experts work on each frame",
+   "transition": "Here is where the experts sit in the encoder."
+  },
+  {
+   "id": "S4",
+   "role": "method",
+   "title": "A router picks the top-2 of 8 bottleneck experts after each of the 24 frozen layers",
+   "figure": {
+    "pdf": "../input/paper_synthetic.pdf",
+    "page": 2,
+    "bbox": [
+     0.1216,
+     0.2864,
+     0.8608,
+     0.4045
+    ],
+    "ref": "Fig. 1",
+    "caption": "Overview of GateLite",
+    "kind": "schematic",
+    "src": [
+     "F4"
+    ]
+   },
+   "bullets": [
+    {
+     "text": "8 experts per block, width 64",
+     "src": [
+      "F4"
+     ]
+    },
+    {
+     "text": "Load-balancing loss, weight 0.01",
+     "src": [
+      "F5"
+     ]
+    },
+    {
+     "text": "Only adapters and the CTC head are trained",
+     "src": [
+      "F6"
+     ]
+    }
+   ],
+   "sources": [
+    "F4",
+    "F5",
+    "F6"
+   ],
+   "notes": "Walk left to right through the figure. It is a schematic, not a result.",
+   "time_s": 75,
+   "key_message": "The encoder stays frozen; only adapters and the CTC head train",
+   "transition": "Does this beat what we use today?"
+  },
+  {
+   "id": "S6",
+   "role": "results",
+   "title": "At 10 h, GateLite has the lowest average WER: 27.9% vs 31.4% for full fine-tuning",
+   "table": {
+    "ref": "Table 1",
+    "caption": "Average WER (%) on five languages, 10 h of training data",
+    "rows": [
+     [
+      "Method",
+      "Trained params (%)",
+      "WER (%)"
+     ],
+     [
+      "Full fine-tuning",
+      "100",
+      "31.4"
+     ],
+     [
+      "LoRA (r=8)",
+      "1.2",
+      "30.2"
+     ],
+     [
+      "Dense adapter",
+      "4.0",
+      "29.1"
+     ],
+     [
+      "GateLite (ours)",
+      "3.1",
+      "27.9"
+     ]
+    ],
+    "highlight": [
+     [
+      4,
+      0
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      4,
+      2
+     ]
+    ],
+    "src": [
+     "F8"
+    ]
+   },
+   "sources": [
+    "F8"
+   ],
+   "notes": "Point at the last row. The trained-parameter column matters: GateLite trains fewer parameters than the dense adapter.",
+   "time_s": 80,
+   "key_message": "GateLite gives the lowest WER at 10 h with fewer trained parameters than a dense adapter",
+   "transition": "And how does the gap change with more data?",
+   "if_asked": [
+    "more parameters? dense adapter trains 4.0% and is still worse (29.1)"
+   ]
+  },
+  {
+   "id": "S7",
+   "role": "results",
+   "title": "The gain is largest with little data and nearly vanishes at 50 h",
+   "chart": {
+    "csv": "../input/wer_by_hours.csv",
+    "x": "hours",
+    "y": [
+     "full_finetune_wer",
+     "gatelite_wer"
+    ],
+    "kind": "bar",
+    "series_labels": {
+     "full_finetune_wer": "Full fine-tuning",
+     "gatelite_wer": "GateLite"
+    },
+    "xlabel": "Training data (hours)",
+    "ylabel": "WER (%)",
+    "labels": true,
+    "ref": "Fig. 2 (redrawn from data)",
+    "src": [
+     "F9",
+     "F14"
+    ]
+   },
+   "sources": [
+    "F9",
+    "F14"
+   ],
+   "notes": "Redrawn from the CSV behind Figure 2. At 50 h the two bars differ by 0.2 points.",
+   "transition": "Two caveats before we decide.",
+   "time_s": 70,
+   "key_message": "The gain is large at 1-5 h and vanishes at 50 h",
+   "if_asked": [
+    "per-hour numbers -> backup S10"
+   ]
+  },
+  {
+   "id": "S8",
+   "role": "limitations",
+   "title": "Only read speech was tested, and routing costs 6% latency",
+   "bullets": [
+    {
+     "text": "Spontaneous speech was not evaluated",
+     "src": [
+      "F10"
+     ]
+    },
+    {
+     "text": "Routing adds 6% inference latency on a single GPU",
+     "src": [
+      "F11"
+     ]
+    }
+   ],
+   "sources": [
+    "F10",
+    "F11"
+   ],
+   "notes": "Say both limits before someone asks; spontaneous speech is the obvious next test.",
+   "time_s": 45,
+   "key_message": "Untested on spontaneous speech; routing costs 6% latency",
+   "transition": "So, my recommendation."
+  },
+  {
+   "id": "S9",
+   "role": "conclusion",
+   "title": "Recommendation: try GateLite on our languages with under 10 h of data",
+   "bullets": [
+    {
+     "text": "Biggest benefit in the lowest-data regime",
+     "src": [
+      "F13"
+     ]
+    },
+    {
+     "text": "Negligible at 50 h of training data",
+     "src": [
+      "F13"
+     ]
+    }
+   ],
+   "sources": [
+    "F12",
+    "F13"
+   ],
+   "notes": "End with the decision we need: pick two languages under 10 h and compare against our dense adapter.",
+   "time_s": 55,
+   "key_message": "Try it for languages with under 10 h of data"
+  },
+  {
+   "id": "S10",
+   "role": "backup",
+   "title": "Backup: per-hour WER values behind Fig. 2",
+   "table": {
+    "csv": "../input/wer_by_hours.csv",
+    "ref": "Fig. 2 data",
+    "caption": "WER (%) by hours of training data",
+    "src": [
+     "F14"
+    ]
+   },
+   "sources": [
+    "F14"
+   ],
+   "notes": "Only if asked about the 50 h numbers: 18.6 vs 18.4."
+  }
+ ]
+}

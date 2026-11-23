@@ -1,0 +1,15 @@
+{"goal": "TODO checkable outcome, e.g. 'the committee accepts that X is new and necessary (Table 3)'",
+ "occasion": "TODO lab meeting | thesis defence | project review | conference talk",
+ "duration_min": 10,
+ "slide_budget": {"main": 9, "backup": 2},
+ "audience": {"who": "TODO", "knows": "TODO prior knowledge", "cares_about": "TODO", "likely_doubts": ["TODO", "TODO", "TODO"]},
+ "sections": [
+  {"name": "Opening + problem", "minutes": 2, "slides": ["S1", "S2"], "key_message": "TODO", "evidence_strength": "strong"},
+  {"name": "Method", "minutes": 2.5, "slides": ["S3", "S4"], "key_message": "TODO", "evidence_strength": "strong"},
+  {"name": "Results", "minutes": 3.5, "slides": ["S5", "S6", "S7"], "key_message": "TODO", "evidence_strength": "moderate"},
+  {"name": "Limits + take-home", "minutes": 2, "slides": ["S8", "S9"], "key_message": "TODO", "evidence_strength": "strong"}],
+ "qa": [
+  {"type": "mechanism", "question": "TODO", "answer_points": ["TODO"], "evidence": ["F3"], "backup_slide": "S10"},
+  {"type": "data", "question": "TODO", "answer_points": ["TODO"], "evidence": ["F7"], "backup_slide": null},
+  {"type": "limits", "question": "TODO", "answer_points": ["TODO"], "evidence": ["F10"], "backup_slide": null}],
+ "cuts": [{"content": "TODO what from the paper is not presented", "reason": "TODO why (goal/audience/time)"}]}

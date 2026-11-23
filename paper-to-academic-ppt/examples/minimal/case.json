@@ -1,0 +1,10 @@
+{"case_id": "example-synthetic-p2p-001",
+ "note": "SYNTHETIC example case - illustrates the interface; not a formal test case",
+ "task": "Turn paper_synthetic.pdf into an 8-12 slide academic deck for a 10-minute reading-group talk, with speaker notes and a page-level evidence map.",
+ "materials": ["paper_synthetic.pdf", "wer_by_hours.csv"],
+ "constraints": {"slides": "8-12", "minutes": 10, "audience": "ML reading group", "language": "en"},
+ "output_contract": {"deck": "editable pptx path + PDF/PNG previews",
+                     "evidence_map": "slide -> figure/table/section/data locator with verbatim quotes",
+                     "render_and_version_record": "source files, exports, fonts/template, change log",
+                     "uncertainty": "what could not be verified",
+                     "status": "complete|partial|failed"}}

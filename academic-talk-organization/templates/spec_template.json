@@ -1,0 +1,17 @@
+{"meta": {"title": "TODO", "lang": "en", "audience": "TODO", "duration_min": 10, "goal": "TODO", "min_slides": 8, "max_slides": 12},
+ "footer": {"text": "TODO speaker · occasion · date", "slide_numbers": true},
+ "slides": [
+  {"id": "S1", "role": "title", "title": "TODO talk title", "subtitle": ["TODO speaker", "TODO occasion · date"], "sources": ["F0"],
+   "time_s": 20, "notes": "TODO opening sentence aimed at this audience", "transition": "TODO"},
+  {"id": "S2", "role": "motivation", "title": "TODO claim: the problem for this audience", "bullets": [{"text": "TODO", "src": ["F1"]}],
+   "sources": ["F1"], "time_s": 60, "key_message": "TODO", "transition": "TODO", "notes": "TODO"},
+  {"id": "S3", "role": "method", "title": "TODO claim: the idea", "figure": {"pdf": "/input/TODO.pdf", "page": 0, "bbox": [0, 0, 1, 1], "ref": "Fig. TODO", "caption": "TODO", "kind": "schematic", "src": ["F3"]},
+   "sources": ["F3"], "time_s": 90, "key_message": "TODO", "transition": "TODO", "notes": "TODO"},
+  {"id": "S4", "role": "results", "title": "TODO claim with number", "table": {"ref": "Table TODO", "rows": [["TODO"]], "src": ["F4"]},
+   "sources": ["F4"], "time_s": 90, "key_message": "TODO", "transition": "TODO", "if_asked": ["TODO -> backup S10"], "notes": "TODO"},
+  {"id": "S5", "role": "limitations", "title": "TODO claim", "bullets": [{"text": "TODO", "src": ["F5"]}], "sources": ["F5"],
+   "time_s": 45, "key_message": "TODO", "transition": "TODO", "notes": "TODO"},
+  {"id": "S6", "role": "conclusion", "title": "TODO take-home", "bullets": [{"text": "TODO", "src": ["F6"]}], "sources": ["F6"],
+   "time_s": 45, "key_message": "TODO", "notes": "TODO closing + invite questions"},
+  {"id": "S10", "role": "backup", "title": "Backup: TODO", "table": {"csv": "/input/TODO.csv"}, "sources": ["F4"], "notes": "TODO only if asked about ..."}
+ ]}

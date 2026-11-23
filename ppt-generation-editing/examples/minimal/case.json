@@ -1,0 +1,10 @@
+{"case_id": "example-synthetic-edit-001",
+ "note": "SYNTHETIC example case - illustrates the interface; not a formal test case",
+ "task": "Revise draft_deck.pptx for a review panel without rebuilding it: (1) the WER on slide 4 must match Table 1 of the paper; (2) compress slide 2 to at most 3 bullets; (3) put the limitations slide before the conclusion; (4) add speaker notes to slide 3; (5) add a backup slide with the per-hour WER data; (6) translate the conclusion title into Chinese. Keep everything else unchanged, keep versions and a change log.",
+ "materials": ["draft_deck.pptx", "paper_synthetic.pdf", "wer_by_hours.csv"],
+ "output_contract": {"revised_deck": "editable pptx + PDF/PNG previews",
+                     "change_log": "per edit: slide, shape, before/after, reason, source",
+                     "evidence_map": "slide content -> paper locator",
+                     "versions": "version list with rollback",
+                     "render_and_version_record": "exports, fonts/template, diff per slide",
+                     "uncertainty": "what could not be verified", "status": "complete|partial|failed"}}
