@@ -10,14 +10,26 @@ figure, table, section or data row of the paper, delivered as an **editable .ppt
 speaker notes) + **PDF/PNG renders**, an **evidence map** and an honest `result.json`.
 Correctness and traceability beat decoration.
 
-Budget: 64 requests / 900 s / 16k tokens per reply. Target ≈ 15 requests: one call per step, the spec in at
-most two writes. **Have a complete deliverable by step 5**, then improve once.
-
+## Quick path (copy these; details in §1–§6) — budget 64 requests / 900 s, target ≈ 12–15 calls
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
+# 1 task + contract + paper map (text with [pN:M] locators, figure/table crops, tables, equations)   [1 call]
+cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
+python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+# 2 verbatim quotes with locators                                                                  [1-3 calls]
+python3 $SKILL/scripts/paper_map.py find "we propose" "outperform" "limitation" "Table 2"
+# 3 write /app/work/facts.json and /app/work/spec.json (templates/; rules in references/)            [2-3 calls]
+# 4 ONE command: check -> build -> LibreOffice render -> records -> result.json                     [1 call]
+python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --mode paper \
+  --max-slides 15 --case /input/case.json [--template /input/<template>.pptx]
+# 5 fix every FAIL in the spec, run step 4 again (max 2 rounds); open previews/contact_sheet.png once
 ```
+Step 4 always leaves a complete, honest deliverable: `deck.pptx`, `deck.pdf`, `previews/`, `evidence_map`,
+`version_record.json`, `result.json` (`case_id`, every contract field, status). Task-specific answers go in
+`/app/work/fill.json` keyed by contract field → add `--fill /app/work/fill.json` to step 4.
+
 
 ## 1. Prepare (1 call)
 ```bash
@@ -67,7 +79,7 @@ Start from `$SKILL/templates/spec_template.json`; full field list in `references
 ## 5. Build, check, render, look (2–4 calls) — a full deliverable exists after the first run
 ```bash
 python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --outdir /app/output \
-  --mode paper --max-slides 15 [--template /input/<template>.pptx|.potx]
+  --mode paper --max-slides 15 --case /input/case.json [--template /input/<template>.pptx|.potx]
 ```
 (`--materials` defaults to `/app/work/materials/*.txt` + input CSVs; `--paper-map` to `/app/work/paper_map.json`.)
 It runs deck_check (quotes verbatim, locators, every number in the materials, Fig./Table numbers exist,
@@ -76,7 +88,11 @@ sources, story order, density, notes) → deck_build → deck_render (LibreOffic
 audit. Fix every **FAIL** in the spec and re-run (max twice). Open `previews/contact_sheet.png` once and check:
 crops show the right figure, nothing overflows, titles fit. Do not polish endlessly.
 
-## 6. Records and result.json (1–2 calls)
+## 6. Records and result.json (0–2 calls)
+Already written by the build step when it has `--case /input/case.json` (it runs the two commands below).
+Run them by hand only to change answers: `--set field=value`, `--uncertainty "..."`, or `--fill /app/work/fill.json`
+(your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
+verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
 python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json \
   [--uncertainty "Fig. 5 is a bitmap: values not re-checked"] [--set field=value]

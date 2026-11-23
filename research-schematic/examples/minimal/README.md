@@ -15,6 +15,12 @@ python3 $SKILL/scripts/extract_materials.py --work $W --find "ABA" "yield"     #
 python3 $SKILL/scripts/make_result.py --case case.json --outdir $W/out --fill fill.json
 ```
 Expected: check `pass`, render `ok` (0 fails), make_result `missing: []`, status `complete`.
+Same thing in one call (what the Skill does on a real case):
+```bash
+mkdir -p $W/in && cp case.json *.txt *.csv $W/in/
+python3 $SKILL/scripts/fig_make.py --spec spec.json --mode schematic --name schematic --case $W/in/case.json    --input $W/in --work $W/work --outdir $W/out2
+```
+Expected first line: `"status": "complete"`, `"reproducible": true`, `"unmapped": []`.
 Fault demos: change a number in a label (e.g. 41 → 45) → `number_not_in_materials` FAIL; move an
 entity onto an arrow's path → `arrow_through_entity` ISSUE; delete a key from fill.json → `FIX:` line
 and status `partial`.

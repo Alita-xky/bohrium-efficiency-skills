@@ -19,6 +19,15 @@ python3 $SKILL/scripts/svg_edit.py apply --svg /tmp/ga/output/graphical_abstract
 python3 $SKILL/scripts/make_result.py --case /tmp/ga/input/case.json --outdir /tmp/ga/output --fill fill.json
 ```
 
+The same in one call each (what the Skill does on a real case):
+```bash
+python3 $SKILL/scripts/ga_make.py --spec /tmp/ga/work/spec.json --mode graphical_abstract --name graphical_abstract \
+   --case /tmp/ga/input/case.json --input /tmp/ga/input --work /tmp/ga/work --outdir /tmp/ga/out2
+python3 $SKILL/scripts/ga_make.py --edit-svg /tmp/ga/out2/graphical_abstract.svg --ops /tmp/ga/work/ops.json \
+   --name figure_edited --case /tmp/ga/input/case.json --input /tmp/ga/input --work /tmp/ga/work --outdir /tmp/ga/out3
+```
+First line of each: `"status": "complete"`, `"reproducible": true`, `"unmapped": []`.
+
 Expected (illustrative) console output:
 ```
 {"status": "pass", "fails": 0, "warns": 0}                                  # ga_check

@@ -10,7 +10,7 @@ kept under "extra"). Allowed status values: "complete" | "partial" | "failed".
 Missing contract fields are NOT invented: they are written as
   {"status": "not_provided", "reason": "..."} and the overall status is downgraded to "partial".
 """
-import argparse, glob, hashlib, json, os, sys
+import argparse, glob, hashlib, json, os, re, sys
 
 
 def sha256(path):
@@ -37,17 +37,19 @@ def find_key(obj, key):
     return None
 
 
+LIST_KEYS = ("fields", "required", "required_fields", "result_fields", "required_keys", "keys", "outputs",
+             "result_json_fields", "result.json", "result_json", "items", "output_fields")
+META_KEYS = {"notes", "note", "description", "comment", "format", "type", "title", "$schema"}
+
+
 def contract_fields(contract):
+    """Field names from any common output_contract shape: list of names, list of {name|field|key},
+    JSON-schema {required, properties}, {"required_fields": [...]} / {"fields": ...} wrappers, or a
+    {field: description} dict. Wrapper/meta keys (notes, description ...) are never fields."""
     if contract is None:
         return []
-    if isinstance(contract, dict):
-        if "fields" in contract and isinstance(contract["fields"], (list, dict)):
-            return contract_fields(contract["fields"])
-        if "required" in contract and isinstance(contract["required"], list):
-            return list(contract["required"]) + [k for k in contract.get("properties", {}) if k not in contract["required"]]
-        if "properties" in contract and isinstance(contract["properties"], dict):
-            return list(contract["properties"].keys())
-        return list(contract.keys())
+    if isinstance(contract, str):
+        return [s.strip() for s in contract.replace(";", ",").split(",") if s.strip()]
     if isinstance(contract, list):
         out = []
         for x in contract:
@@ -56,9 +58,31 @@ def contract_fields(contract):
             elif isinstance(x, dict):
                 out.append(x.get("name") or x.get("field") or x.get("key") or json.dumps(x, ensure_ascii=False)[:40])
         return out
-    if isinstance(contract, str):
-        return [s.strip() for s in contract.replace(";", ",").split(",") if s.strip()]
+    if isinstance(contract, dict):
+        if isinstance(contract.get("properties"), dict):
+            req = contract.get("required") if isinstance(contract.get("required"), list) else []
+            return list(req) + [k for k in contract["properties"] if k not in req]
+        out = []
+        for k in LIST_KEYS:
+            if isinstance(contract.get(k), (list, dict)):
+                out += [f for f in contract_fields(contract[k]) if f not in out]
+        if out:
+            return out
+        return [k for k in contract if k not in META_KEYS]
     return []
+
+
+def load_json_lenient(path):
+    """Agent-written JSON: allow raw newlines/tabs inside strings and a trailing comma."""
+    txt = open(path, encoding="utf-8-sig").read()
+    try:
+        return json.loads(txt, strict=False)
+    except json.JSONDecodeError:
+        try:
+            return json.loads(re.sub(r",\s*([}\]])", r"\1", txt), strict=False)
+        except json.JSONDecodeError as e:
+            line = txt.splitlines()[e.lineno - 1] if e.lineno - 1 < len(txt.splitlines()) else ""
+            sys.exit(f"INVALID JSON in {path}: {e.msg} at line {e.lineno} col {e.colno}: {line[:160]!r}")
 
 
 def main():
@@ -72,7 +96,7 @@ def main():
         case = json.load(open(a.case, encoding="utf-8"))
     except Exception as e:
         print(f"WARN cannot read case: {e!r}")
-    fill = json.load(open(a.fill, encoding="utf-8")) if os.path.exists(a.fill) else {}
+    fill = load_json_lenient(a.fill) if os.path.exists(a.fill) else {}
     contract = find_key(case, "output_contract")
     fields = contract_fields(contract)
     case_id = find_key(case, "case_id") or find_key(case, "id") or fill.get("case_id") or "unknown"
@@ -95,6 +119,34 @@ def main():
             render["note"] = "%s render finding(s) were already in the input deck and are outside the edit instructions" % rs.get(
                 "pre_existing_render_fails")
 
+    def jl(n):
+        try:
+            return json.load(open(os.path.join(a.outdir, n), encoding="utf-8"))
+        except Exception:
+            return None
+    cr, rr, comp, pres, vr = (jl(n) for n in ("check_report.json", "render_report.json", "compliance.json",
+                                               "preserve.json", "version_record.json"))
+    verification = {}   # one place where a reviewer sees what was machine-checked, and the verdicts
+    if cr:
+        verification["content_check"] = dict(status=cr.get("status"), facts_verified=cr.get("facts_verified"),
+                                             n_facts=cr.get("n_facts"), numbers_checked=cr.get("numbers_checked"),
+                                             failed=sorted({i.get("rule") or i.get("check") or "?" for i in cr.get("issues", [])
+                                                            if i.get("level") == "fail"})[:15],
+                                             what="verbatim quotes, locators, every number in the materials, Fig./Table numbers "
+                                                  "exist, sources per slide, story order, density, notes")
+    if rr:
+        verification["render"] = dict(status=rr.get("status"), renderer=(rr.get("tools") or {}).get("soffice_version"),
+                                      n_slides=rr.get("n_slides"), pdf_pages=rr.get("pdf_pages"),
+                                      previews=len(rr.get("previews") or []),
+                                      pdf_fonts=sorted({f.get("name") for f in (rr.get("pdf_fonts") or []) if isinstance(f, dict)}),
+                                      all_fonts_embedded=all(f.get("embedded") for f in (rr.get("pdf_fonts") or []) if isinstance(f, dict))
+                                      if rr.get("pdf_fonts") else None,
+                                      n_fail=rr.get("n_fail"), n_warn=rr.get("n_warn"))
+    if comp:
+        verification["template_compliance"] = dict(status=comp.get("status"), rate=comp.get("compliance_rate"),
+                                                   by_rule=comp.get("issues_by_rule"))
+    if pres:
+        verification["content_preservation"] = dict(status=pres.get("status"), text_preserved_rate=pres.get("text_preserved_rate"))
     result = {"case_id": case_id}
     missing = []
     for f in fields:
@@ -111,13 +163,21 @@ def main():
         status = "partial"
     if render.get("status") == "needs_fix" and status == "complete":
         status = "partial"
+    if cr and cr.get("status") in ("fail", "needs_fix") and status == "complete":
+        status = "partial"
     if "status" not in fields:
         result["status"] = status
-    if "status" in fields and isinstance(result.get("status"), str) and result["status"] == "complete" and (missing or render.get("status") == "needs_fix"):
+    if "status" in fields and isinstance(result.get("status"), str) and result["status"] == "complete" and (
+            missing or render.get("status") == "needs_fix" or (cr and cr.get("status") in ("fail", "needs_fix"))):
         result["status"] = "partial"
-        result["status_note"] = "downgraded from complete: missing contract fields or failed render checks"
+        result["status_note"] = "downgraded from complete: missing contract fields or failed content/render checks"
     result["artifacts"] = artifacts if "artifacts" not in fields else result.get("artifacts")
     result["render_check"] = render
+    if verification:
+        result.setdefault("verification", verification)
+    if vr:
+        result.setdefault("inputs", [dict(file=x.get("file"), sha256=x.get("sha256")) for x in vr.get("inputs", [])][:40])
+        result.setdefault("reproduce", dict(command=vr.get("rerun"), tools=vr.get("tools"), fonts=vr.get("fonts")))
     if extra:
         result["extra"] = extra
     result["contract_fields"] = fields

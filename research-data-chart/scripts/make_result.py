@@ -138,6 +138,32 @@ def main():
         render = dict(status=r.get("status"), fonts=r.get("fonts"), font_notes=r.get("font_notes"),
                       issues=[i for i in r.get("issues", []) if i.get("level") == "fail"][:20])
 
+    def jl(n):
+        try:
+            return json.load(open(os.path.join(a.outdir, n), encoding="utf-8"))
+        except Exception:
+            return None
+    cr, rr, el, vr = jl("check_report.json"), jl("render_report.json"), jl("edit_log.json"), jl("version_record.json")
+    verification = {}   # one place where a reviewer sees what was machine-checked, and the verdicts
+    if cr:
+        verification["spec_audit"] = dict(status=cr.get("status"), n_fail=cr.get("n_fail"), n_warn=cr.get("n_warn"),
+                                          failed=[r.get("check") for r in cr.get("results", []) if r.get("level") == "fail"][:15],
+                                          what="sources and verbatim quotes, every printed number found in the materials, "
+                                               "arrow ends, legend/category colours, units, mode rules")
+    if rr:
+        svg = (rr.get("outputs") or {}).get("svg") or {}
+        png = (rr.get("outputs") or {}).get("png") or {}
+        verification["render_layout"] = dict(status=rr.get("status"),
+                                             failed=[i.get("check") for i in rr.get("issues", []) if i.get("level") == "fail"][:15],
+                                             n_warn=sum(1 for i in rr.get("issues", []) if i.get("level") == "warn"),
+                                             svg_text_elements=svg.get("text_elements"), png_pixels=png.get("pixels"),
+                                             png_dpi=png.get("dpi"), fonts=rr.get("fonts"))
+    if el:
+        ch = el.get("changes", [])
+        verification["edit"] = dict(ops=len(ch), verified=sum(1 for c in ch if c.get("verified")),
+                                    unchanged_check=el.get("unchanged_check"))
+    if vr:
+        verification["reproducibility"] = vr.get("reproducibility")
     result = {"case_id": case_id}
     missing = []
     for f in fields:
@@ -157,13 +183,22 @@ def main():
         status = "partial"
     if render.get("status") == "needs_fix" and status == "complete":
         status = "partial"
+    if cr and cr.get("status") == "fail" and status == "complete":
+        status = "partial"
     if "status" not in fields:
         result["status"] = status
-    if "status" in fields and isinstance(result.get("status"), str) and result["status"] == "complete" and (missing or render.get("status") == "needs_fix"):
+    if "status" in fields and isinstance(result.get("status"), str) and result["status"] == "complete" and (
+            missing or render.get("status") == "needs_fix" or (cr and cr.get("status") == "fail")):
         result["status"] = "partial"
-        result["status_note"] = "downgraded from complete: missing contract fields or failed render checks"
+        result["status_note"] = "downgraded from complete: missing contract fields or failed spec/render checks"
     result["artifacts"] = artifacts if "artifacts" not in fields else result.get("artifacts")
     result["render_check"] = render
+    if verification:
+        result.setdefault("verification", verification)
+    if vr:
+        result.setdefault("inputs", [dict(file=x.get("file"), sha256=x.get("sha256")) for x in vr.get("inputs", [])][:40])
+        result.setdefault("reproduce", dict(commands=vr.get("rerun_commands"), script="reproduce.sh",
+                                            export_parameters=vr.get("export_parameters"), tools=vr.get("tools")))
     result["contract_fields"] = fields
     result["missing_fields"] = missing
     bad = broken_paths(fill, a.outdir)

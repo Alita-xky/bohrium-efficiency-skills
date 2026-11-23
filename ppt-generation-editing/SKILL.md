@@ -9,13 +9,24 @@ Goal: the requested changes — **and only those** — applied to the given deck
 reason, source and before/after**, every version **kept and reversible**, numbers **checked against the paper**,
 the template intact, and real renders of the result.
 
-Budget: 64 requests / 900 s / 16k tokens per reply. Target ≈ 12 requests; one edit round is one call.
-
+## Quick path (copy these; details in §1–§6) — budget 64 requests / 900 s, target ≈ 8–12 calls
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
+# 1 task (the numbered instructions) + contract + deck inventory + paper map                      [1 call]
+cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
+python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+# 2 values the instructions need, with locators: python3 $SKILL/scripts/paper_map.py find "..."   [1-3 calls]
+# 3 write /app/work/ops.json: one op per instruction, addressed by slide + shape, with reason/src [1 call]
+# 4 ONE command: snapshot v0 -> apply -> render -> diff -> evidence check -> audit -> result.json [1 call]
+python3 $SKILL/scripts/deck_edit.py round --pptx /input/<deck>.pptx --ops /app/work/ops.json --outdir /app/output \
+  --materials /app/work/materials/*.txt /input/*.csv --note "instructions 1-6" --case /input/case.json
+# 5 more instructions or a fix: ops2.json, round --pptx /app/output/deck.pptx ... (v2); roll back with versions/
 ```
+Step 4 always leaves a complete, honest deliverable (edited deck, PDF, previews, `edit_log.json`, versions,
+`slide_diff`, `result.json` with every contract field). Unaddressed slides stay byte-identical.
+
 
 ## 1. Prepare (1 call)
 ```bash
@@ -46,7 +57,7 @@ wrong number → `replace_text` (works inside tables); "fonts: Chinese X, Latin 
 ## 4. Run the round (1 call) — complete deliverable after this
 ```bash
 python3 $SKILL/scripts/deck_edit.py round --pptx /input/<deck>.pptx --ops /app/work/ops.json --outdir /app/output \
-  --materials /app/work/materials/*.txt /input/*.csv --note "instructions 1-6"
+  --materials /app/work/materials/*.txt /input/*.csv --note "instructions 1-6" --case /input/case.json
 ```
 First round snapshots the input as `versions/v0.pptx` (+ renders); then applies the ops with the byte-preserving
 XML engine (`--engine pptx` to use python-pptx for text ops) → `/app/output/deck.pptx`
@@ -65,7 +76,11 @@ Wrong or incomplete? Write `/app/work/ops2.json` and run `round --pptx /app/outp
 and redo. No starting deck? Generate v0 first exactly like paper2ppt (facts.json + spec.json →
 `deck_make.py --outdir /app/work/gen`), then run rounds on `/app/work/gen/deck.pptx`.
 
-## 6. Records and result.json (1–2 calls)
+## 6. Records and result.json (0–2 calls)
+Already written by the round when it has `--case /input/case.json` (it runs the two commands below).
+Run them by hand only to change answers: `--set field=value`, `--uncertainty "..."`, or `--fill /app/work/fill.json`
+(your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
+verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
 python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
 python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json

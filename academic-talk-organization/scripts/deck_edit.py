@@ -25,7 +25,7 @@ Engine (apply): python-pptx (if importable) runs replace_text/set_text/set_notes
 fallback use the stdlib XML engine, which copies untouched package parts byte-for-byte (round defaults to it;
 --engine pptx/auto switches). edit_log.json records each op with before/after values and changed package parts.
 """
-import argparse, copy, difflib, json, os, re, shutil, sys, tempfile, time, zipfile
+import argparse, copy, difflib, json, os, re, shutil, subprocess, sys, tempfile, time, zipfile
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -986,6 +986,11 @@ def main():
     p.add_argument("--template-ref", default=None, help="template/deck whose master the result must keep (default: v0)")
     p.add_argument("--engine", default="xml", choices=["auto", "pptx", "xml"],
                    help="xml (default for rounds): untouched parts stay byte-identical; auto/pptx: python-pptx for text ops")
+    p.add_argument("--case", default=None, help="also write version_record.json + result.json after the round")
+    p.add_argument("--work", default="/app/work")
+    p.add_argument("--input", default="/input")
+    p.add_argument("--fill", default=None, help="your own answers keyed by contract field (win over the automatic ones)")
+    p.add_argument("--uncertainty", action="append", default=[])
     p = sub.add_parser("inventory")
     p.add_argument("--pptx", required=True)
     p.add_argument("--out", default=None)
@@ -1009,7 +1014,25 @@ def main():
     p.add_argument("--png-a", default=None)
     p.add_argument("--png-b", default=None)
     a = ap.parse_args()
-    return {"inventory": cmd_inventory, "apply": cmd_apply, "snapshot": cmd_snapshot, "diff": cmd_diff, "round": cmd_round}[a.cmd](a)
+    rc = {"inventory": cmd_inventory, "apply": cmd_apply, "snapshot": cmd_snapshot, "diff": cmd_diff, "round": cmd_round}[a.cmd](a)
+    if a.cmd == "round" and getattr(a, "case", None):   # records + result.json in the same call
+        here = os.path.dirname(os.path.abspath(__file__))
+        os.makedirs(a.work, exist_ok=True)
+        cmd = [sys.executable, os.path.join(here, "deck_fill.py"), "--case", a.case, "--outdir", a.outdir, "--work", a.work,
+               "--input", a.input, "--out", os.path.join(a.work, "fill.json"), "--deck", os.path.join(a.outdir, a.name + ".pptx"),
+               "--result"] + sum([["--uncertainty", u] for u in a.uncertainty], []) + (["--fill", a.fill] if a.fill else [])
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        for line in (p.stdout + p.stderr).splitlines():
+            if line.startswith("{") and '"result"' in line:
+                r = json.loads(line)
+                print("RESULT " + json.dumps(dict(result=r.get("result"), status=r.get("status"), missing=r.get("missing")),
+                                             ensure_ascii=False))
+            elif line.startswith("{") and '"mapped"' in line:
+                r = json.loads(line)
+                print("CONTRACT mapped=%s unmapped=%s" % (r.get("mapped"), r.get("unmapped")))
+            elif line.startswith(("UNMAPPED", "WARN", "FIX", "Traceback")) or "Error" in line:
+                print(line)
+    return rc
 
 
 if __name__ == "__main__":

@@ -10,13 +10,24 @@ up to the slot**, every slide leaves **one key message** whose wording matches t
 likely questions have **answers with sources and backup slides**, and every claim traces to the materials.
 Deliver an editable `.pptx` (notes = speaker script), PDF/PNG renders, `talk_plan.json/.md`, evidence map, records.
 
-Budget: 64 requests / 900 s / 16k tokens per reply. Target ≈ 16 requests; deliverable after step 5.
-
+## Quick path (copy these; details in §1–§6) — budget 64 requests / 900 s, target ≈ 13–16 calls
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
+# 1 task (audience, minutes, goal) + contract + paper map                                         [1 call]
+cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
+python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+# 2 verbatim quotes with locators: python3 $SKILL/scripts/paper_map.py find "..." "..."             [1-3 calls]
+# 3 write facts.json, talk_plan.json, spec.json in /app/work (templates/)                         [2-3 calls]
+# 4 ONE command: check (incl. time budget, Q&A) -> build -> render -> records -> result.json     [1 call]
+python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --mode talk \
+  --plan /app/work/talk_plan.json --duration-min <M> --case /input/case.json
+# 5 fix every FAIL, run step 4 again (max 2 rounds); open previews/contact_sheet.png once
 ```
+Step 4 always leaves a complete, honest deliverable (deck, PDF, previews, `talk_plan.md`, evidence map,
+`result.json` with `case_id` + every contract field). Extra answers: `/app/work/fill.json` → `--fill`.
+
 
 ## 1. Prepare (1 call)
 ```bash
@@ -59,14 +70,18 @@ Spec (template `$SKILL/templates/spec_template.json`, fields `references/formats
 ## 5. Build, check, render, look (2–4 calls)
 ```bash
 python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --outdir /app/output \
-  --mode talk --plan /app/work/talk_plan.json --duration-min <M> [--max-slides N] [--template /input/<template>]
+  --mode talk --plan /app/work/talk_plan.json --duration-min <M> --case /input/case.json [--max-slides N] [--template /input/<template>]
 ```
 Talk mode adds: goal/audience present, time budget ±10 %, key messages and transitions, ≥ 3 Q&A with valid
 fact ids and backup slides, cuts recorded, numbers in the plan's key messages and answers found in the
 materials. Outputs `talk_plan.md` (goal, audience, section budget, slide timeline with start times, Q&A, cuts)
 plus deck, PDF, PNGs, evidence map. Fix every FAIL, re-run (max twice), look at `previews/contact_sheet.png` once.
 
-## 6. Records and result.json (1–2 calls)
+## 6. Records and result.json (0–2 calls)
+Already written by the build step when it has `--case /input/case.json` (it runs the two commands below).
+Run them by hand only to change answers: `--set field=value`, `--uncertainty "..."`, or `--fill /app/work/fill.json`
+(your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
+verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
 python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
 python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json

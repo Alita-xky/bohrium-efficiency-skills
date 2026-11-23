@@ -20,11 +20,24 @@ tick_labels_overlap, legend_overlap, glyph_missing.
 Text: `10^18`, `10^{-3}`, `Ca^{2+}`, `CO_{2}`, `EC_{50}` become Unicode super/subscripts
 (still plain editable <text>). Only matplotlib/numpy (+ stdlib) are required.
 """
-import argparse, csv, hashlib, json, math, os, re, sys, unicodedata
+import argparse, csv, glob, hashlib, json, math, os, re, shutil, subprocess, sys, unicodedata
 import logging, warnings
 import xml.etree.ElementTree as ET
 
-import matplotlib
+try:
+    import matplotlib
+except ImportError:   # scientific-python normally has it; try one quick install, then fail with a clear message
+    subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--timeout", "20",
+                    "matplotlib", "numpy"], capture_output=True, timeout=120)
+    try:
+        import matplotlib
+    except ImportError:
+        print(json.dumps(dict(status="failed", fails=1, warns=0, outputs={}), ensure_ascii=False))
+        print("ISSUE " + json.dumps(dict(level="fail", check="matplotlib_missing",
+              hint="matplotlib is not installed and pip could not install it: deliver spec.json + facts.json, "
+                   "report the missing renderer in result.json (status failed/partial); for an edit task svg_edit.py "
+                   "needs no matplotlib")))
+        sys.exit(3)
 matplotlib.use("Agg")
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 logging.getLogger("fontTools").setLevel(logging.ERROR)
@@ -77,6 +90,26 @@ def sha256(path):
     return h.hexdigest()
 
 
+def find_data_file(p, spec_dir):
+    """Resolve a data path the way an agent means it: absolute, next to the spec, cwd, /input, /app/work,
+    then the same file name anywhere under /input or /app/work. Returns the first existing path (or the
+    spec-relative path when nothing exists, so the error names it)."""
+    if not p:
+        return p
+    cands = [p] if os.path.isabs(p) else [os.path.join(spec_dir, p), os.path.abspath(p), os.path.join("/input", p),
+                                           os.path.join("/app/work", p)]
+    for c in cands:
+        if os.path.exists(c):
+            return c
+    import glob as _glob
+    base = os.path.basename(p)
+    for root in ("/input", "/app/work", spec_dir):
+        hits = sorted(_glob.glob(os.path.join(root, "**", base), recursive=True))
+        if hits:
+            return hits[0]
+    return cands[0]
+
+
 # ---------------------------------------------------------------- fonts
 CJK_PREF = ["Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Source Han Sans CN", "WenQuanYi Zen Hei",
             "WenQuanYi Micro Hei", "Sarasa Gothic SC", "PingFang SC", "Hiragino Sans GB", "Heiti SC", "STHeiti",
@@ -91,6 +124,28 @@ def _covers(fname, chars):
         return all(f.get_char_index(ord(c)) for c in chars)
     except Exception:
         return False
+
+
+def _cjk_font_files(limit=400):
+    """CJK-capable font files on disk: fc-list :lang=zh first, then common font folders (name-filtered)."""
+    found = []
+    if shutil.which("fc-list"):
+        try:
+            out = subprocess.run(["fc-list", ":lang=zh", "file"], capture_output=True, text=True, timeout=20).stdout
+            found += [l.split(":")[0].strip() for l in out.splitlines() if l.strip()]
+        except Exception:
+            pass
+    name_rx = re.compile(r"cjk|han|hei|song|kai|ming|wqy|wenquan|noto.*(sc|tc|jp|kr)|droid|pingfang|hiragino|yahei|"
+                         r"simsun|fang|sarasa|unifont|arialuni|ukai|uming", re.I)
+    for d in ("/usr/share/fonts", "/usr/local/share/fonts", os.path.expanduser("~/.fonts"),
+              os.path.expanduser("~/.local/share/fonts"), "/opt", "/System/Library/Fonts", "/Library/Fonts",
+              os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fonts")):
+        if os.path.isdir(d):
+            for ext in ("ttf", "otf", "ttc", "TTF", "OTF", "TTC"):
+                found += [p for p in glob.glob(os.path.join(d, "**", "*." + ext), recursive=True)
+                          if name_rx.search(os.path.basename(p))][:limit]
+    pref = re.compile(r"sans|hei|gothic|wqy|wenquan|sourcehan|source.han|pingfang|yahei|droid", re.I)
+    return sorted(dict.fromkeys(found), key=lambda p: (not pref.search(os.path.basename(p)), p))[:limit]
 
 
 def pick_fonts(spec, all_text):
@@ -122,6 +177,16 @@ def pick_fonts(spec, all_text):
             if n in by_name and any(_covers(fn, sample) for fn in by_name[n][:3]):
                 pick = n
                 break
+        if not pick:   # the font cache can predate installed fonts: look for CJK fonts on disk, register, retry
+            for fp in _cjk_font_files():
+                if _covers(fp, sample):
+                    try:
+                        font_manager.fontManager.addfont(fp)
+                        pick = font_manager.FontProperties(fname=fp).get_name()
+                        notes.append(f"CJK font registered from {fp} (it was not in matplotlib's font cache)")
+                        break
+                    except Exception:
+                        continue
         if pick:
             new_fallback = tuple(int(x) for x in re.findall(r"\d+", matplotlib.__version__)[:2]) >= (3, 6)
             fams = fams + [pick] if new_fallback else [pick] + fams
@@ -274,7 +339,7 @@ def load_series(el, spec_dir):
     [+ err (column or list) + group (long table, one series per group value)]; or data.values inline."""
     d = el.get("data", {})
     if "csv" in d:
-        path = d["csv"] if os.path.isabs(d["csv"]) else os.path.join(spec_dir, d["csv"])
+        path = find_data_file(d["csv"], spec_dir)
         with open(path, newline="", encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
         origin = f"csv:{path}"
@@ -959,6 +1024,15 @@ def main():
     spec = load_json_lenient(args.spec)
     spec_dir = os.path.dirname(os.path.abspath(args.spec))
     os.makedirs(args.outdir, exist_ok=True)
+    missing_data = [dict(level="fail", check="chart_csv_missing", id=el.get("id"), path=el["data"]["csv"],
+                         hint="give the CSV path as written in /input (absolute), or copy the table to /app/work/<name>.csv")
+                    for _, el in iter_all(spec) if el.get("type") == "chart" and isinstance(el.get("data"), dict)
+                    and el["data"].get("csv") and not os.path.exists(find_data_file(el["data"]["csv"], spec_dir))]
+    if missing_data:   # stop cleanly (no traceback): nothing can be drawn without the data
+        print(json.dumps(dict(status="needs_fix", fails=len(missing_data), warns=0, outputs={}), ensure_ascii=False))
+        for i in missing_data:
+            print("ISSUE", json.dumps(i, ensure_ascii=False))
+        return 2
     all_text = json.dumps(spec, ensure_ascii=False)
     fams, font_notes, cjk_ok = pick_fonts(spec, all_text)
     # explicit family list -> per-glyph fallback (Latin font, CJK font, DejaVu Sans for symbols such as ⊣ →)
@@ -1013,7 +1087,9 @@ def main():
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                fig.savefig(p, dpi=dpi if ext == "png" else None, facecolor=fig.get_facecolor())
+                # no timestamps in the files: the same spec gives byte-identical SVG/PDF/PNG (re-run check)
+                meta = {"svg": {"Date": None}, "pdf": {"CreationDate": None, "ModDate": None}}.get(ext)
+                fig.savefig(p, dpi=dpi if ext == "png" else None, facecolor=fig.get_facecolor(), metadata=meta)
             out[ext] = dict(path=p, bytes=os.path.getsize(p), sha256=sha256(p))
             if ext == "png":
                 out[ext]["pixels"] = png_size(p)

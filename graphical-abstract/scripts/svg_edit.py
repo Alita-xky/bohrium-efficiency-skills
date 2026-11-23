@@ -355,15 +355,16 @@ def apply_ops(svg_path, ops, out_path):
                 if n == 0:
                     raise ValueError(f"colour {src or '?'} not found inside {eid}; inventory colours: {list(c)}")
                 entry.update(before=src, after=op["to"], nodes_changed=n)
-                touched.add(eid)
+                touched.update(x.get("id") for x in el.iter() if x.get("id"))  # the op addresses the whole group
             elif kind == "set_style":
                 b = deep_set(el, op["prop"], str(op["value"]))
                 entry.update(before=sorted({str(x) for x in b}), after=str(op["value"]), nodes_changed=len(b))
-                touched.add(eid)
+                touched.update(x.get("id") for x in el.iter() if x.get("id"))
             elif kind == "set_attr":
                 if op["attr"] in COLOR_PROPS + ("stroke-width", "opacity", "font-size", "font-family") and local(el.tag) == "g":
                     b = deep_set(el, op["attr"], str(op["value"]))
                     entry["note"] = "applied to descendants (group children carry their own styles)"
+                    touched.update(x.get("id") for x in el.iter() if x.get("id"))
                 else:
                     b = [el.get(op["attr"])]
                     el.set(op["attr"], str(op["value"]))

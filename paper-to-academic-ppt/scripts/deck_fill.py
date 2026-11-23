@@ -42,17 +42,8 @@ def find_key(obj, key):
 
 
 def fields_of(contract):
-    if isinstance(contract, dict):
-        if isinstance(contract.get("fields"), (list, dict)):
-            return fields_of(contract["fields"])
-        if isinstance(contract.get("properties"), dict):
-            return list(contract["properties"].keys())
-        return list(contract.keys())
-    if isinstance(contract, list):
-        return [x if isinstance(x, str) else (x.get("name") or x.get("field") or x.get("key")) for x in contract]
-    if isinstance(contract, str):
-        return [s.strip() for s in re.split(r"[,;]", contract) if s.strip()]
-    return []
+    from make_result import contract_fields   # one parser for every contract shape (shared with make_result)
+    return contract_fields(contract)
 
 
 RULES = [
@@ -82,6 +73,8 @@ def main():
     ap.add_argument("--uncertainty", action="append", default=[])
     ap.add_argument("--set", action="append", default=[])
     ap.add_argument("--deck", default=None, help="the final deck (default: newest *.pptx in outdir, templates excluded)")
+    ap.add_argument("--fill", default=None, help="your own answers keyed by contract field; they win (dicts are merged)")
+    ap.add_argument("--result", action="store_true", help="also run make_result.py -> <outdir>/result.json")
     a = ap.parse_args()
     case = jload(a.case) or {}
     fields = [f for f in fields_of(find_key(case, "output_contract")) if f and f != "case_id"]
@@ -199,7 +192,15 @@ def main():
             v = jload(v[1:]) if v.endswith(".json") else open(v[1:], encoding="utf-8").read()
         fill[k] = v
         mapping[k] = "--set"
-    fill["status"] = fill.get("status", status) if "status" in fields else status
+    if a.fill and os.path.exists(a.fill):
+        from make_result import load_json_lenient
+        own = load_json_lenient(a.fill)
+        for k, v in own.items():
+            fill[k] = {**fill[k], **v} if isinstance(v, dict) and isinstance(fill.get(k), dict) else v
+            mapping[k] = (mapping[k] + "+" if k in mapping else "") + "fill.json"
+        if own.get("status") == "complete" and status != "complete":
+            fill["status"] = status   # never claim complete over a failed check
+    fill["status"] = fill.get("status", status) if "status" in fields else fill.get("status", status)
     fill.setdefault("uncertainty", val["uncertainty"]) if "uncertainty" not in fields else None
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(fill, f, ensure_ascii=False, indent=1)
@@ -208,6 +209,11 @@ def main():
                           mapped=mapping, unmapped=unmapped), ensure_ascii=False))
     if unmapped:
         print("UNMAPPED contract fields (add with --set field=value, else they become not_provided): %s" % unmapped)
+    if a.result:
+        import subprocess
+        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "make_result.py"),
+                            "--case", a.case, "--outdir", od, "--fill", a.out], capture_output=True, text=True)
+        print((p.stdout + p.stderr).strip())
     return 0
 
 

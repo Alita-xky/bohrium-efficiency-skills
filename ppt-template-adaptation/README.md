@@ -29,15 +29,37 @@ fonts replaced and pictures lost after PDF export. This Skill makes template app
 | `scripts/deck_build.py` | spec → .pptx (python-pptx or stdlib backend), font fitting ladder, charts from CSV, tables, figures, notes |
 | `scripts/deck_render.py` | .pptx → PDF → PNGs + contact sheet; layout and font checks |
 | `scripts/deck_check.py` | spec (or existing .pptx) vs materials audit; writes the evidence map |
-| `scripts/deck_make.py` | check → build → render (→ template audit) in one call |
+| `scripts/deck_make.py` | check → build → render (→ template audit) in one call; `--case` also writes records + result.json |
 | `scripts/deck_edit.py` | inventory / source-preserving edits / snapshots / slide diff (for revisions) |
 | `scripts/deck_template.py` | template inspect (+ layout gallery), audit, fix, deck→spec, content preservation |
-| `scripts/deck_fill.py` | version_record.json + contract mapping for result.json |
-| `scripts/make_result.py` | contract-complete result.json (copied unchanged from the sibling figure Skill) |
+| `scripts/deck_fill.py` | version_record.json + contract mapping for result.json (`--fill` merges your answers, `--result` runs make_result) |
+| `scripts/make_result.py` | contract-complete result.json (any contract shape) with `verification`, `inputs`, `reproduce` |
+| `scripts/gain_check.py` | measured comparison on the synthetic example (plain python-pptx vs this Skill, injected defects, contract shapes) |
+| `references/measured_gain.md` | the output of `gain_check.py` for this Skill (summary below) |
 | `scripts/pptkit.py` | shared stdlib PresentationML library (package I/O, default template, catalog, inventory, XML builders) |
 | `templates/` | `spec_template.json` (route B, with `layout_name` hints), `facts_template.json` |
 | `references/` | `template_rules.md` (anatomy, layout mapping, size ladder, fonts/colours, consistency, routes, fixes), `slide_rules.md`, `formats.md` |
 | `examples/minimal/` | SYNTHETIC example: generator for a 4:3 .potx template + a 16:9 draft deck with violations + paper, case.json |
+
+## Measured gain (synthetic example; reproduce with `python3 scripts/gain_check.py`)
+
+| measured | without the Skill | with the Skill |
+|---|---|---|
+| template compliance rate | 0.0 (draft) | 1.0 (adapted) |
+| text of the draft preserved | – | pass (1.0) |
+| contract shapes fully filled | – | 6/6 |
+
+Full tables and limits: `references/measured_gain.md`. Not the platform's baseline-agent comparison (the organiser
+runs that on hidden cases); it shows, measured on identical input, what the scripts add and which defects they flag.
+
+## Evidence map for reviewers
+| Rubric point | Where to look / how to re-check |
+|---|---|
+| completion, completeness | `result.json` (`case_id`, every contract field, `status`), `deck.pptx`, `deck.pdf`, `previews/` |
+| correctness | `check_report.json` + `evidence_map.json/.md`: verbatim quotes, every number in the materials, Fig./Table numbers exist |
+| verifiability | `version_record.json` (inputs + sha256, tools, fonts requested vs embedded, re-run command), `result.json.verification` |
+| quality / efficiency gain, gain verifiability | `references/measured_gain.md`, `scripts/gain_check.py` (one command, same input for both sides) |
+| exception handling | SKILL.md exception table; defect rows in `measured_gain.md` |
 
 ## Requirements
 Python 3.8+. Used when present (all optional, detected at run time): python-pptx (else stdlib writer),
@@ -82,7 +104,8 @@ python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/outp
   is a fair summary — the agent still has to read the cited paragraph.
 
 ## Maintenance
-Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,
+Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
+parsing, `verification` block, measured gain report). Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,
 ppt_template, ppt_edit); only SKILL.md, templates, references and examples differ.
 
 ## Tested on real papers (dogfooding log, 2026-11)

@@ -6,10 +6,12 @@ Usage:
       --outdir /app/output [--name deck] [--template T.pptx] [--mode paper|talk|template|edit] \
       [--materials '/app/work/materials/*.txt' /input/*.csv] [--paper-map /app/work/paper_map.json] [--plan talk_plan.json] \
       [--min-slides N] [--max-slides N] [--duration-min M] [--backend auto|pptx|xml]
+      [--case /input/case.json [--fill /app/work/fill.json] [--uncertainty "..."] [--set field=value]]
 
 Runs deck_check.py (spec vs materials, evidence_map.json/.md), deck_build.py (deck .pptx, build_report.json,
 slides_outline.md), deck_render.py (PDF, previews/, contact_sheet.png, render_report.json) and, with a template,
-deck_template.py audit (compliance.json). The deck is always built - even when the check fails - so an honest
+deck_template.py audit (compliance.json); with --case also deck_fill.py (version_record.json, contract mapping)
+and make_result.py (result.json). The deck is always built - even when the check fails - so an honest
 partial deliverable exists early. Prints every FAIL in one list; fix them in the spec and run again.
 """
 import argparse, glob, json, os, subprocess, sys
@@ -50,6 +52,12 @@ def main():
     ap.add_argument("--backend", default="auto")
     ap.add_argument("--keep-template-slides", action="store_true")
     ap.add_argument("--preserve-from", default=None, help="source deck whose content must survive (writes preserve.json)")
+    ap.add_argument("--case", default=None, help="also write version_record.json + result.json (deck_fill + make_result)")
+    ap.add_argument("--work", default="/app/work")
+    ap.add_argument("--input", default="/input")
+    ap.add_argument("--fill", default=None, help="your own answers keyed by contract field (win over the automatic ones)")
+    ap.add_argument("--uncertainty", action="append", default=[])
+    ap.add_argument("--set", action="append", default=[])
     a = ap.parse_args()
     os.makedirs(a.outdir, exist_ok=True)
     specs = sum([["--spec", s] for s in a.spec], [])
@@ -111,6 +119,28 @@ def main():
         print("  WARN " + w)
     with open(os.path.join(a.outdir, "make_summary.json"), "w", encoding="utf-8") as f:
         json.dump(dict(status=status, steps=summary, fails=fails, warns=warns), f, ensure_ascii=False, indent=1)
+    if a.case:   # records + result.json in the same call: a complete, honest deliverable exists after one command
+        fl = [os.path.join(HERE, "deck_fill.py"), "--case", a.case, "--outdir", a.outdir, "--work", a.work, "--input", a.input,
+              "--out", os.path.join(a.work, "fill.json"), "--deck", pptx, "--result"]
+        fl += sum([["--uncertainty", u] for u in a.uncertainty], []) + sum([["--set", x] for x in a.set], [])
+        if a.fill:
+            fl += ["--fill", a.fill]
+        os.makedirs(a.work, exist_ok=True)
+        rc, out = run(fl)
+        for line in out.splitlines():
+            if line.startswith("{") and '"result"' in line:
+                r = json.loads(line)
+                print("RESULT " + json.dumps(dict(result=r.get("result"), status=r.get("status"), missing=r.get("missing")),
+                                             ensure_ascii=False))
+            elif line.startswith("{") and '"mapped"' in line:
+                r = json.loads(line)
+                print("CONTRACT mapped=%s unmapped=%s" % (r.get("mapped"), r.get("unmapped")))
+            elif line.startswith(("UNMAPPED", "WARN", "FIX")):
+                print(line)
+        if "RESULT" not in out and '"result"' not in out:
+            print("FAIL result: deck_fill/make_result did not run: " + out[-600:])
+    if fails:
+        print("NEXT: fix each FAIL in the spec, then run this same command again")
     return 0
 
 

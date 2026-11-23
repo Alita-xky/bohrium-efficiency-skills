@@ -25,6 +25,38 @@ SCI_TYPES = {"entity", "arrow", "chart", "image", "scalebar"}
 
 
 
+
+def quote_found(q, mat_squash):
+    """Verbatim test on normalised text: the whole quote (short) or its first and last 60 characters (long)."""
+    parts = [squash(x) for x in re.split(r"\.\.\.|…|\[\.\.\.\]", q)]
+    for k in [x for x in parts if len(x) >= 8] or [squash(q)]:   # "A ... B": each kept part must be verbatim
+        if len(k) <= 120:
+            if k not in mat_squash:
+                return False
+        elif not (k[:60] in mat_squash and k[-60:] in mat_squash):
+            return False
+    return True
+
+
+def find_data_file(p, spec_dir):
+    """Resolve a data path the way an agent means it: absolute, next to the spec, cwd, /input, /app/work,
+    then the same file name anywhere under /input or /app/work. Returns the first existing path (or the
+    spec-relative path when nothing exists, so the error names it)."""
+    if not p:
+        return p
+    cands = [p] if os.path.isabs(p) else [os.path.join(spec_dir, p), os.path.abspath(p), os.path.join("/input", p),
+                                           os.path.join("/app/work", p)]
+    for c in cands:
+        if os.path.exists(c):
+            return c
+    import glob as _glob
+    base = os.path.basename(p)
+    for root in ("/input", "/app/work", spec_dir):
+        hits = sorted(_glob.glob(os.path.join(root, "**", base), recursive=True))
+        if hits:
+            return hits[0]
+    return cands[0]
+
 def load_json_lenient(path):
     """Agent-written JSON: allow raw newlines/tabs inside strings and a trailing comma; on failure
     exit with the line/column and the offending line instead of a traceback."""
@@ -188,14 +220,20 @@ def main():
                     else:
                         add("fail", "number_not_in_materials", id=el["id"], number=n,
                             hint="copy the exact value from the source, or set derived:{formula,inputs}")
+        if t == "entity":
+            lab = str(el.get("label") or "")
+            nwords = len(lab.split()) + len(re.findall("[\u4e00-\u9fff]", lab)) // 2
+            if nwords > 25:
+                add("warn", "label_too_long", id=el["id"], words=nwords,
+                    hint="keep the key phrase in the source's wording (<= ~20 words); details go to a footnote or result.json")
         q = el.get("source", {}).get("quote") if isinstance(el.get("source"), dict) else None
-        if q and mat_squash and squash(q)[:60] not in mat_squash:
+        if q and mat_squash and not quote_found(q, mat_squash):
             add("warn", "quote_not_found", id=el["id"], quote=q[:70],
                 hint="copy the sentence printed by extract_materials.py --find (verbatim, same locator)")
         if t == "chart":
             d = el.get("data", {})
             if "csv" in d:
-                p = d["csv"] if os.path.isabs(d["csv"]) else os.path.join(spec_dir, d["csv"])
+                p = find_data_file(d["csv"], spec_dir)
                 if not os.path.exists(p):
                     add("fail", "chart_csv_missing", id=el["id"], path=p)
                 else:
@@ -311,6 +349,11 @@ def main():
     charts = [el for _, el in iter_elements(spec) if el.get("type") == "chart"]
     arrows = [ar for _, ar in iter_arrows(spec)]
     sci_arrows = [ar for ar in arrows if not (isinstance(ar.get("source"), dict) and ar["source"].get("type") == "design")]
+    for ar in sci_arrows:   # every mode: a quoted relation must be quoted verbatim
+        src = ar.get("source") if isinstance(ar.get("source"), dict) else {}
+        if src.get("quote") and mat_squash and not quote_found(src["quote"], mat_squash):
+            add("warn", "quote_not_found", id=ar.get("id"), quote=src["quote"][:70],
+                hint="copy the sentence printed by extract_materials.py --find (verbatim)")
     if a.mode == "chart":
         if not charts:
             add("fail", "chart_missing", hint="a source_value_chart needs at least one chart element bound to data")
@@ -331,9 +374,6 @@ def main():
             if a.mode == "mechanism" and not src.get("quote"):
                 add("fail", "relation_without_quote", id=ar.get("id"),
                     hint="direction and sign of each mechanistic arrow must be backed by a verbatim quote")
-            if src.get("quote") and mat_squash and squash(src["quote"])[:60] not in mat_squash:
-                add("warn", "quote_not_found", id=ar.get("id"), quote=src["quote"][:70],
-                    hint="copy the sentence printed by extract_materials.py --find (verbatim)")
         orphans = {e["id"] for e in ents} - {ar.get("from") for ar in arrows} - {ar.get("to") for ar in arrows}
         if orphans and len(orphans) > len(ents) // 2:
             add("warn", "many_unconnected_entities", ids=sorted(orphans)[:10])
