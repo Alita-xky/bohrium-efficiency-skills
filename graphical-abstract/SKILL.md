@@ -1,16 +1,18 @@
 ---
 name: source-bound-figure-builder
-description: Build or edit a scientific figure (graphical abstract, schematic, mechanism/pathway diagram, data chart, apparatus/roadmap figure) strictly from the provided case materials, delivering a layered editable SVG plus rendered PDF/PNG, an element-to-source map, layout/legend/number checks and a contract-complete result.json. Use whenever a task asks to draw, redraw, edit or export a research figure from papers, data files or an existing figure source.
+description: "Build or edit a single-page graphical abstract (research problem -> method -> key result -> conclusion) or another research figure strictly from the provided case materials, delivering a layered editable SVG plus rendered PDF/PNG, an element-to-source map, number/quote/legend/layout checks and a contract-complete result.json; edit tasks change only the requested elements of the given SVG and verify the rest is unchanged. Use whenever a task asks to draw, redraw, edit or export a graphical abstract or research figure from papers, data files or an existing figure source."
 ---
 
-# Source-bound figure builder
+# Graphical abstract (图形摘要) — source-bound figure Skill
 
-Goal: a figure in which **every entity, arrow, number, colour and label can be traced to the input
+Goal: a figure in which **every entity, arrow, value, colour and label can be traced to the input
 materials**, delivered as an **editable layered SVG** + **PDF/PNG previews**, with an honest
-`result.json`. Looks matter less than correctness, traceability and editability.
+`result.json`. Correctness, traceability and editability matter more than decoration.
+Organiser workorder type: `graphical_abstract` (the same procedure also builds schematics,
+mechanism diagrams, charts and apparatus/route figures: `--mode schematic|mechanism|chart|setup`).
 
-Budget per case: 64 model requests, 900 s. Follow the steps in order, keep tool calls few and
-**save a first complete deliverable by step 5 (≈ request 25)**, then improve.
+Budget per case: 64 model requests, 900 s. A normal run needs **8–12 tool calls**; the call count per
+step is given in brackets. Save a first complete deliverable (step 6) before polishing.
 
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
@@ -18,97 +20,138 @@ SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/de
 mkdir -p /app/work /app/output
 ```
 
-## 1. Read the task and the contract (1–2 calls)
-`cat /input/case.json task.md` (task.md may be in the working dir or /input). Note: the figure type,
-the **output_contract fields** (result.json must contain every one, plus `case_id`), required
-formats/sizes/dpi/fonts, and whether this is **create** or **edit** (an existing SVG/PPTX/figure source
-is provided → edit mode, step 4b).
+## Focus: graphical abstract (one page, four parts)
+- Four panels left → right with `role` problem | method | result | conclusion (`ga_check.py --mode
+  graphical_abstract` fails if a role is missing). Short boxes (≤ ~20 words) in the paper's wording.
+- Result panel: at least the key quantitative result(s) **with units**, copied from the source. A data
+  file or a table → `chart` bound to it; numbers only in the text → chart with `data.values` and a
+  `source.quote` that contains them, or a text box. Never estimate values from a plotted figure.
+- When the paper states a mechanism/model, draw it as a small entity–arrow diagram (direction and sign
+  quoted) in the result or conclusion panel; categories that matter (e.g. pro- vs anti-inflammatory,
+  treatment vs control) get one colour each + legend.
+- Language follows the task (e.g. Chinese title and text, entity names as in the paper: TNFα, IL-10);
+  a CJK font covering the characters is picked automatically (`font_notes`).
+- Details that do not fit (statistics, secondary results, conditions) go into the footnote or
+  result.json (`four_part_mapping`/uncertainty), not onto the panels.
 
-## 2. Extract materials with locators (1 call)
+## 1. Task, contract, materials [1 call]
 ```bash
-python3 $SKILL/scripts/extract_materials.py --input /input --task task.md --work /app/work
+cat /input/case.json /input/task.md task.md 2>/dev/null
+python3 $SKILL/scripts/make_result.py --case /input/case.json --list-fields
+python3 $SKILL/scripts/extract_materials.py --input /input --work /app/work   # finds task.md itself
 ```
-Text goes to `/app/work/materials/*.txt` with paragraph tags `[p3:12]` (page 3, paragraph 12).
-Tables are listed with columns; PDF pages are rendered to `materials/pages/*.png` so you can look at the
-original figures. Read only what you need (`grep -n` for entity names, numbers, "Fig").
+`--list-fields` prints `case_id` and the exact **output_contract field names** (any contract shape is
+understood) — these become the keys of `fill.json` in step 6. Decide **create** or **edit** (a figure
+source such as .svg is provided and the task asks to change it → step 4b). Note required size/dpi/
+format/language. `extract_materials` writes `/app/work/materials/<file>.txt` (reading order, two-column
+PDFs untangled, **one paragraph per line starting with its locator `[p3:12]`**), `<file>.layout.txt`
+(column-preserving, for tables), CSV/XLSX summaries, and prints every figure/table caption with its locator.
 
-## 3. Write `/app/work/facts.json` — the evidence table (no drawing yet)
-One row per thing that will appear on the figure:
-`{"id":"E1","kind":"entity|relation|number|claim|unit","text":"...","source":{"file":"...","loc":"p3:12","quote":"<= 25 words copied verbatim"}}`
-Rules:
-- Use the paper's own names and numbers. **Never invent a value, unit, sample size or direction.**
-- Relation direction/sign (activates vs inhibits, A→B vs B→A) must be stated in the quote.
-- If something the task asks for is not in the materials, add a row with `"status":"not_in_materials"`
-  and plan a visible placeholder ("value not reported") instead of a made-up number.
-- For a graphical abstract collect the four parts: research **problem**, **method**, key **result**
-  (with its numbers), **conclusion**.
+## 2. Find the evidence [1–2 calls]
+```bash
+python3 $SKILL/scripts/extract_materials.py --work /app/work --find "inhibits" "3.3 ng" "Table 2"
+grep -n -A15 "Table 2" /app/work/materials/*.layout.txt      # tables: rows stay on one line
+```
+`--find` prints each matching **sentence with its locator** — paste it verbatim as `source.quote`.
+PDF text flattens superscripts: `2.3 · 1019` means 2.3×10^19, `ng.mL−1` means ng/mL.
 
-## 4a. Create mode — write `/app/work/spec.json`
-Start from `$SKILL/templates/spec_template_ga.json` (four panels: problem → method → result →
-conclusion; already laid out without overlaps). Other figure types: keep the canvas, replace panels
-(see `$SKILL/references/design_rules.md` §Layouts). Spec essentials:
-- coordinates are **fractions, top-left origin**, relative to the panel for elements inside a panel;
-- element types: `entity` (box/ellipse with label), `text`, `chart` (data from CSV:
-  `"data":{"csv":"/input/x.csv","x":"col","y":"col","err":"col"}`), `legend`, `scalebar`, `image`, `group`;
-- arrows: `{"id","from","to","kind":"activates|inhibits|flow|produces|converts|binds|next","label"}`;
-  arrows may connect entities or whole panels (`"from":"panel:P1"`);
-- every scientific element gets `"source":{"file","loc"}` copied from facts.json; purely visual items
-  use `"source":{"type":"design"}`;
-- colour encodes a category → give entities `"category"` and add a `legend`; use the colour-blind-safe
-  palette in design_rules.md; units in axis labels `"Time (h)"`.
+## 3. Evidence table + spec [1 call: write both files]
+`/app/work/facts.json`: one row per thing that will appear: `{"id","kind":"entity|relation|value|condition|claim",
+"text","source":{"file","loc","quote"}}`. Never invent a value, unit, n, direction or name. Missing
+but requested → row with `"status":"not_in_materials"` and a visible "not reported" placeholder.
 
-## 4b. Edit mode — keep the original source
+## 4a. Create mode — `/app/work/spec.json`
+Copy `$SKILL/templates/spec_template_ga.json` and replace every TODO (other layouts in the same folder: schematic,
+chart, mechanism, setup; a filled example: `$SKILL/examples/minimal/spec.json`). Spec essentials:
+- fractions, **top-left origin**, relative to the panel for elements inside a panel;
+- types: `entity` (box/ellipse + label, `category` → legend), `text`, `chart`, `legend`, `scalebar`, `image`, `group`;
+- arrows `{"id","from","to","kind","label","source"}`, kinds activates|promotes|inhibits|flow|produces|
+  converts|binds|associates|next; ends may be entities or whole panels (`"panel:P1"`). Leave out
+  `connection`: opposite pairs (A→B, B→A) become two arcs and arrows are routed around other boxes
+  automatically; set `"connection":"arc3,rad=0.3"` only to override;
+- `chart.data`: `{"csv","x","y","err","group"}`; **`"y"` may be a list of columns** (wide table, one
+  series per column, names via `series_labels`) — no reshaping needed; no data file → copy the
+  reported numbers into `"values":{"x":[..],"y":[..]}` with a `source.quote` that contains them;
+  options `kind` bar|barh|line|scatter (**barh when > 6 categories or long names**), `value_labels`
+  (prints the CSV strings exactly), `highlight` [categories], `yscale`/`xscale` "log", `ylim`;
+  empty cells are drawn as **"n.r."** (never fill them);
+- text notation: `10^18`, `10^{-3}`, `Ca^{2+}`, `CO_{2}` render as real super/subscripts; Greek
+  and CJK work (a font with the glyphs is picked automatically);
+- every scientific element has `"source":{"file","loc"}` (+`quote` for relations and numbers);
+  purely visual items use `"source":{"type":"design"}`;
+- legend swatch colour = the `edge` (or `fill`) colour of that category's entities; one colour per category.
+
+## 4b. Edit mode — keep the original source [3–4 calls]
 ```bash
 python3 $SKILL/scripts/svg_edit.py inventory --svg <given.svg> --out /app/work/inventory.json
 ```
-Write `/app/work/ops.json` with only the requested changes, addressed by existing ids
-(`set_text`, `set_attr`, `set_style`, `translate`, `delete`, `add_text`), then
+Rows show id, text, colours used inside the element and an approximate bbox (SVG units; canvas size
+on the first line). Write `/app/work/ops.json` with only the requested changes, addressed by id:
+`set_text` (keeps the block centred), `recolor` (`{"op":"recolor","id":"arrow3","to":"#D55E00"}` —
+changes the element's main colour in all its paths; also recolour matching legend handles and labels),
+`set_style`, `set_attr`, `translate`, `delete`, `add_text` (`x`,`y` from free space in the bboxes;
+font defaults to the figure's font).
 ```bash
 python3 $SKILL/scripts/svg_edit.py apply --svg <given.svg> --ops /app/work/ops.json \
   --out /app/output/figure_edited.svg --log /app/output/edit_log.json
 python3 $SKILL/scripts/svg_edit.py export --svg /app/output/figure_edited.svg \
-  --png /app/output/figure_edited.png --pdf /app/output/figure_edited.pdf
+  --png /app/output/figure_edited.png --pdf /app/output/figure_edited.pdf --dpi 300
 ```
-Never redraw an edit task from scratch: unchanged elements must keep their ids and attributes.
-If the given source is not SVG (PPTX/DOCX), convert a copy for preview with
-`soffice --headless --convert-to pdf`, edit the original format only if a tool for it exists, and
-state the limitation.
+`apply` re-reads its output and marks each op `verified`; anything in `not_applied_or_unverified` or a
+`warning` (e.g. new text overlapping) must be fixed and re-applied **from the original file**.
+`unchanged_check` proves untouched ids are byte-identical — copy it into result.json. Never redraw an
+edit task from scratch. Text already converted to paths (inventory note) cannot be re-typed: delete
+that group and `add_text` at its bbox, and say so. Non-SVG sources (PPTX/DOCX/PNG): preview with
+`soffice --headless --convert-to pdf`, redraw only what is asked as a new layered SVG, state the limitation.
+Edit mode then goes straight to step 6 (steps 3–5 are for new figures).
 
-## 5. Check, render, look (2–4 calls) — save a deliverable now
+## 5. Check and render [1 call, repeat at most twice]
 ```bash
-python3 $SKILL/scripts/ga_check.py --spec /app/work/spec.json --materials '/app/work/materials/*.txt' /input/*.csv \
-  --mode graphical_abstract --out /app/output/check_report.json
+python3 $SKILL/scripts/ga_check.py --spec /app/work/spec.json --mode graphical_abstract \
+  --materials '/app/work/materials/*.txt' /input/*.csv /app/work/*.csv --out /app/output/check_report.json
 python3 $SKILL/scripts/ga_render.py --spec /app/work/spec.json --outdir /app/output --name graphical_abstract
 ```
-(`--mode` = graphical_abstract | schematic | chart | mechanism | setup; only graphical_abstract
-requires the four roles.) Fix every **FAIL** (missing source, unknown arrow endpoint, number not
-in materials, text overflow, out of canvas). Read `render_report.json`; open the PNG once to look for
-crossing arrows, cramped text or wrong colours. Re-run at most twice — do not polish endlessly.
+**FAIL** must be fixed (missing source/quote, number not in materials, unknown arrow end, text that does
+not fit even at 6.5 pt, out of canvas, glyph boxes). The renderer already shrinks only the overflowing
+labels, rotates crowded ticks and routes arrows. Its **ISSUE lines describe the picture in words**, so a
+model that cannot view images can still fix the layout:
 
-## 6. result.json (1–2 calls)
-Write `/app/work/fill.json` with one key per output_contract field (paths to the SVG/PDF/PNG,
-`source_map` = `layer_map.json` path or content, element→source table, checks, edits, uncertainty,
-`status`: complete|partial|failed). Then
+| ISSUE | fix |
+|---|---|
+| arrow_through_entity / arrows_cross | move one entity (change x/y) or reorder a row; or give the arrow `connection` rad ±0.3 |
+| arrow_through_text / text_overlap / label_overlap | move the text element, set the arrow's `label_pos` (0–1), or shorten |
+| legend_overlap | move the legend into free space (another panel corner) |
+| chart_out_of_canvas / tick_labels_overlap | reduce chart `h`, or use `kind:"barh"` |
+| text_overflow (FAIL) | shorten with source wording or enlarge the box |
+| glyph_missing / cjk_font_missing | replace the character (`->`, `alpha`), or use English labels and report it |
+| quote_not_found (warn) | re-copy the quote from `--find` output |
+
+If you can view images, open the PNG once. Stop after two fix rounds; list what remains under uncertainty.
+
+## 6. result.json [1–2 calls]
+Write `/app/work/fill.json` with **one key per contract field from step 1** (paths to SVG/PDF/PNG,
+`layer_map.json` for element→source, `check_report.json`/`render_report.json` for checks, edit_log /
+unchanged_check, uncertainty incl. every "n.r." and every warn left, `status`: complete|partial|failed), then
 ```bash
 python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
 ```
-It copies `case_id`, adds artifact hashes and render checks, and marks unfilled contract fields as
-`not_provided` (never fabricate them).
+It copies `case_id`, adds artifact hashes and render checks, writes `not_provided` for missing fields
+(and prints `FIX:` lines naming them and any path that does not exist) — fix and rerun until clean.
 
 ## Exception handling (decide, then state it in result.json)
 | Situation | Action |
 |---|---|
-| key number/unit missing in materials | draw "not reported" placeholder, `status: partial`, list it under uncertainty |
-| entity name ambiguous / two sources disagree | use the paper's main-text wording, record both with locators |
-| text overflow, font missing, CJK boxes | renderer shrinks fonts (≥6.5 pt) and wraps; if still failing shorten labels using source wording; report font notes |
-| canvas too small / size required | set `canvas.width_in/height_in/dpi` from the task; report final pixels |
-| export fails | keep the SVG, try `svg_edit.py export`, report which converters were tried |
-| PDF without text layer | extract_materials runs OCR; cite OCR text as lower confidence |
-| task outside figure work (e.g. statistics, writing) | do only the figure part, say what was out of scope |
+| value/unit/n missing in materials | "n.r."/"not reported" placeholder, `status: partial` only if the task required it, list under uncertainty |
+| names ambiguous / sources disagree | main-text wording, record both locators |
+| text overflow, font missing, CJK boxes | automatic shrink ≥ 6.5 pt + wrap; then shorten; report `font_notes` |
+| size/dpi/format required | set `canvas.width_in/height_in/dpi`; report `png_pixels` |
+| export fails | keep the SVG, use `svg_edit.py export` (rsvg → cairosvg → inkscape → chromium → LibreOffice+pdftoppm) and report converters tried |
+| PDF without text layer | OCR runs automatically if tesseract exists; cite OCR text as lower confidence |
+| request outside figure work | do only the figure part; say what was out of scope |
 
-## Final checklist (before stopping)
-1. `/app/output` has: editable SVG, PDF, PNG, `layer_map.json`, `render_report.json`,
-   `check_report.json` (and `edit_log.json` in edit mode), `result.json`.
-2. No number on the figure is absent from the materials (or it is marked derived with formula).
-3. Every colour/arrow style that carries meaning is in the legend; units on axes and scale bars.
+## Final checklist
+1. `/app/output`: editable SVG (one Inkscape layer per panel), PDF, PNG, `layer_map.json`,
+   `render_report.json`, `check_report.json` (+ `edit_log.json` in edit mode), `result.json`.
+2. No value on the figure is absent from the materials (or it is marked derived with formula).
+3. Meaningful colours/arrow kinds are in the legend; units on axes and scale bars; "n.r." explained.
 4. `result.json` has `case_id` and every contract field; status honest; limits listed.

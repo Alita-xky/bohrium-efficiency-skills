@@ -1,0 +1,199 @@
+{
+ "_comment": "TEMPLATE apparatus + technical route. Replace every TODO; delete unused elements; keep ids unique.",
+ "canvas": {
+  "width_in": 11,
+  "height_in": 5.5,
+  "dpi": 300,
+  "background": "#FFFFFF",
+  "font_family": "auto",
+  "base_font_pt": 11
+ },
+ "title": {
+  "text": "TODO short title in the paper's words",
+  "y": 0.05,
+  "source": {
+   "file": "TODO",
+   "loc": "TODO",
+   "quote": "TODO verbatim quote (relations/numbers)"
+  }
+ },
+ "panels": [
+  {
+   "id": "route",
+   "role": "route",
+   "title": "TODO title",
+   "x": 0.02,
+   "y": 0.12,
+   "w": 0.96,
+   "h": 0.62,
+   "fill": "#F7F9FC",
+   "elements": [
+    {
+     "id": "s1",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.02,
+     "y": 0.3,
+     "w": 0.17,
+     "h": 0.4,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Step",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "s2",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.23,
+     "y": 0.3,
+     "w": 0.17,
+     "h": 0.4,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Step",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "s3",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.44,
+     "y": 0.3,
+     "w": 0.15,
+     "h": 0.4,
+     "fill": "#E9F6F1",
+     "edge": "#009E73",
+     "category": "Measurement",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "s4",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.62,
+     "y": 0.3,
+     "w": 0.16,
+     "h": 0.4,
+     "fill": "#E9F6F1",
+     "edge": "#009E73",
+     "category": "Measurement",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "s5",
+     "type": "entity",
+     "label": "TODO label from the source",
+     "x": 0.81,
+     "y": 0.3,
+     "w": 0.17,
+     "h": 0.4,
+     "fill": "#FBEFF5",
+     "edge": "#CC79A7",
+     "category": "Endpoint",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    }
+   ],
+   "arrows": [
+    {
+     "id": "n1",
+     "from": "s1",
+     "to": "s2",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    },
+    {
+     "id": "n2",
+     "from": "s2",
+     "to": "s3",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    },
+    {
+     "id": "n3",
+     "from": "s3",
+     "to": "s4",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    },
+    {
+     "id": "n4",
+     "from": "s4",
+     "to": "s5",
+     "kind": "next",
+     "source": {
+      "type": "design"
+     }
+    }
+   ]
+  }
+ ],
+ "elements": [
+  {
+   "id": "lg",
+   "type": "legend",
+   "x": 0.03,
+   "y": 0.8,
+   "w": 0.5,
+   "h": 0.16,
+   "size": 8,
+   "entries": [
+    {
+     "label": "TODO label from the source",
+     "color": "#0072B2"
+    },
+    {
+     "label": "TODO label from the source",
+     "color": "#009E73"
+    },
+    {
+     "label": "TODO label from the source",
+     "color": "#CC79A7"
+    }
+   ]
+  },
+  {
+   "id": "note",
+   "type": "text",
+   "text": "TODO text from the source",
+   "x": 0.55,
+   "y": 0.84,
+   "w": 0.43,
+   "h": 0.08,
+   "size": 9,
+   "style": "italic",
+   "source": {
+    "file": "TODO",
+    "loc": "TODO",
+    "quote": "TODO verbatim quote (relations/numbers)"
+   }
+  }
+ ],
+ "footnote": "TODO Source: <paper short ref>; data from <table/figure>."
+}

@@ -5,9 +5,16 @@ Usage:
   python3 extract_materials.py --input /input --task task.md --work /app/work [--render-pages 4]
 
 Writes /app/work/materials/:
-  <name>.txt            text per file, paragraphs tagged  [p3:12]  (page 3, paragraph 12)
-  pages/<name>-<n>.png  low-res renders of the first PDF pages (to look at original figures)
-  materials_index.json  one row per input file: type, pages, columns, sizes, extraction method, problems
+  <name>.txt            reading-order text, ONE PARAGRAPH PER LINE, each line starts with its locator
+                        [p3:12] (page 3, paragraph 12) -> `grep -n "keyword" <name>.txt` shows the locator
+  <name>.layout.txt     column-preserving text (pdftotext -layout) with "=== page N ===" markers: use it
+                        for TABLES (rows stay on one line); cite tables as "Table 2 (p6)"
+  pages/<name>-<n>.png  renders of the pages that carry figure/table captions (to look at originals)
+  materials_index.json  one row per input file: type, pages, columns, captions, extraction method, problems
+Search afterwards (prints "<file> [p3:12] <sentence>", i.e. a quote with its locator):
+  python3 extract_materials.py --work /app/work --find "3.3 ng" "inhibits" "Table 2"
+Two-column PDFs: the paragraph file uses reading order (columns are not interleaved), so quotes copied
+from it match the checker. Superscripts are flattened by PDF text extraction ("2.3 · 1019" = 2.3×10^19).
 Nothing is summarised or guessed: it only copies what the files contain and records what failed.
 """
 import argparse, csv, json, os, re, shutil, subprocess, sys
@@ -25,20 +32,52 @@ def run(cmd, timeout=120):
         return 1, "", repr(e)
 
 
+LIGATURES = {"\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi", "\ufb04": "ffl", "\u00ad": ""}
+_CW = r"(?:FIG(?:URE)?|Fig(?:ure)?|TABLE|Table|Scheme|SCHEME)\.?\s*S?\d+[A-Za-z]?"
+CAP_RE = re.compile(r"(?:^|(?<=[\s.]))(" + _CW + r"\s*[:|]\s+\S|^" + _CW + r"\s*\.\s+[A-Z]|^[图表]\s*S?\d+)")
+
+
+def clean(s):
+    for k, v in LIGATURES.items():
+        s = s.replace(k, v)
+    return s
+
+
 def tag_paragraphs(pages):
+    """One paragraph per line: '[p3:12] text'. Lines inside a paragraph are joined with a space;
+    a line ending in '-' is joined without a space (keeps 'anti-inflammatory', 'con-centration')."""
     out = []
     for pi, page in enumerate(pages, 1):
-        paras = [q.strip() for q in re.split(r"\n\s*\n", page) if q.strip()]
+        paras = [q.strip() for q in re.split(r"\n\s*\n", clean(page)) if q.strip()]
         for qi, q in enumerate(paras, 1):
+            q = re.sub(r"-\n\s*", "-", q)
+            q = re.sub(r"\s*\n\s*", " ", q)
             out.append(f"[p{pi}:{qi}] " + re.sub(r"[ \t]+", " ", q))
-    return "\n\n".join(out)
+    return "\n".join(out)
+
+
+def find_captions(tagged):
+    caps = []
+    for line in tagged.splitlines():
+        m = re.match(r"\[(p\d+:\d+)\] (.*)", line)
+        if not m:
+            continue
+        for c in CAP_RE.finditer(m.group(2)):
+            caps.append(f"[{m.group(1)}] {m.group(2)[c.start(1):c.start(1) + 150]}")
+    return caps
+
+
+def strip_pages(pages):
+    while pages and not pages[-1].strip():
+        pages = pages[:-1]
+    return pages
 
 
 def pdf_text(path):
     if shutil.which("pdftotext"):
-        rc, out, err = run(["pdftotext", "-layout", path, "-"])
+        rc, out, err = run(["pdftotext", path, "-"])   # reading order: two-column papers stay readable
         if rc == 0 and out.strip():
-            return out.split("\f"), "pdftotext"
+            return strip_pages(out.split("\f")), "pdftotext"
     try:
         import fitz  # PyMuPDF
         doc = fitz.open(path)
@@ -54,21 +93,56 @@ def pdf_text(path):
     return [], "none"
 
 
+def find_terms(mdir, terms, width=1):
+    """Print every sentence containing a term, prefixed by its locator -> ready-made verbatim quotes."""
+    import glob
+    files = sorted(f for f in glob.glob(os.path.join(mdir, "*.txt")) if not f.endswith(".layout.txt"))
+    for term in terms:
+        print(f"## {term}")
+        rx = re.compile(re.escape(term).replace("\\ ", r"\s+"), re.I)
+        hits = 0
+        for f in files:
+            for line in open(f, encoding="utf-8", errors="ignore"):
+                m = re.match(r"(\[p\d+:\d+\]) (.*)", line.rstrip("\n"))
+                if not m:
+                    continue
+                sents = re.split(r"(?<=[.;!?])\s+(?=[A-Z(\[])", m.group(2))
+                for i, snt in enumerate(sents):
+                    if rx.search(snt):
+                        q = " ".join(sents[max(0, i - width + 1):i + width])
+                        print(f"{os.path.basename(f)[:-4]} {m.group(1)} {q[:400]}")
+                        hits += 1
+                        if hits >= 8:
+                            break
+                if hits >= 8:
+                    break
+        if not hits:
+            print(f"NOT FOUND: {term!r} (try a shorter term, other spelling, or the .layout.txt for tables)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", default="/input")
     ap.add_argument("--task", default=None)
     ap.add_argument("--work", default="/app/work")
-    ap.add_argument("--render-pages", type=int, default=4)
+    ap.add_argument("--render-pages", type=int, default=6, help="max pages rendered (caption pages first)")
+    ap.add_argument("--find", nargs="+", default=None,
+                    help="search already extracted materials: print each sentence containing a term with its locator")
     a = ap.parse_args()
     mdir = os.path.join(a.work, "materials")
+    if a.find:
+        find_terms(mdir, a.find)
+        return 0
     os.makedirs(os.path.join(mdir, "pages"), exist_ok=True)
     files = []
     for root, _, names in os.walk(a.input):
         for n in sorted(names):
             files.append(os.path.join(root, n))
-    if a.task and os.path.exists(a.task):
-        files.append(a.task)
+    task = a.task if (a.task and os.path.exists(a.task)) else next(
+        (c for c in (os.path.join(a.input, "task.md"), "task.md", "/app/task.md", "/app/work/task.md",
+                     "/input/task.md") if os.path.exists(c)), None)
+    if task and os.path.abspath(task) not in {os.path.abspath(f) for f in files}:
+        files.append(task)
     index = []
     for p in files:
         name = os.path.basename(p)
@@ -87,12 +161,26 @@ def main():
                             rc, out, _ = run(["tesseract", os.path.join(mdir, "pages", img), "-", "-l", "eng+chi_sim"])
                             texts.append(out)
                         pages, row["method"] = texts, "ocr"
-                open(os.path.join(mdir, name + ".txt"), "w", encoding="utf-8").write(tag_paragraphs(pages))
+                tagged = tag_paragraphs(pages)
+                txt_path = os.path.join(mdir, name + ".txt")
+                open(txt_path, "w", encoding="utf-8").write(tagged)
+                row.update(text_file=txt_path, paragraphs=tagged.count("\n") + 1, words=len(tagged.split()))
+                if shutil.which("pdftotext") and row.get("method") == "pdftotext":
+                    rc, lay, _ = run(["pdftotext", "-layout", p, "-"])
+                    if rc == 0:
+                        lp = strip_pages(lay.split("\f"))
+                        open(os.path.join(mdir, name + ".layout.txt"), "w", encoding="utf-8").write(
+                            "".join(f"=== page {i} ===\n{clean(pg)}\n" for i, pg in enumerate(lp, 1)))
+                        row["layout_file"] = os.path.join(mdir, name + ".layout.txt")
+                caps = find_captions(tagged)
+                row["captions"] = caps[:30]
+                cap_pages = sorted({int(re.match(r"\[p(\d+)", c).group(1)) for c in caps})
                 if shutil.which("pdftoppm") and a.render_pages > 0:
-                    run(["pdftoppm", "-r", "60", "-png", "-l", str(a.render_pages), p,
-                         os.path.join(mdir, "pages", os.path.splitext(name)[0])])
-                caps = re.findall(r"((?:Fig(?:ure)?\.?|图)\s*\d+[A-Za-z]?[.:：][^\n]{0,160})", "\n".join(pages))
-                row["figure_captions"] = caps[:20]
+                    targets = (cap_pages or list(range(1, len(pages) + 1)))[:a.render_pages]
+                    for pg in targets:
+                        run(["pdftoppm", "-r", "90", "-png", "-f", str(pg), "-l", str(pg), p,
+                             os.path.join(mdir, "pages", os.path.splitext(name)[0])])
+                    row["rendered_pages"] = targets
             elif ext in TABLE_EXT:
                 delim = "\t" if ext == ".tsv" else ","
                 with open(p, newline="", encoding="utf-8-sig") as f:
@@ -145,8 +233,13 @@ def main():
     json.dump(out, open(os.path.join(mdir, "materials_index.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(json.dumps(dict(n_files=len(index), tools=tools), ensure_ascii=False))
     for r in index:
-        print(json.dumps({k: r[k] for k in r if k in ("file", "type", "pages", "columns", "n_rows", "method", "problems")},
+        print(json.dumps({k: r[k] for k in r if k in ("file", "type", "pages", "words", "text_file", "layout_file",
+                                                      "columns", "n_rows", "method", "problems")},
                          ensure_ascii=False))
+        for c in r.get("captions", [])[:25]:
+            print("   CAPTION", c)
+    print("NEXT: grep -n -i '<keyword>' %s/*.txt  (each hit line starts with its locator [pX:Y]);"
+          " tables: grep -n -A15 'Table N' %s/*.layout.txt" % (mdir, mdir))
     return 0
 
 

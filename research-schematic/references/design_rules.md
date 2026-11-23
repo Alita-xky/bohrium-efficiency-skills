@@ -1,7 +1,7 @@
 # Design rules for source-bound research figures
 
-These rules turn "looks fine" into checkable decisions. Each one is enforced or reported by
-`ga_check.py` / `ga_render.py`, or must be stated in `result.json`.
+These rules turn "looks fine" into checkable decisions. Each one is enforced or reported by the
+check script (`*_check.py`) or the render script (`*_render.py`), or must be stated in `result.json`.
 
 ## 1. Content comes from the materials
 - Entity names, relation directions, numbers, units and sample sizes are copied from the materials
@@ -24,6 +24,9 @@ These rules turn "looks fine" into checkable decisions. Each one is enforced or 
 | position | spatial compartments (outside/membrane/cytosol/nucleus; upstream→downstream) | keep source topology |
 | bar length / point position | measured value | axis starts at 0 for bars; units in label |
 
+Legend colours: the swatch of a category uses the same colour as that category's entity `edge` (or
+`fill`); two categories never share a colour (checked: `legend_color_mismatch`, `legend_duplicate_color`).
+
 Palette (Okabe–Ito, colour-blind safe): `#0072B2` blue, `#E69F00` orange, `#009E73` green,
 `#D55E00` vermillion, `#CC79A7` purple, `#56B4E9` sky, `#F0E442` yellow, `#000000` black.
 Charts default to neutral grey so that their bars never clash with the category colours.
@@ -40,16 +43,26 @@ Charts default to neutral grey so that their bars never clash with the category 
 - **Schematic**: groups (`type:"group"`) for repeated motifs; keep labels outside small shapes.
 - **Data chart**: one `chart` element per panel, data from the CSV; error bars only if the column
   exists; state n and error type (SD/SEM/CI) in the axis label or footnote, copied from the source.
+  > 6 categories or long names → `barh`; several series → grouped bars with the legend above the
+  plot; not-reported cells → "n.r." markers + footnote; orders of magnitude → log axis named in the label.
+- **Arrows**: signal → integrator → output top-to-bottom or left-to-right; regulators at the side.
+  Opposite pairs become two arcs automatically; other arrows are routed around boxes. Remaining
+  `arrow_through_entity` / `arrows_cross` issues mean the entities should be re-ordered.
 
 ## 4. Typography and canvas
 - Base 11 pt; nothing below 6.5 pt (renderer shrinks globally up to 30 % before reporting overflow).
 - Labels ≤ ~8 words; prefer the source's term over paraphrase; abbreviations as defined in the paper.
 - Default canvas 13.33 × 7.5 in (16:9) at 300 dpi; journals often ask 5 × 5 cm–13 × 5 cm or
   1200 × 600 px — follow the task exactly and report final pixel size.
-- CJK text needs a CJK font: the renderer picks one if installed and reports otherwise.
+- CJK text needs a CJK font: the renderer picks one whose glyphs cover the text (checked per
+  character) and reports `cjk_font_missing` otherwise. Mixed CJK/Latin labels wrap without splitting
+  Latin words.
+- Scientific notation in labels: `10^18`, `10^{-3}`, `Ca^{2+}`, `CO_{2}` → Unicode super/subscripts
+  (stay editable text). Keep the source's units (`ng/ml`, not a converted unit) unless asked.
 
 ## 5. Deliverable checklist
-1. Layered SVG: every element is a `<g id=...>` named after the spec id; text stays `<text>`.
+1. Layered SVG: one Inkscape layer per panel (+ connectors, annotations); every element is a
+   `<g id=...>` named after the spec id; text stays `<text>` (multi-line labels centre-anchored).
 2. PDF (TrueType embedded) and PNG previews generated from the same drawing.
 3. `layer_map.json`: id → type, panel, label, source, data origin.
 4. `check_report.json` + `render_report.json`: provenance, numbers, legend, overflow, canvas, export.

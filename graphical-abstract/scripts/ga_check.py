@@ -15,18 +15,73 @@ Checks (fail = must fix before rendering; warn = fix or explain in result.json):
 """
 import argparse, csv, glob, json, os, re, sys
 
-NUM_RE = re.compile(r"(?<![A-Za-z_])[-+]?\d+(?:[.,]\d+)?(?:\s?[×x]\s?10\^?-?\d+)?")
+SUPER = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻", "0123456789+-")
+MANT = r"[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?"
+POW = r"\s?[×x·*]\s?10\s?\^?\{?[-+]?\d{1,3}\}?"
+NUM_RE = re.compile(r"(?<![A-Za-z0-9_.\-])(?:10\^\{?[-+]?\d{1,3}\}?|" + MANT + "(?:" + POW + ")?)")
 ARROW_KINDS = {"activates", "promotes", "inhibits", "flow", "produces", "converts", "binds", "associates", "next"}
 ROLES_GA = ["problem", "method", "result", "conclusion"]
 SCI_TYPES = {"entity", "arrow", "chart", "image", "scalebar"}
 
 
-def norm_num(s):
-    s = s.replace(",", ".").replace(" ", "")
+
+def load_json_lenient(path):
+    """Agent-written JSON: allow raw newlines/tabs inside strings and a trailing comma; on failure
+    exit with the line/column and the offending line instead of a traceback."""
+    txt = open(path, encoding="utf-8-sig").read()
     try:
-        return float(re.sub(r"[×x]10\^?(-?\d+)$", r"e\1", s))
-    except ValueError:
-        return None
+        return json.loads(txt, strict=False)
+    except json.JSONDecodeError:
+        try:
+            return json.loads(re.sub(r",\s*([}\]])", r"\1", txt), strict=False)
+        except json.JSONDecodeError as e:
+            line = txt.splitlines()[e.lineno - 1] if e.lineno - 1 < len(txt.splitlines()) else ""
+            sys.exit(f"INVALID JSON in {path}: {e.msg} at line {e.lineno} col {e.colno}: {line[:160]!r}")
+
+def norm_text(s):
+    """Unify number spellings: unicode minus, superscript exponents (10¹⁸ -> 10^18), dot operators."""
+    s = s.replace("−", "-").replace("–", "-").replace("⋅", "·").replace(" ", " ").replace(" ", " ")
+    s = re.sub(r"10([⁺⁻]?[⁰¹²³⁴-⁹]+)", lambda m: "10^" + m.group(1).translate(SUPER), s)
+    return s
+
+
+def num_keys(tok):
+    """All plausible values of a number token -> set of canonical strings ('%.6g').
+    Handles 2.3e19, 2.3 × 10^19, 2.3 · 1019 (PDF-flattened superscript), 10^-3, 1,000 / 3,3."""
+    tok = tok.strip()
+    m = re.fullmatch(r"10\^\{?([-+]?\d{1,3})\}?", tok)
+    if m:
+        return {"%.6g" % (10.0 ** int(m.group(1)))}
+    m = re.fullmatch(r"([-+]?\d+(?:[.,]\d+)?)(?:[eE]([-+]?\d+))?(?:\s?[×x·*]\s?10\s?\^?\{?([-+]?\d{1,3})\}?)?", tok)
+    if not m:
+        return set()
+    mant, e1, e2 = m.groups()
+    cands = {mant.replace(",", ".")}
+    if re.fullmatch(r"[-+]?\d{1,3},\d{3}", mant):
+        cands.add(mant.replace(",", ""))
+    out = set()
+    for c in cands:
+        try:
+            v = float(c) * 10.0 ** (int(e1 or 0) + int(e2 or 0))
+            out.add("%.6g" % v)
+        except (ValueError, OverflowError):
+            pass
+    return out
+
+
+def numbers_in(text):
+    return [m.group(0) for m in NUM_RE.finditer(norm_text(text or ""))]
+
+
+def norm_num(s):  # kept for compatibility
+    k = num_keys(s)
+    return float(next(iter(k))) if k else None
+
+
+def squash(s):
+    """Loose form for quote matching: lowercase, letters/digits/Greek/CJK only."""
+    s = norm_text(s or "").lower().replace("ﬁ", "fi").replace("ﬂ", "fl")
+    return re.sub(r"[^0-9a-zͰ-Ͽ一-鿿]+", "", s)
 
 
 def load_material_numbers(paths):
@@ -44,10 +99,8 @@ def load_material_numbers(paths):
         except OSError:
             continue
     blob = "\n".join(texts)
-    for m in NUM_RE.finditer(blob):
-        v = norm_num(m.group(0))
-        if v is not None:
-            nums.add(round(v, 6))
+    for tok in numbers_in(blob):
+        nums |= num_keys(tok)
     return nums, blob
 
 
@@ -87,12 +140,13 @@ def main():
     ap.add_argument("--mode", default="graphical_abstract")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
-    spec = json.load(open(a.spec, encoding="utf-8"))
+    spec = load_json_lenient(a.spec)
     spec_dir = os.path.dirname(os.path.abspath(a.spec))
     mats = []
     for m in a.materials:
         mats += glob.glob(m) or [m]
     mat_nums, mat_blob = load_material_numbers(mats)
+    mat_squash = squash(mat_blob)
     res = []
 
     def add(level, check, **kw):
@@ -119,16 +173,25 @@ def main():
                 add("fail", "schema_coord_range", id=el["id"], field=k, value=v)
         if t in SCI_TYPES and not has_source(el):
             add("warn", "provenance_missing", id=el["id"], hint="add source:{file,loc,quote} or source:{type:'design'}")
-        text = el.get("label") or el.get("text") or ""
-        nums_here = [m.group(0) for m in NUM_RE.finditer(text)]
-        if nums_here and not has_source(el):
+        text = " ".join(str(el.get(k) or "") for k in ("label", "text", "title", "xlabel", "ylabel"))
+        text += " " + " ".join(str(e.get("label", "")) for e in el.get("entries", []))
+        nums_here = numbers_in(text)
+        if nums_here and not has_source(el) and t != "legend":
             add("fail", "number_without_source", id=el["id"], numbers=nums_here)
         if nums_here and mat_nums:
             for n in nums_here:
-                v = norm_num(n)
-                if v is not None and round(v, 6) not in mat_nums and not el.get("derived"):
-                    add("fail", "number_not_in_materials", id=el["id"], number=n,
-                        hint="copy the exact value from the source, or set derived:{formula,inputs}")
+                k = num_keys(n)
+                if k and not (k & mat_nums) and not el.get("derived"):
+                    if num_keys(n.lstrip("+-")) & mat_nums:
+                        add("warn", "number_sign_differs", id=el["id"], number=n,
+                            hint="the source states the magnitude without this sign: make sure the direction is stated there")
+                    else:
+                        add("fail", "number_not_in_materials", id=el["id"], number=n,
+                            hint="copy the exact value from the source, or set derived:{formula,inputs}")
+        q = el.get("source", {}).get("quote") if isinstance(el.get("source"), dict) else None
+        if q and mat_squash and squash(q)[:60] not in mat_squash:
+            add("warn", "quote_not_found", id=el["id"], quote=q[:70],
+                hint="copy the sentence printed by extract_materials.py --find (verbatim, same locator)")
         if t == "chart":
             d = el.get("data", {})
             if "csv" in d:
@@ -140,12 +203,24 @@ def main():
                         rows = list(csv.DictReader(f))
                     cols = rows[0].keys() if rows else []
                     for k in ("x", "y", "err", "group"):
-                        if d.get(k) and d[k] not in cols:
-                            add("fail", "chart_column_missing", id=el["id"], column=d[k], available=list(cols))
-                    if d.get("y") in cols:
-                        bad = [r[d["y"]] for r in rows if not re.fullmatch(r"\s*[-+]?\d+(\.\d+)?([eE][-+]?\d+)?\s*", r[d["y"]] or "")]
+                        for c in (d.get(k) if isinstance(d.get(k), list) else [d.get(k)]):
+                            if c and c not in cols:
+                                add("fail", "chart_column_missing", id=el["id"], column=c, available=list(cols))
+                    for yc in (d.get("y") if isinstance(d.get("y"), list) else [d.get("y")]):
+                        if yc not in cols:
+                            continue
+                        vals = [(r.get(yc) or "").strip() for r in rows]
+                        empty = sum(1 for v in vals if v in ("", "NA", "NaN", "nan", "-", "n.r.", "—"))
+                        bad = [v for v in vals if v not in ("", "NA", "NaN", "nan", "-", "n.r.", "—") and
+                               not re.fullmatch(r"[-+\u2212]?\d+(\.\d+)?([eE][-+]?\d+)?", v.replace(",", ""))]
                         if bad:
-                            add("warn", "chart_nonnumeric_values", id=el["id"], examples=bad[:5])
+                            add("warn", "chart_nonnumeric_values", id=el["id"], column=yc, examples=bad[:5])
+                        if empty:
+                            add("info", "chart_missing_values", id=el["id"], column=yc, n=empty,
+                                hint="rendered as 'n.r.' markers; never fill them; state it in footnote and result.json")
+                        if "log" in (el.get("yscale"), el.get("xscale")) and any(
+                                re.fullmatch(r"[-+]?\d+(\.\d+)?([eE][-+]?\d+)?", v) and float(v) <= 0 for v in vals):
+                            add("fail", "log_scale_nonpositive", id=el["id"], column=yc)
             elif "values" in d:
                 if not has_source(el):
                     add("fail", "chart_inline_without_source", id=el["id"])
@@ -158,7 +233,13 @@ def main():
 
     for p in spec.get("panels", []):
         ids["panel:" + p["id"]] = p
-    blob = json.dumps(spec, ensure_ascii=False)
+    def strip_meta(o):
+        if isinstance(o, dict):
+            return {k: strip_meta(v) for k, v in o.items() if not str(k).startswith("_")}
+        if isinstance(o, list):
+            return [strip_meta(v) for v in o]
+        return o
+    blob = json.dumps(strip_meta(spec), ensure_ascii=False)
     for tok in ("TODO", "PLACEHOLDER", "<fill"):
         if tok in blob:
             add("fail", "template_placeholder_left", token=tok, hint="replace every template placeholder with sourced content or delete the element")
@@ -183,7 +264,36 @@ def main():
         if el.get("type", "entity") == "entity" and el.get("category"):
             colors_used.add((el["category"], el.get("fill")))
 
+    loose = [("title", (spec.get("title") or {}).get("text", "")), ("footnote", spec.get("footnote") or "")]
+    loose += [("panel:" + p["id"], p.get("title") or "") for p in spec.get("panels", [])]
+    loose += [(ar.get("id"), ar.get("label") or "") for _, ar in iter_arrows(spec)]
+    for lid, txt in loose:
+        for n in numbers_in(txt):
+            k = num_keys(n)
+            if k and mat_nums and not (k & mat_nums):
+                add("warn", "number_not_in_materials", id=lid, number=n,
+                    hint="numbers in titles/footnotes/arrow labels must also come from the materials")
     legends = [el for _, el in iter_elements(spec) if el.get("type") == "legend"]
+    cat_cols = {}
+    for _, el in iter_elements(spec):
+        if el.get("type", "entity") == "entity" and el.get("category"):
+            cat_cols.setdefault(el["category"], set()).update(
+                c.lower() for c in (el.get("fill"), el.get("edge")) if c)
+    seen_cols = {}
+    for L in legends:
+        for e in L.get("entries", []):
+            lab = (e.get("label") or "").lower()
+            col = (e.get("color") or "").lower()
+            if e.get("marker", "square").startswith("arrow"):
+                continue
+            for cat, cols in cat_cols.items():
+                if cat.lower() in lab and col and col not in cols and (e.get("fill") or "").lower() not in cols:
+                    add("warn", "legend_color_mismatch", category=cat, legend_color=col, entity_colors=sorted(cols),
+                        hint="legend swatch must use the entity fill or edge colour of that category")
+            if col and col in seen_cols and seen_cols[col] != lab:
+                add("warn", "legend_duplicate_color", color=col, labels=[seen_cols[col], lab],
+                    hint="two categories with one colour cannot be told apart")
+            seen_cols.setdefault(col, lab)
     legend_labels = " ".join(e.get("label", "") for L in legends for e in L.get("entries", [])).lower()
     legend_markers = {e.get("marker", "") for L in legends for e in L.get("entries", [])}
     for cat, fill in sorted(colors_used, key=str):
@@ -197,6 +307,43 @@ def main():
     if len(fills - {""}) >= 3 and not legends:
         add("warn", "legend_absent", detail=f"{len(fills)} fill colors used without any legend")
 
+    ents = [el for _, el in iter_elements(spec) if el.get("type", "entity") == "entity"]
+    charts = [el for _, el in iter_elements(spec) if el.get("type") == "chart"]
+    arrows = [ar for _, ar in iter_arrows(spec)]
+    sci_arrows = [ar for ar in arrows if not (isinstance(ar.get("source"), dict) and ar["source"].get("type") == "design")]
+    if a.mode == "chart":
+        if not charts:
+            add("fail", "chart_missing", hint="a source_value_chart needs at least one chart element bound to data")
+        for c in charts:
+            if "csv" not in c.get("data", {}) and not (isinstance(c.get("source"), dict) and c["source"].get("quote")):
+                add("fail", "chart_values_unverifiable", id=c["id"], hint="bind to a CSV extracted from the materials, or give source.quote with the exact values")
+            value_label = c.get("xlabel") if c.get("kind") == "barh" else c.get("ylabel")
+            if not value_label:
+                add("fail", "chart_axis_label_missing", id=c["id"],
+                    hint="the value axis needs 'Quantity (unit)' (ylabel; xlabel for barh)")
+    if a.mode in ("mechanism", "schematic"):
+        if len(ents) < 3:
+            add("fail", "too_few_entities", n=len(ents))
+        if not sci_arrows:
+            add("fail", "no_relations", hint="draw the source-stated relations as arrows with kinds")
+        for ar in sci_arrows:
+            src = ar.get("source") if isinstance(ar.get("source"), dict) else {}
+            if a.mode == "mechanism" and not src.get("quote"):
+                add("fail", "relation_without_quote", id=ar.get("id"),
+                    hint="direction and sign of each mechanistic arrow must be backed by a verbatim quote")
+            if src.get("quote") and mat_squash and squash(src["quote"])[:60] not in mat_squash:
+                add("warn", "quote_not_found", id=ar.get("id"), quote=src["quote"][:70],
+                    hint="copy the sentence printed by extract_materials.py --find (verbatim)")
+        orphans = {e["id"] for e in ents} - {ar.get("from") for ar in arrows} - {ar.get("to") for ar in arrows}
+        if orphans and len(orphans) > len(ents) // 2:
+            add("warn", "many_unconnected_entities", ids=sorted(orphans)[:10])
+    if a.mode == "mechanism":
+        if not spec.get("panels"):
+            add("warn", "no_compartments", hint="use panels for compartments (extracellular / membrane / cytoplasm / nucleus) when the source names them")
+    if a.mode == "setup":
+        steps = [ar for ar in arrows if ar.get("kind") in ("next", "flow")]
+        if len(ents) >= 3 and not steps:
+            add("fail", "route_order_missing", hint="connect stages/components in the order stated in the methods with next/flow arrows")
     if a.mode == "graphical_abstract":
         roles = [p.get("role") for p in spec.get("panels", [])]
         for r in ROLES_GA:
@@ -206,13 +353,15 @@ def main():
         add("warn", "title_missing")
 
     fails = [r for r in res if r["level"] == "fail"]
-    out = dict(status="pass" if not fails else "fail", n_fail=len(fails), n_warn=len(res) - len(fails),
+    out = dict(status="pass" if not fails else "fail", n_fail=len(fails),
+               n_warn=sum(1 for r in res if r["level"] == "warn"),
                materials=mats, n_material_numbers=len(mat_nums), results=res)
     if a.out:
+        os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
         json.dump(out, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(json.dumps(dict(status=out["status"], fails=out["n_fail"], warns=out["n_warn"]), ensure_ascii=False))
-    for r in res[:20]:
-        print(("FAIL " if r["level"] == "fail" else "WARN ") + json.dumps(r, ensure_ascii=False))
+    for r in sorted(res, key=lambda r: {"fail": 0, "warn": 1}.get(r["level"], 2))[:25]:
+        print(r["level"].upper() + " " + json.dumps(r, ensure_ascii=False))
     return 0 if not fails else 2
 
 

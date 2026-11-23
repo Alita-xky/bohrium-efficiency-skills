@@ -3,6 +3,7 @@
 output_contract, filled from the agent's fill.json plus automatically collected artifact facts.
 
 Usage:
+  python3 make_result.py --case /input/case.json --list-fields          (step 1: which keys are required)
   python3 make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
 
 fill.json: the agent's task-specific answers, keyed by output_contract field names (any extra keys are
@@ -10,8 +11,22 @@ kept under "extra"). Allowed status values: "complete" | "partial" | "failed".
 Missing contract fields are NOT invented: they are written as
   {"status": "not_provided", "reason": "..."} and the overall status is downgraded to "partial".
 """
-import argparse, glob, hashlib, json, os, sys
+import argparse, glob, hashlib, json, os, re, sys
 
+
+
+def load_json_lenient(path):
+    """Agent-written JSON: allow raw newlines/tabs inside strings and a trailing comma; on failure
+    exit with the line/column and the offending line instead of a traceback."""
+    txt = open(path, encoding="utf-8-sig").read()
+    try:
+        return json.loads(txt, strict=False)
+    except json.JSONDecodeError:
+        try:
+            return json.loads(re.sub(r",\s*([}\]])", r"\1", txt), strict=False)
+        except json.JSONDecodeError as e:
+            line = txt.splitlines()[e.lineno - 1] if e.lineno - 1 < len(txt.splitlines()) else ""
+            sys.exit(f"INVALID JSON in {path}: {e.msg} at line {e.lineno} col {e.colno}: {line[:160]!r}")
 
 def sha256(path):
     h = hashlib.sha256()
@@ -37,17 +52,19 @@ def find_key(obj, key):
     return None
 
 
+LIST_KEYS = ("fields", "required", "required_fields", "result_fields", "required_keys", "keys", "outputs",
+             "result_json_fields", "result.json", "result_json", "items", "output_fields")
+META_KEYS = {"notes", "note", "description", "comment", "format", "type", "title", "$schema"}
+
+
 def contract_fields(contract):
+    """Field names from any common output_contract shape: list of names, list of {name|field|key},
+    JSON-schema {required, properties}, {"required_fields": [...]} / {"fields": ...} wrappers, or a
+    {field: description} dict. Wrapper/meta keys (notes, description ...) are never fields."""
     if contract is None:
         return []
-    if isinstance(contract, dict):
-        if "fields" in contract and isinstance(contract["fields"], (list, dict)):
-            return contract_fields(contract["fields"])
-        if "required" in contract and isinstance(contract["required"], list):
-            return list(contract["required"]) + [k for k in contract.get("properties", {}) if k not in contract["required"]]
-        if "properties" in contract and isinstance(contract["properties"], dict):
-            return list(contract["properties"].keys())
-        return list(contract.keys())
+    if isinstance(contract, str):
+        return [s.strip() for s in contract.replace(";", ",").split(",") if s.strip()]
     if isinstance(contract, list):
         out = []
         for x in contract:
@@ -56,23 +73,56 @@ def contract_fields(contract):
             elif isinstance(x, dict):
                 out.append(x.get("name") or x.get("field") or x.get("key") or json.dumps(x, ensure_ascii=False)[:40])
         return out
-    if isinstance(contract, str):
-        return [s.strip() for s in contract.replace(";", ",").split(",") if s.strip()]
+    if isinstance(contract, dict):
+        if isinstance(contract.get("properties"), dict):
+            req = contract.get("required") if isinstance(contract.get("required"), list) else []
+            return list(req) + [k for k in contract["properties"] if k not in req]
+        out = []
+        for k in LIST_KEYS:
+            if isinstance(contract.get(k), (list, dict)):
+                out += [f for f in contract_fields(contract[k]) if f not in out]
+        if out:
+            return out
+        return [k for k in contract if k not in META_KEYS]
     return []
+
+
+def broken_paths(obj, outdir, found=None):
+    """String values that look like output file paths but do not exist."""
+    found = [] if found is None else found
+    if isinstance(obj, dict):
+        for v in obj.values():
+            broken_paths(v, outdir, found)
+    elif isinstance(obj, list):
+        for v in obj:
+            broken_paths(v, outdir, found)
+    elif isinstance(obj, str) and re.fullmatch(r"[^\s]+\.(svg|pdf|png|json|csv|pptx|docx|xlsx)", obj):
+        cands = [obj, os.path.join(outdir, obj), os.path.join(outdir, os.path.basename(obj))]
+        if not any(os.path.exists(c) for c in cands):
+            found.append(obj)
+    return found
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default="/input/case.json")
     ap.add_argument("--outdir", default="/app/output")
-    ap.add_argument("--fill", required=True)
+    ap.add_argument("--fill", default=None)
+    ap.add_argument("--list-fields", action="store_true", help="only print case_id and the contract field names")
     a = ap.parse_args()
+    if a.list_fields or not a.fill:
+        case = json.load(open(a.case, encoding="utf-8"))
+        print(json.dumps(dict(case_id=find_key(case, "case_id") or find_key(case, "id"),
+                              contract_fields=contract_fields(find_key(case, "output_contract")),
+                              raw_contract=find_key(case, "output_contract")), ensure_ascii=False))
+        print("fill.json needs exactly these keys (plus 'status'); values = paths, tables or short text")
+        return 0
     case = {}
     try:
         case = json.load(open(a.case, encoding="utf-8"))
     except Exception as e:
         print(f"WARN cannot read case: {e!r}")
-    fill = json.load(open(a.fill, encoding="utf-8")) if os.path.exists(a.fill) else {}
+    fill = load_json_lenient(a.fill) if os.path.exists(a.fill) else {}
     contract = find_key(case, "output_contract")
     fields = contract_fields(contract)
     case_id = find_key(case, "case_id") or find_key(case, "id") or fill.get("case_id") or "unknown"
@@ -98,7 +148,10 @@ def main():
         else:
             result[f] = {"status": "not_provided", "reason": "no evidence produced for this field in this run"}
             missing.append(f)
+    # every key the agent filled is kept at top level too (a contract-parsing surprise never hides answers)
     extra = {k: v for k, v in fill.items() if k not in fields and k != "case_id"}
+    for k, v in extra.items():
+        result.setdefault(k, v)
     status = fill.get("status", "complete")
     if missing and status == "complete":
         status = "partial"
@@ -111,15 +164,21 @@ def main():
         result["status_note"] = "downgraded from complete: missing contract fields or failed render checks"
     result["artifacts"] = artifacts if "artifacts" not in fields else result.get("artifacts")
     result["render_check"] = render
-    if extra:
-        result["extra"] = extra
     result["contract_fields"] = fields
     result["missing_fields"] = missing
+    bad = broken_paths(fill, a.outdir)
+    if bad:
+        result["broken_paths"] = bad
     os.makedirs(a.outdir, exist_ok=True)
     out = os.path.join(a.outdir, "result.json")
     json.dump(result, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    print(json.dumps(dict(result=out, case_id=case_id, n_contract_fields=len(fields), missing=missing,
-                          status=result.get("status", status), n_artifacts=len(artifacts)), ensure_ascii=False))
+    print(json.dumps(dict(result=out, case_id=case_id, contract_fields=fields, missing=missing,
+                          status=result.get("status", status), n_artifacts=len(artifacts), broken_paths=bad),
+                     ensure_ascii=False))
+    if missing:
+        print("FIX: add these keys to fill.json and rerun: " + ", ".join(missing))
+    if bad:
+        print("FIX: these paths in fill.json do not exist: " + ", ".join(bad))
     if not fields:
         print("WARN no output_contract found in case.json: print the case file and fill fields by hand")
     return 0

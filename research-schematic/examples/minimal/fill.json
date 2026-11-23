@@ -1,0 +1,6 @@
+{"editable_source": "schematic.svg (layered: one Inkscape layer per panel; every element id = spec id)",
+ "exports": {"pdf": "schematic.pdf", "png": "schematic.png", "note": "pixel size and dpi in render_report.json"},
+ "element_sources": "layer_map.json (element id -> source file, locator, quote)",
+ "checks": {"spec_audit": "check_report.json", "layout_and_export": "render_report.json"},
+ "uncertainty": ["SYNTHETIC example: materials are made up; nothing here is a real result"],
+ "status": "complete"}
