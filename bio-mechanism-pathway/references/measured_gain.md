@@ -1,22 +1,22 @@
 # Measured gain (SYNTHETIC example, mode `mechanism`)
 
-Generated 2026-11-23 16:52 by `python3 scripts/gain_check.py --mode mechanism --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-24 14:27 by `python3 scripts/gain_check.py --mode mechanism --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
 | measured on the output | A: matplotlib defaults | B: this Skill |
 |---|---|---|
-| editable `<text>` elements in the SVG | 0 | 19 |
-| spec elements addressable by id in the SVG | 0/8 | 8/8 |
-| named layers | 0 | 5 |
-| PDF fonts embedded as TrueType/OpenType | 0 | 2 |
+| editable `<text>` elements in the SVG | 0 | 31 |
+| spec elements addressable by id in the SVG | 0/15 | 15/15 |
+| named layers | 0 | 7 |
+| PDF fonts embedded as TrueType/OpenType | 0 | 3 |
 | PDF Type 3 (glyph drawing) fonts | 2 | 0 |
 | element → source map | False | True |
 | result.json with case_id | False | True |
 | contract fields filled | 0/6 | 6/6 |
 | re-run byte-identical (SVG, PDF, PNG) | False | True |
 | automatic checks | none | spec vs materials (fig_check.py), layout/export (fig_render.py), re-run hash, contract |
-| wall time (s) | 1.0 | 3.7 |
+| wall time (s) | 0.4 | 1.5 |
 
 ## 2. One injected defect per run (same spec otherwise)
 
@@ -26,16 +26,16 @@ Flagged before delivery by B: **8/8**; A: 0 flagged (1 runs crashed without a de
 |---|---|---|---|
 | fabricated_number — a number that is in no material is printed, with a real-looking citation | drawn and shipped, no message | FAIL (status partial) | FAIL check: {"level": "fail", "check": "number_not_in_materials", "id": "inj_num", "number": "63.7", "hint": " |
 | unknown_arrow_end — an arrow points to an entity that does not exist | script crashed (KeyError), no deliverable | FAIL (status partial) | FAIL check: {"level": "fail", "check": "arrow_endpoint_unknown", "id": "inj_ar", "end": "to", "ref": "ghost_en |
-| source_removed — a scientific element has no source | drawn and shipped, no message | WARN (status complete) | WARN check: {"level": "warn", "check": "provenance_missing", "id": "drought", "hint": "add source:{file,loc,qu |
-| quote_paraphrased — a quote is not verbatim any more | drawn and shipped, no message | WARN (status complete) | WARN check: {"level": "warn", "check": "quote_not_found", "id": "r1", "quote": "ng/g 41 to 12 from ABA root ra |
+| source_removed — a scientific element has no source | drawn and shipped, no message | WARN (status partial) | WARN check: {"level": "warn", "check": "provenance_missing", "id": "cle25", "hint": "add source:{file,loc,quot |
+| quote_paraphrased — a quote is not verbatim any more | drawn and shipped, no message | WARN (status complete) | WARN check: {"level": "warn", "check": "quote_not_found", "id": "bam", "quote": "membrane plasma the in recept |
 | legend_colour_mismatch — a legend swatch no longer matches its category colour | drawn and shipped, no message | WARN (status complete) | WARN check: {"level": "warn", "check": "legend_color_mismatch", "category": "Stimulus", "legend_color": "#7f7f |
-| label_too_long — an 80-word label (unreadable even if it fits) | drawn and shipped, no message | FAIL (status partial) | FAIL render: {"level": "fail", "check": "text_overflow", "id": "drought", "text_bbox": [0.1185, 0.1804, 0.2415 |
+| label_too_long — an 80-word label (unreadable even if it fits) | drawn and shipped, no message | FAIL (status partial) | FAIL render: {"level": "fail", "check": "text_overflow", "id": "cle25", "text_bbox": [0.1031, 0.0967, 0.2201,  |
 | arrow_quote_removed — a mechanistic arrow keeps its direction but loses the quote that states it | drawn and shipped, no message | FAIL (status partial) | FAIL check: {"level": "fail", "check": "relation_without_quote", "id": "r1", "hint": "direction and sign of ea |
 | contract_field_without_answer — a required result field has no answer | no result.json is written | FIX line + field written as not_provided (status partial) |  |
 
 ## 3. Source-preserving edit (svg_edit.py on B's SVG)
 
-2 ops, 2 verified on the written file; untouched elements byte-identical: 43/43; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
+2 ops, 2 verified on the written file; untouched elements byte-identical: 81/81; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
 
 ## 4. output_contract shapes (fields filled automatically by fig_make.py)
 

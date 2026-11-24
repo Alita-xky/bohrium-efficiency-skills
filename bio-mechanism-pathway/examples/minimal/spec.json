@@ -1,5 +1,5 @@
 {
- "_comment": "SYNTHETIC EXAMPLE (interface demo, not a formal case result). Mechanism figure with compartments.",
+ "_comment": "SYNTHETIC EXAMPLE (interface demo, not a formal case result). Mechanism figure: compartments as panels (membrane band, cytoplasm, nucleus), icons only for objects the text names.",
  "canvas": {
   "width_in": 10,
   "height_in": 6.5,
@@ -9,134 +9,198 @@
   "base_font_pt": 11
  },
  "title": {
-  "text": "Drought → root ABA → stomatal closure (synthetic example)",
+  "text": "Soil drying → CLE25–BAM → NCED3 → ABA → stomatal closure (synthetic example)",
   "y": 0.04,
   "source": {
    "file": "paper_excerpt.txt",
-   "loc": "p1:5"
+   "loc": "p1:7"
   }
  },
  "panels": [
   {
-   "id": "soil",
+   "id": "root",
    "role": "compartment",
-   "title": "Soil / root",
-   "x": 0.03,
+   "title": "Root",
+   "x": 0.02,
    "y": 0.1,
-   "w": 0.3,
+   "w": 0.22,
    "h": 0.8,
    "fill": "#FBF6EE",
    "elements": [
     {
+     "id": "cle25",
+     "type": "entity",
+     "label": "CLE25 peptide",
+     "x": 0.06,
+     "y": 0.15,
+     "w": 0.88,
+     "h": 0.15,
+     "fill": "#FDEEE6",
+     "edge": "#D55E00",
+     "category": "Signal (peptide / hormone)",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:7"
+     },
+     "icon": "peptide"
+    },
+    {
      "id": "drought",
      "type": "entity",
-     "shape": "ellipse",
      "label": "Soil drying (drought)",
-     "x": 0.1,
-     "y": 0.18,
-     "w": 0.8,
-     "h": 0.2,
+     "x": 0.06,
+     "y": 0.43,
+     "w": 0.88,
+     "h": 0.15,
      "fill": "#FFF4E5",
      "edge": "#E69F00",
      "category": "Stimulus",
      "source": {
       "file": "paper_excerpt.txt",
       "loc": "p1:3"
-     }
+     },
+     "shape": "ellipse"
     },
     {
      "id": "aba_root",
      "type": "entity",
-     "label": "Root ABA ↑ (12 → 41 ng/g)",
-     "x": 0.1,
-     "y": 0.58,
-     "w": 0.8,
-     "h": 0.2,
-     "fill": "#E9F6F1",
-     "edge": "#009E73",
-     "category": "Hormone",
+     "label": "Root ABA ↑\n(12 → 41 ng/g)",
+     "x": 0.06,
+     "y": 0.72,
+     "w": 0.88,
+     "h": 0.16,
+     "fill": "#FDEEE6",
+     "edge": "#D55E00",
+     "category": "Signal (peptide / hormone)",
      "source": {
       "file": "paper_excerpt.txt",
       "loc": "p1:4"
-     }
+     },
+     "icon": "molecule"
     }
    ]
   },
   {
-   "id": "leaf",
+   "id": "mem",
    "role": "compartment",
-   "title": "Leaf (guard cells)",
-   "x": 0.37,
-   "y": 0.1,
-   "w": 0.3,
-   "h": 0.8,
-   "fill": "#F3F8FD",
+   "shape": "membrane",
+   "title": "Plasma membrane (leaf cell)",
+   "x": 0.28,
+   "y": 0.235,
+   "w": 0.46,
+   "h": 0.05,
    "elements": [
     {
-     "id": "stomata",
-     "type": "entity",
-     "label": "Stomatal opening",
-     "x": 0.1,
-     "y": 0.58,
-     "w": 0.8,
-     "h": 0.2,
-     "fill": "#E8F1FA",
-     "edge": "#0072B2",
-     "category": "Physiological process",
+     "id": "bam",
+     "type": "icon",
+     "name": "receptor",
+     "label": "BAM receptor",
+     "x": 0.06,
+     "y": 0.0,
+     "w": 0.6,
+     "h": 1.0,
+     "color": "#009E73",
+     "category": "Receptor",
      "source": {
       "file": "paper_excerpt.txt",
-      "loc": "p1:4"
-     }
-    },
-    {
-     "id": "gs",
-     "type": "text",
-     "ha": "center",
-     "text": "conductance −38%",
-     "x": 0.05,
-     "y": 0.82,
-     "w": 0.9,
-     "h": 0.08,
-     "size": 9.5,
-     "source": {
-      "file": "paper_excerpt.txt",
-      "loc": "p1:4"
+      "loc": "p1:7",
+      "quote": "CLE25 binds BAM receptors in the plasma membrane"
      }
     }
    ]
   },
   {
-   "id": "plant",
+   "id": "cyto",
    "role": "compartment",
-   "title": "Whole plant",
-   "x": 0.71,
+   "title": "Cytoplasm",
+   "x": 0.28,
+   "y": 0.285,
+   "w": 0.46,
+   "h": 0.615,
+   "fill": "#F5F9FC",
+   "edge": "#C9D3DD",
+   "elements": [
+    {
+     "id": "nced3_enz",
+     "type": "entity",
+     "label": "NCED3 enzyme",
+     "x": 0.56,
+     "y": 0.24,
+     "w": 0.4,
+     "h": 0.15,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Gene / enzyme",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:7"
+     },
+     "icon": "protein"
+    },
+    {
+     "id": "aba_leaf",
+     "type": "entity",
+     "label": "ABA synthesis ↑",
+     "x": 0.56,
+     "y": 0.66,
+     "w": 0.4,
+     "h": 0.15,
+     "fill": "#FDEEE6",
+     "edge": "#D55E00",
+     "category": "Signal (peptide / hormone)",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:7"
+     },
+     "icon": "molecule"
+    }
+   ]
+  },
+  {
+   "id": "nuc",
+   "role": "compartment",
+   "shape": "nucleus",
+   "title": "Nucleus",
+   "x": 0.3,
+   "y": 0.54,
+   "w": 0.22,
+   "h": 0.33,
+   "elements": [
+    {
+     "id": "nced3_gene",
+     "type": "entity",
+     "label": "NCED3 gene",
+     "x": 0.08,
+     "y": 0.3,
+     "w": 0.84,
+     "h": 0.26,
+     "fill": "#E8F1FA",
+     "edge": "#0072B2",
+     "category": "Gene / enzyme",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:7"
+     },
+     "icon": "dna"
+    }
+   ]
+  },
+  {
+   "id": "guard",
+   "role": "compartment",
+   "title": "Guard cells",
+   "x": 0.78,
    "y": 0.1,
-   "w": 0.26,
+   "w": 0.2,
    "h": 0.8,
    "fill": "#FAF5FA",
    "elements": [
     {
-     "id": "yield",
-     "type": "entity",
-     "label": "Grain yield ↓ (5.2 → 3.9 t/ha)",
-     "x": 0.08,
-     "y": 0.58,
-     "w": 0.84,
-     "h": 0.2,
-     "fill": "#FBEFF5",
-     "edge": "#CC79A7",
-     "category": "Outcome",
-     "source": {
-      "file": "paper_excerpt.txt",
-      "loc": "p1:4"
-     }
-    },
-    {
      "id": "lg",
      "type": "legend",
-     "x": 0.06,
-     "y": 0.08,
-     "w": 0.9,
+     "x": 0.05,
+     "y": 0.12,
+     "w": 0.92,
      "h": 0.4,
      "size": 8,
      "entries": [
@@ -145,11 +209,15 @@
        "color": "#E69F00"
       },
       {
-       "label": "Hormone",
+       "label": "Signal (peptide / hormone)",
+       "color": "#D55E00"
+      },
+      {
+       "label": "Receptor",
        "color": "#009E73"
       },
       {
-       "label": "Physiological process",
+       "label": "Gene / enzyme",
        "color": "#0072B2"
       },
       {
@@ -162,11 +230,34 @@
        "marker": "arrow_activates"
       },
       {
-       "label": "inhibits",
-       "color": "#D55E00",
-       "marker": "arrow_inhibits"
+       "label": "binds",
+       "color": "#333333",
+       "marker": "arrow_binds"
+      },
+      {
+       "label": "produces",
+       "color": "#333333",
+       "marker": "arrow_produces"
       }
      ]
+    },
+    {
+     "id": "closure",
+     "type": "entity",
+     "label": "Stomatal closure",
+     "x": 0.08,
+     "y": 0.62,
+     "w": 0.84,
+     "h": 0.22,
+     "fill": "#FBEFF5",
+     "edge": "#CC79A7",
+     "category": "Outcome",
+     "source": {
+      "file": "paper_excerpt.txt",
+      "loc": "p1:7"
+     },
+     "icon": "cell",
+     "icon_pos": "top"
     }
    ]
   }
@@ -174,6 +265,18 @@
  "arrows": [
   {
    "id": "r1",
+   "from": "drought",
+   "to": "cle25",
+   "kind": "activates",
+   "label": "release",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:7",
+    "quote": "Under soil drying, roots also release the peptide CLE25"
+   }
+  },
+  {
+   "id": "r2",
    "from": "drought",
    "to": "aba_root",
    "kind": "activates",
@@ -185,29 +288,65 @@
    }
   },
   {
-   "id": "r2",
-   "from": "aba_root",
-   "to": "stomata",
-   "kind": "inhibits",
-   "color": "#D55E00",
+   "id": "r3",
+   "from": "cle25",
+   "to": "bam",
+   "kind": "binds",
+   "label": "binds",
    "source": {
     "file": "paper_excerpt.txt",
-    "loc": "p1:4",
-    "quote": "ABA inhibits stomatal opening"
+    "loc": "p1:7",
+    "quote": "CLE25 binds BAM receptors in the plasma membrane"
+   },
+   "label_pos": 0.6
+  },
+  {
+   "id": "r4",
+   "from": "bam",
+   "to": "nced3_gene",
+   "kind": "activates",
+   "label": "induces expression",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:7",
+    "quote": "BAM signalling induces expression of the NCED3 gene in the nucleus"
    }
   },
   {
-   "id": "r3",
-   "from": "stomata",
-   "to": "yield",
-   "kind": "activates",
-   "label": "links to",
+   "id": "r5",
+   "from": "nced3_gene",
+   "to": "nced3_enz",
+   "kind": "produces",
+   "label": "encodes",
    "source": {
     "file": "paper_excerpt.txt",
-    "loc": "p1:5",
-    "quote": "Root-derived ABA links soil drying to stomatal closure and yield loss"
+    "loc": "p1:7",
+    "quote": "The NCED3 gene encodes the NCED3 enzyme"
+   }
+  },
+  {
+   "id": "r6",
+   "from": "nced3_enz",
+   "to": "aba_leaf",
+   "kind": "activates",
+   "label": "increases",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:7",
+    "quote": "which increases ABA synthesis in the cytoplasm"
+   }
+  },
+  {
+   "id": "r7",
+   "from": "aba_leaf",
+   "to": "closure",
+   "kind": "activates",
+   "source": {
+    "file": "paper_excerpt.txt",
+    "loc": "p1:7",
+    "quote": "ABA leaves the cell and closes stomata"
    }
   }
  ],
- "footnote": "Synthetic example. Relations quoted from paper_excerpt.txt [p1:4–5]."
+ "footnote": "Synthetic example. Relations quoted from paper_excerpt.txt (results; signalling model stated as proposed)."
 }

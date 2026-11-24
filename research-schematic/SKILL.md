@@ -40,6 +40,9 @@ contract field and an honest status), so a run that stops early still delivers. 
 - Group what belongs together (`group` or `panel`), keep reading order left→right / top→bottom,
   ≤ 12 entities per panel, labels ≤ 8 words in the source's terms.
 - Colour = category only, with a legend; arrow kinds that carry meaning appear in the legend.
+- Icons (design_rules §6): an entity that IS a named physical object (organism, cell type, molecule,
+  instrument, dataset) may carry `"icon":"plant"` etc.; concepts, variables and treatments stay plain
+  boxes. 2–4 icons per figure, never decorative.
 - Edit requests on a provided SVG: never redraw — use `svg_edit.py` and keep all other ids.
 
 ## 1. Task, contract, materials [1 call]
@@ -67,7 +70,11 @@ but requested → row with `"status":"not_in_materials"` and a visible "not repo
 Copy `$SKILL/templates/spec_template_schematic.json` and replace every TODO (other layouts in the same folder: schematic,
 chart, mechanism, setup, ga; a filled example: `$SKILL/examples/minimal/spec.json`). Spec essentials:
 - fractions, **top-left origin**, relative to the panel for elements inside a panel;
-- types: `entity` (box/ellipse + label, `category` → legend), `text`, `chart`, `legend`, `scalebar`, `image`, `group`;
+- types: `entity` (box/ellipse + label, `category` → legend; optional `"icon":"cell"` inside, left of
+  or above the label), `icon` (`{"id","type":"icon","name":"laser","x","y","w","h","label","source"}`:
+  flat vector icon + label below; arrows may end at it), `text`, `chart`, `legend`, `scalebar`, `image`,
+  `group`; panel `"shape":"membrane|nucleus|cell"` for compartments. Icon names + rules:
+  `references/design_rules.md` §6 — **only for objects the source names, never decoration**;
 - arrows `{"id","from","to","kind","label","source"}`, kinds activates|promotes|inhibits|flow|produces|
   converts|binds|associates|next; ends may be entities or whole panels (`"panel:P1"`). Leave out
   `connection`: opposite pairs (A→B, B→A) become two arcs and arrows are routed around other boxes

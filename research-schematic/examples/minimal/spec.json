@@ -1,5 +1,5 @@
 {
- "_comment": "SYNTHETIC EXAMPLE relationship schematic.",
+ "_comment": "SYNTHETIC EXAMPLE relationship schematic. Icons only where the text names the object (wheat plants, ABA).",
  "canvas": {
   "width_in": 10,
   "height_in": 6,
@@ -31,7 +31,8 @@
    "source": {
     "file": "paper_excerpt.txt",
     "loc": "p1:3"
-   }
+   },
+   "icon": "plant"
   },
   {
    "id": "ww",
@@ -69,9 +70,9 @@
    "id": "aba",
    "type": "entity",
    "label": "Root ABA",
-   "x": 0.58,
+   "x": 0.56,
    "y": 0.42,
-   "w": 0.16,
+   "w": 0.19,
    "h": 0.12,
    "fill": "#E9F6F1",
    "edge": "#009E73",
@@ -79,7 +80,8 @@
    "source": {
     "file": "paper_excerpt.txt",
     "loc": "p1:3"
-   }
+   },
+   "icon": "molecule"
   },
   {
    "id": "gs",

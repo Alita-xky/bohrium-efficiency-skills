@@ -311,7 +311,7 @@ def main():
             prov_rows.append(dict(id=k, type=v.get("type"), label=short(v.get("label") or v.get("title") or v.get("kind"), 60),
                                   source=" ".join(str(s.get(x)) for x in ("file", "loc") if s.get(x)),
                                   quote=short(s.get("quote"), 110) or None))
-        elif v.get("type") in ("entity", "arrow", "chart"):
+        elif v.get("type") in ("entity", "icon", "arrow", "chart"):
             no_src.append(k)
     data_map = []
     for elx in _iter_elements(spec or {}):

@@ -7,3 +7,7 @@ Methods. We grew wheat in 24 pots under well-watered and drought regimes and mea
 Results. Drought raised root ABA from 12 to 41 ng/g. ABA inhibits stomatal opening; stomatal conductance fell by 38%. Grain yield decreased from 5.2 to 3.9 t/ha.
 
 Conclusion. Root-derived ABA links soil drying to stomatal closure and yield loss under drought.
+
+Imaging set-up. Guard cells were imaged on a custom fluorescence microscope: a 488 nm laser beam was focused by a lens onto the leaf sample in a flow cell, a peristaltic pump perfused the flow cell with buffer at 1 mL/min, and emitted light was recorded by a CMOS camera and analysed on a computer.
+
+Signalling model (proposed). Under soil drying, roots also release the peptide CLE25, which moves to the leaves. In leaf cells, CLE25 binds BAM receptors in the plasma membrane. BAM signalling induces expression of the NCED3 gene in the nucleus. The NCED3 gene encodes the NCED3 enzyme, which increases ABA synthesis in the cytoplasm. ABA leaves the cell and closes stomata.

@@ -35,8 +35,13 @@ contract field and an honest status), so a run that stops early still delivers. 
 ## Focus: apparatus and technical-route figures
 - Technical route: stages left→right (or top→bottom) in the order of the methods section, joined by
   `next` arrows; parallel branches as separate rows; decision points as `ellipse` entities.
-- Apparatus: components as entities placed in their physical order along the sample/fluid/light/signal
-  path, connections as `flow` arrows labelled with what flows; group sub-systems with `group`.
+- Apparatus: every instrument the methods name as an `icon` element (`laser`, `lens`, `cuvette` =
+  sample cell, `detector` = camera, `pump`, `computer`, `microscope`, `flask`, `beaker`, `tube`, `chip`,
+  `database`; design_rules §6) in physical order along the light/fluid/signal path, same `w`/`h` per row,
+  label = the source's name + stated condition ("488 nm laser"); `flow` arrows labelled with what flows,
+  one colour per path type (light / fluid / data) + legend; sub-systems as panels or `group`. An
+  instrument whose type is not stated stays a labelled entity with "not reported". Route steps may carry
+  an icon only for an object the step names (`"icon":"plant"`).
 - Conditions (temperature, time, flow rate, wavelength, concentration, model numbers) appear only if
   the source states them, copied with units; otherwise write "not reported" (see example note).
 - Dimensions or scale bars only if reported; never imply a scale.
@@ -67,7 +72,11 @@ but requested → row with `"status":"not_in_materials"` and a visible "not repo
 Copy `$SKILL/templates/spec_template_setup.json` and replace every TODO (other layouts in the same folder: schematic,
 chart, mechanism, setup, ga; a filled example: `$SKILL/examples/minimal/spec.json`). Spec essentials:
 - fractions, **top-left origin**, relative to the panel for elements inside a panel;
-- types: `entity` (box/ellipse + label, `category` → legend), `text`, `chart`, `legend`, `scalebar`, `image`, `group`;
+- types: `entity` (box/ellipse + label, `category` → legend; optional `"icon":"cell"` inside, left of
+  or above the label), `icon` (`{"id","type":"icon","name":"laser","x","y","w","h","label","source"}`:
+  flat vector icon + label below; arrows may end at it), `text`, `chart`, `legend`, `scalebar`, `image`,
+  `group`; panel `"shape":"membrane|nucleus|cell"` for compartments. Icon names + rules:
+  `references/design_rules.md` §6 — **only for objects the source names, never decoration**;
 - arrows `{"id","from","to","kind","label","source"}`, kinds activates|promotes|inhibits|flow|produces|
   converts|binds|associates|next; ends may be entities or whole panels (`"panel:P1"`). Leave out
   `connection`: opposite pairs (A→B, B→A) become two arcs and arrows are routed around other boxes

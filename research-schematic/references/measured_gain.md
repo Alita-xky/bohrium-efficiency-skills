@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `schematic`)
 
-Generated 2026-11-23 16:51 by `python3 scripts/gain_check.py --mode schematic --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-24 14:27 by `python3 scripts/gain_check.py --mode schematic --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
@@ -16,7 +16,7 @@ Generated 2026-11-23 16:51 by `python3 scripts/gain_check.py --mode schematic --
 | contract fields filled | 0/6 | 6/6 |
 | re-run byte-identical (SVG, PDF, PNG) | False | True |
 | automatic checks | none | spec vs materials (fig_check.py), layout/export (fig_render.py), re-run hash, contract |
-| wall time (s) | 1.3 | 4.3 |
+| wall time (s) | 0.3 | 1.2 |
 
 ## 2. One injected defect per run (same spec otherwise)
 
@@ -29,13 +29,13 @@ Flagged before delivery by B: **8/8**; A: 0 flagged (1 runs crashed without a de
 | source_removed — a scientific element has no source | drawn and shipped, no message | FAIL (status partial) | FAIL check: {"level": "fail", "check": "number_without_source", "id": "design", "numbers": ["24"]} |
 | quote_paraphrased — a quote is not verbatim any more | drawn and shipped, no message | WARN (status complete) | WARN check: {"level": "warn", "check": "quote_not_found", "id": "a1", "quote": "regimes drought and well-water |
 | legend_colour_mismatch — a legend swatch no longer matches its category colour | drawn and shipped, no message | WARN (status complete) | WARN check: {"level": "warn", "check": "legend_color_mismatch", "category": "Design", "legend_color": "#7f7f7f |
-| label_too_long — an 80-word label (unreadable even if it fits) | drawn and shipped, no message | FAIL (status partial) | FAIL render: {"level": "fail", "check": "text_overflow", "id": "design", "text_bbox": [0.0685, 0.3344, 0.1915, |
+| label_too_long — an 80-word label (unreadable even if it fits) | drawn and shipped, no message | FAIL (status partial) | FAIL render: {"level": "fail", "check": "text_overflow", "id": "design", "text_bbox": [0.1165, 0.2571, 0.2115, |
 | relations_removed — the schematic shows entities but none of the stated relations | drawn and shipped, no message | FAIL (status partial) | FAIL check: {"level": "fail", "check": "no_relations", "hint": "draw the source-stated relations as arrows wit |
 | contract_field_without_answer — a required result field has no answer | no result.json is written | FIX line + field written as not_provided (status partial) |  |
 
 ## 3. Source-preserving edit (svg_edit.py on B's SVG)
 
-2 ops, 2 verified on the written file; untouched elements byte-identical: 31/31; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
+2 ops, 2 verified on the written file; untouched elements byte-identical: 33/33; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
 
 ## 4. output_contract shapes (fields filled automatically by fig_make.py)
 

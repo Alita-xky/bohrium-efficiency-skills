@@ -345,7 +345,9 @@ def apply_ops(svg_path, ops, out_path):
                 if not anchored:
                     entry["note"] = (entry.get("note", "") + "; start-anchored text: x kept, re-centre with translate "
                                      "if the length changed a lot").strip("; ")
-                touched.add(eid)
+                touched.add(eid)   # a group (e.g. an icon with its label): the text nodes inside it change too
+                touched.update(x.get("id") for x in el.iter() if x.get("id") and any(
+                    local(t.tag) in ("text", "tspan") for t in x.iter()))
             elif kind == "recolor":
                 c = colours(el)
                 src = (op.get("from") or (c.most_common(1)[0][0] if c else "")).lower()

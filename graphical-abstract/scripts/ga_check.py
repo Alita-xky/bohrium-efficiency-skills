@@ -12,6 +12,8 @@ Checks (fail = must fix before rendering; warn = fix or explain in result.json):
   * chart data: CSV columns exist, values numeric, axis labels carry units
   * legend coverage: every encoding color/arrow kind used is explained in a legend
   * graphical abstract completeness: panels with roles problem / method / result / conclusion
+  * icons: known names only (the list is printed on failure); an icon of a scientific object (biology / lab
+    group) needs a real source on its element; warn when nothing in the materials names that object
 """
 import argparse, csv, glob, json, os, re, sys
 
@@ -22,6 +24,43 @@ NUM_RE = re.compile(r"(?<![A-Za-z0-9_.\-])(?:10\^\{?[-+]?\d{1,3}\}?|" + MANT + "
 ARROW_KINDS = {"activates", "promotes", "inhibits", "flow", "produces", "converts", "binds", "associates", "next"}
 ROLES_GA = ["problem", "method", "result", "conclusion"]
 SCI_TYPES = {"entity", "arrow", "chart", "image", "scalebar"}
+# keep in sync with ICON_GROUPS / ICON_ALIASES in ga_render.py
+ICON_GROUPS = {
+    "biology": ["cell", "nucleus", "mitochondrion", "receptor", "channel", "protein", "peptide", "molecule", "dna",
+                "rna", "virus", "bacterium", "antibody", "plant"],
+    "lab": ["flask", "beaker", "cuvette", "laser", "lens", "detector", "microscope", "pump", "tube", "computer",
+            "database", "chip"],
+    "generic": ["document", "chart", "gear"],
+}
+ICON_ALIASES = {"membrane_receptor": "receptor", "ion_channel": "channel", "transporter": "channel", "blob": "protein",
+                "small_molecule": "molecule", "gene": "dna", "sample_cell": "cuvette", "sample": "cuvette",
+                "camera": "detector", "pipe": "tube", "tubing": "tube", "monitor": "computer", "cylinder": "database",
+                "sensor": "chip", "paper": "document", "process": "gear", "seedling": "plant"}
+SCI_ICONS = set(ICON_GROUPS["biology"]) | set(ICON_GROUPS["lab"])
+# words that show the materials name the object an icon depicts (lower-case substrings); None = names vary too much
+ICON_TERMS = dict(
+    cell=["cell"], nucleus=["nucle"], mitochondrion=["mitochond"], receptor=["receptor"],
+    channel=["channel", "transporter", "pore", "pump"], dna=["dna", "gene", "genom", "promoter", "chromatin", "plasmid"],
+    rna=["rna", "transcript"], virus=["virus", "viral", "phage", "virion"],
+    bacterium=["bacteri", "microb", "coli", "strain", "bacill"], antibody=["antibod", "igg", "immunoglobulin", "nanobod"],
+    plant=["plant", "seedling", "wheat", "rice", "maize", "arabidopsis", "tobacco", "crop", "leaf", "leaves", "root", "shoot"],
+    flask=["flask", "culture", "incubat"], beaker=["beaker", "solution", "vessel", "container"],
+    cuvette=["cuvette", "sample", "flow cell"], laser=["laser"], lens=["lens", "objective", "optic"],
+    detector=["detector", "camera", "ccd", "cmos", "photodiode", "photomultiplier", "pmt", "sensor", "spectrometer"],
+    microscope=["microscop"], pump=["pump", "perfus", "syringe"], tube=["tube", "tubing", "pipe", "capillar"],
+    computer=["computer", "software", "workstation", "server", "analys", "algorithm", "code"],
+    database=["database", "repository", "dataset", "archive"],
+    chip=["chip", "sensor", "microfluidic", "array", "electrode", "circuit"])
+
+
+def icon_canonical(name):
+    n = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return ICON_ALIASES.get(n, n)
+
+
+def valid_icon_names():
+    return sorted(n for g in ICON_GROUPS.values() for n in g) + ["aliases: " + ", ".join(
+        f"{a}->{b}" for a, b in sorted(ICON_ALIASES.items()))]
 
 
 
@@ -156,6 +195,14 @@ def iter_arrows(spec):
             yield p["id"], a
 
 
+def real_source(x):
+    """A source pointing into the materials (not just {"type": "design"})."""
+    s = x.get("source")
+    if isinstance(s, dict):
+        return s.get("type") != "design" and bool(s.get("file") or s.get("loc") or s.get("quote"))
+    return bool(s and str(s).strip())
+
+
 def has_source(x):
     s = x.get("source")
     if not s:
@@ -195,7 +242,7 @@ def main():
         t = el.get("type", "entity")
         need = {"entity": ["x", "y", "w", "h"], "chart": ["x", "y", "w", "h"], "image": ["x", "y", "w", "h", "path"],
                 "text": ["x", "y", "text"], "legend": ["x", "y", "entries"], "scalebar": ["x", "y", "label"],
-                "group": ["x", "y", "w", "h"]}.get(t, [])
+                "group": ["x", "y", "w", "h"], "icon": ["x", "y", "w", "h", "name"]}.get(t, [])
         for k in need:
             if k not in el:
                 add("fail", "schema_field_missing", id=el["id"], field=k)
@@ -205,6 +252,23 @@ def main():
                 add("fail", "schema_coord_range", id=el["id"], field=k, value=v)
         if t in SCI_TYPES and not has_source(el):
             add("warn", "provenance_missing", id=el["id"], hint="add source:{file,loc,quote} or source:{type:'design'}")
+        icon_raw = el.get("name") if t == "icon" else (el.get("icon") if t == "entity" else None)
+        if t == "icon" or icon_raw:
+            ic = icon_canonical(icon_raw)
+            if ic not in {n for g in ICON_GROUPS.values() for n in g}:
+                add("fail", "icon_unknown", id=el["id"], icon=icon_raw, valid=valid_icon_names(),
+                    hint="use one of these names (or an alias), or remove the icon")
+            elif ic in SCI_ICONS and not real_source(el):
+                add("fail", "icon_without_source", id=el["id"], icon=ic,
+                    hint="an icon of a scientific object needs source:{file,loc} naming that object; "
+                         "draw icons only for objects the materials name, never as decoration")
+            elif ic in SCI_ICONS and mat_blob and ICON_TERMS.get(ic) and \
+                    not any(w in mat_blob.lower() for w in ICON_TERMS[ic]):
+                add("warn", "icon_not_named_in_materials", id=el["id"], icon=ic, looked_for=ICON_TERMS[ic][:6],
+                    hint="no material mentions this object: remove the icon (it would imply an unstated fact) "
+                         "or pick the icon of the object the source does name")
+            elif t == "icon" and not has_source(el):
+                add("warn", "provenance_missing", id=el["id"], hint="generic icon: add source:{type:'design'}")
         text = " ".join(str(el.get(k) or "") for k in ("label", "text", "title", "xlabel", "ylabel"))
         text += " " + " ".join(str(e.get("label", "")) for e in el.get("entries", []))
         nums_here = numbers_in(text)
@@ -299,8 +363,8 @@ def main():
         if not has_source(ar):
             add("warn", "provenance_missing", id=ar["id"], hint="direction/causality must be supported by the source")
     for pid, el in iter_elements(spec):
-        if el.get("type", "entity") == "entity" and el.get("category"):
-            colors_used.add((el["category"], el.get("fill")))
+        if el.get("type", "entity") in ("entity", "icon") and el.get("category"):
+            colors_used.add((el["category"], el.get("fill") or el.get("color")))
 
     loose = [("title", (spec.get("title") or {}).get("text", "")), ("footnote", spec.get("footnote") or "")]
     loose += [("panel:" + p["id"], p.get("title") or "") for p in spec.get("panels", [])]
@@ -314,9 +378,9 @@ def main():
     legends = [el for _, el in iter_elements(spec) if el.get("type") == "legend"]
     cat_cols = {}
     for _, el in iter_elements(spec):
-        if el.get("type", "entity") == "entity" and el.get("category"):
+        if el.get("type", "entity") in ("entity", "icon") and el.get("category"):
             cat_cols.setdefault(el["category"], set()).update(
-                c.lower() for c in (el.get("fill"), el.get("edge")) if c)
+                c.lower() for c in (el.get("fill"), el.get("edge"), el.get("color")) if c)
     seen_cols = {}
     for L in legends:
         for e in L.get("entries", []):
@@ -345,7 +409,8 @@ def main():
     if len(fills - {""}) >= 3 and not legends:
         add("warn", "legend_absent", detail=f"{len(fills)} fill colors used without any legend")
 
-    ents = [el for _, el in iter_elements(spec) if el.get("type", "entity") == "entity"]
+    ents = [el for _, el in iter_elements(spec) if el.get("type", "entity") == "entity"
+            or (el.get("type") == "icon" and real_source(el))]   # icons of named objects count as entities
     charts = [el for _, el in iter_elements(spec) if el.get("type") == "chart"]
     arrows = [ar for _, ar in iter_arrows(spec)]
     sci_arrows = [ar for ar in arrows if not (isinstance(ar.get("source"), dict) and ar["source"].get("type") == "design")]

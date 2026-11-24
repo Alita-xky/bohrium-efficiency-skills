@@ -1,8 +1,8 @@
 {
- "_comment": "TEMPLATE apparatus + technical route. Replace every TODO; delete unused elements; keep ids unique.",
+ "_comment": "TEMPLATE apparatus + technical route. Apparatus components as type 'icon' elements (same w/h in one row so labels line up) joined by 'flow' arrows labelled with what flows; conditions only as stated, with units. Icons only for instruments the methods name: replace each 'TODO <icon>' or delete the element. Replace every TODO; delete unused elements; keep ids unique.",
  "canvas": {
   "width_in": 11,
-  "height_in": 5.5,
+  "height_in": 7.2,
   "dpi": 300,
   "background": "#FFFFFF",
   "font_family": "auto",
@@ -10,7 +10,7 @@
  },
  "title": {
   "text": "TODO short title in the paper's words",
-  "y": 0.05,
+  "y": 0.04,
   "source": {
    "file": "TODO",
    "loc": "TODO",
@@ -19,13 +19,239 @@
  },
  "panels": [
   {
+   "id": "setup",
+   "role": "apparatus",
+   "title": "TODO title",
+   "x": 0.02,
+   "y": 0.09,
+   "w": 0.96,
+   "h": 0.52,
+   "fill": "#F7F9FC",
+   "elements": [
+    {
+     "id": "laser",
+     "type": "icon",
+     "name": "TODO laser (keep only if the source names this object, else delete)",
+     "label": "TODO label from the source",
+     "x": 0.02,
+     "y": 0.13,
+     "w": 0.15,
+     "h": 0.4,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     },
+     "color": "#56B4E9"
+    },
+    {
+     "id": "lens",
+     "type": "icon",
+     "name": "TODO lens (keep only if the source names this object, else delete)",
+     "label": "TODO label from the source",
+     "x": 0.215,
+     "y": 0.13,
+     "w": 0.13,
+     "h": 0.4,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "cell",
+     "type": "icon",
+     "name": "TODO cuvette (keep only if the source names this object, else delete)",
+     "label": "TODO label from the source",
+     "x": 0.405,
+     "y": 0.13,
+     "w": 0.13,
+     "h": 0.4,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "cam",
+     "type": "icon",
+     "name": "TODO detector (keep only if the source names this object, else delete)",
+     "label": "TODO label from the source",
+     "x": 0.6,
+     "y": 0.13,
+     "w": 0.13,
+     "h": 0.4,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "pc",
+     "type": "icon",
+     "name": "TODO computer (keep only if the source names this object, else delete)",
+     "label": "TODO label from the source",
+     "x": 0.8,
+     "y": 0.13,
+     "w": 0.15,
+     "h": 0.4,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "pump",
+     "type": "icon",
+     "name": "TODO pump (keep only if the source names this object, else delete)",
+     "label": "TODO label from the source",
+     "x": 0.405,
+     "y": 0.68,
+     "w": 0.13,
+     "h": 0.3,
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     },
+     "color": "#E69F00"
+    },
+    {
+     "id": "lg",
+     "type": "legend",
+     "x": 0.64,
+     "y": 0.6,
+     "w": 0.3,
+     "h": 0.38,
+     "size": 8.5,
+     "entries": [
+      {
+       "label": "TODO label from the source",
+       "color": "#56B4E9",
+       "marker": "line"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#E69F00",
+       "marker": "line"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#6B7785",
+       "marker": "line"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#0072B2"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#009E73"
+      },
+      {
+       "label": "TODO label from the source",
+       "color": "#CC79A7"
+      }
+     ]
+    },
+    {
+     "id": "note",
+     "type": "text",
+     "text": "TODO text from the source",
+     "x": 0.02,
+     "y": 0.72,
+     "w": 0.34,
+     "h": 0.18,
+     "size": 8.5,
+     "style": "italic",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    }
+   ],
+   "arrows": [
+    {
+     "id": "f1",
+     "from": "laser",
+     "to": "lens",
+     "kind": "flow",
+     "color": "#56B4E9",
+     "label": "TODO label from the source",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "f2",
+     "from": "lens",
+     "to": "cell",
+     "kind": "flow",
+     "color": "#56B4E9",
+     "label": "TODO label from the source",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "f3",
+     "from": "cell",
+     "to": "cam",
+     "kind": "flow",
+     "color": "#56B4E9",
+     "label": "TODO label from the source",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     },
+     "label_pos": 0.42
+    },
+    {
+     "id": "f4",
+     "from": "cam",
+     "to": "pc",
+     "kind": "flow",
+     "color": "#6B7785",
+     "label": "TODO label from the source",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    },
+    {
+     "id": "f5",
+     "from": "pump",
+     "to": "cell",
+     "kind": "flow",
+     "color": "#E69F00",
+     "label": "TODO label from the source",
+     "source": {
+      "file": "TODO",
+      "loc": "TODO",
+      "quote": "TODO verbatim quote (relations/numbers)"
+     }
+    }
+   ]
+  },
+  {
    "id": "route",
    "role": "route",
    "title": "TODO title",
    "x": 0.02,
-   "y": 0.12,
+   "y": 0.65,
    "w": 0.96,
-   "h": 0.62,
+   "h": 0.29,
    "fill": "#F7F9FC",
    "elements": [
     {
@@ -35,7 +261,7 @@
      "x": 0.02,
      "y": 0.3,
      "w": 0.17,
-     "h": 0.4,
+     "h": 0.52,
      "fill": "#E8F1FA",
      "edge": "#0072B2",
      "category": "Step",
@@ -43,16 +269,17 @@
       "file": "TODO",
       "loc": "TODO",
       "quote": "TODO verbatim quote (relations/numbers)"
-     }
+     },
+     "icon": "TODO plant (keep only if the source names this object, else delete)"
     },
     {
      "id": "s2",
      "type": "entity",
      "label": "TODO label from the source",
-     "x": 0.23,
+     "x": 0.225,
      "y": 0.3,
      "w": 0.17,
-     "h": 0.4,
+     "h": 0.52,
      "fill": "#E8F1FA",
      "edge": "#0072B2",
      "category": "Step",
@@ -66,10 +293,10 @@
      "id": "s3",
      "type": "entity",
      "label": "TODO label from the source",
-     "x": 0.44,
+     "x": 0.43,
      "y": 0.3,
-     "w": 0.15,
-     "h": 0.4,
+     "w": 0.17,
+     "h": 0.52,
      "fill": "#E9F6F1",
      "edge": "#009E73",
      "category": "Measurement",
@@ -77,7 +304,8 @@
       "file": "TODO",
       "loc": "TODO",
       "quote": "TODO verbatim quote (relations/numbers)"
-     }
+     },
+     "icon": "TODO molecule (keep only if the source names this object, else delete)"
     },
     {
      "id": "s4",
@@ -85,8 +313,8 @@
      "label": "TODO label from the source",
      "x": 0.62,
      "y": 0.3,
-     "w": 0.16,
-     "h": 0.4,
+     "w": 0.17,
+     "h": 0.52,
      "fill": "#E9F6F1",
      "edge": "#009E73",
      "category": "Measurement",
@@ -103,7 +331,7 @@
      "x": 0.81,
      "y": 0.3,
      "w": 0.17,
-     "h": 0.4,
+     "h": 0.52,
      "fill": "#FBEFF5",
      "edge": "#CC79A7",
      "category": "Endpoint",
@@ -152,47 +380,6 @@
      }
     }
    ]
-  }
- ],
- "elements": [
-  {
-   "id": "lg",
-   "type": "legend",
-   "x": 0.03,
-   "y": 0.8,
-   "w": 0.5,
-   "h": 0.16,
-   "size": 8,
-   "entries": [
-    {
-     "label": "TODO label from the source",
-     "color": "#0072B2"
-    },
-    {
-     "label": "TODO label from the source",
-     "color": "#009E73"
-    },
-    {
-     "label": "TODO label from the source",
-     "color": "#CC79A7"
-    }
-   ]
-  },
-  {
-   "id": "note",
-   "type": "text",
-   "text": "TODO text from the source",
-   "x": 0.55,
-   "y": 0.84,
-   "w": 0.43,
-   "h": 0.08,
-   "size": 9,
-   "style": "italic",
-   "source": {
-    "file": "TODO",
-    "loc": "TODO",
-    "quote": "TODO verbatim quote (relations/numbers)"
-   }
   }
  ],
  "footnote": "TODO Source: <paper short ref>; data from <table/figure>."

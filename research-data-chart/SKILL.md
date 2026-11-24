@@ -48,6 +48,8 @@ contract field and an honest status), so a run that stops early still delivers. 
   Use `value_labels:true` when exact values matter (the CSV strings are printed unchanged, e.g. 26.30)
   and `highlight` for the rows the task asks to emphasise.
 - Axis labels `Quantity (unit)`; state n and the error type (SD/SEM/95% CI) exactly as the source does.
+- No icons inside the plot area: an icon never encodes a value (a small one in a title box is allowed
+  only for an object the source names).
 - Edit requests (restyle, fix a value, change units) on a provided SVG: change only what is asked
   with `svg_edit.py` (`recolor`, `set_text`), or re-render from the corrected CSV and log before/after.
 
@@ -76,7 +78,11 @@ but requested → row with `"status":"not_in_materials"` and a visible "not repo
 Copy `$SKILL/templates/spec_template_chart.json` and replace every TODO (other layouts in the same folder: schematic,
 chart, mechanism, setup, ga; a filled example: `$SKILL/examples/minimal/spec.json`). Spec essentials:
 - fractions, **top-left origin**, relative to the panel for elements inside a panel;
-- types: `entity` (box/ellipse + label, `category` → legend), `text`, `chart`, `legend`, `scalebar`, `image`, `group`;
+- types: `entity` (box/ellipse + label, `category` → legend; optional `"icon":"cell"` inside, left of
+  or above the label), `icon` (`{"id","type":"icon","name":"laser","x","y","w","h","label","source"}`:
+  flat vector icon + label below; arrows may end at it), `text`, `chart`, `legend`, `scalebar`, `image`,
+  `group`; panel `"shape":"membrane|nucleus|cell"` for compartments. Icon names + rules:
+  `references/design_rules.md` §6 — **only for objects the source names, never decoration**;
 - arrows `{"id","from","to","kind","label","source"}`, kinds activates|promotes|inhibits|flow|produces|
   converts|binds|associates|next; ends may be entities or whole panels (`"panel:P1"`). Leave out
   `connection`: opposite pairs (A→B, B→A) become two arcs and arrows are routed around other boxes

@@ -88,8 +88,8 @@ def baseline_draw(spec, spec_dir, out_base):
     for cont, e in walk(spec):
         x, y, w, h = box(cont, e)
         t = e.get("type", "entity")
-        if t == "entity":
-            ax.text(x + w / 2, y + h / 2, e.get("label", ""), ha="center", va="center",
+        if t in ("entity", "icon"):     # a plain library has no icons: the object is drawn as a labelled box
+            ax.text(x + w / 2, y + h / 2, e.get("label", "") or e.get("name", ""), ha="center", va="center",
                     bbox=dict(boxstyle="round", fc=e.get("fill", "white")))
             centers[e["id"]] = (x + w / 2, y + h / 2)
         elif t == "text":
@@ -344,7 +344,7 @@ def main():
 
     # 1 deliverable comparison
     I, W, O, sp, spec = make_case(a.example, base, "clean", spec0)
-    spec_ids = [e["id"] for _, e in walk(spec) if e.get("type", "entity") in ("entity", "chart", "text")] + \
+    spec_ids = [e["id"] for _, e in walk(spec) if e.get("type", "entity") in ("entity", "icon", "chart", "text")] + \
                [x["id"] for x in arrows(spec)]
     tb = time.time()
     summ, out = skill_run(a.mode, name, I, W, O, sp)

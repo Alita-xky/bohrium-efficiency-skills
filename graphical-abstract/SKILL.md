@@ -41,6 +41,9 @@ contract field and an honest status), so a run that stops early still delivers. 
 - When the paper states a mechanism/model, draw it as a small entity–arrow diagram (direction and sign
   quoted) in the result or conclusion panel; categories that matter (e.g. pro- vs anti-inflammatory,
   treatment vs control) get one colour each + legend.
+- Icons sparingly (2–4, design_rules §6): `"icon":"plant"` / `"cell"` / `"molecule"` / `"flask"` … on boxes
+  for objects the paper names (organism, cell type, molecule, instrument); never decorative, never on
+  concepts or conclusions.
 - Language follows the task (e.g. Chinese title and text, entity names as in the paper: TNFα, IL-10);
   a CJK font covering the characters is picked automatically (`font_notes`).
 - Details that do not fit (statistics, secondary results, conditions) go into the footnote or
@@ -71,7 +74,11 @@ but requested → row with `"status":"not_in_materials"` and a visible "not repo
 Copy `$SKILL/templates/spec_template_ga.json` and replace every TODO (other layouts in the same folder: schematic,
 chart, mechanism, setup; a filled example: `$SKILL/examples/minimal/spec.json`). Spec essentials:
 - fractions, **top-left origin**, relative to the panel for elements inside a panel;
-- types: `entity` (box/ellipse + label, `category` → legend), `text`, `chart`, `legend`, `scalebar`, `image`, `group`;
+- types: `entity` (box/ellipse + label, `category` → legend; optional `"icon":"cell"` inside, left of
+  or above the label), `icon` (`{"id","type":"icon","name":"laser","x","y","w","h","label","source"}`:
+  flat vector icon + label below; arrows may end at it), `text`, `chart`, `legend`, `scalebar`, `image`,
+  `group`; panel `"shape":"membrane|nucleus|cell"` for compartments. Icon names + rules:
+  `references/design_rules.md` §6 — **only for objects the source names, never decoration**;
 - arrows `{"id","from","to","kind","label","source"}`, kinds activates|promotes|inhibits|flow|produces|
   converts|binds|associates|next; ends may be entities or whole panels (`"panel:P1"`). Leave out
   `connection`: opposite pairs (A→B, B→A) become two arcs and arrows are routed around other boxes

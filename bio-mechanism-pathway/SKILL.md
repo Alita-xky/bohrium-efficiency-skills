@@ -35,6 +35,12 @@ contract field and an honest status), so a run that stops early still delivers. 
 ## Focus: mechanism and pathway figures
 - Compartments as panels in the order the biology implies (extracellular → membrane → cytoplasm →
   nucleus, or tissue → cell → organelle); entities inside the compartment the source places them in.
+- Draw the biology, not just boxes (design_rules §6): membrane = panel `"shape":"membrane"` with
+  receptors/channels as `icon` elements in it (`receptor`, `channel` — they snap across the bilayer,
+  binding side up); nucleus = panel `"shape":"nucleus"`; genes `"icon":"dna"`, ligands/hormones
+  `molecule` or `peptide`, enzymes/proteins `protein`, cells `cell`, pathogens `virus`/`bacterium`,
+  `antibody`, `mitochondrion`. Only when the source states what the entity is and where it sits; an
+  entity of unstated type or location stays a plain box. Template: membrane + cytoplasm + nucleus.
 - Entity categories (gene, protein, metabolite, small molecule, cell type, process, phenotype) →
   fill/edge colour + legend, one distinct colour per category. Use the source's names and casing
   (TNFα, IL-10, Ca^{2+} → Ca²⁺); properties the source states (e.g. "autocrine, short range") can go
@@ -75,7 +81,11 @@ but requested → row with `"status":"not_in_materials"` and a visible "not repo
 Copy `$SKILL/templates/spec_template_mechanism.json` and replace every TODO (other layouts in the same folder: schematic,
 chart, mechanism, setup, ga; a filled example: `$SKILL/examples/minimal/spec.json`). Spec essentials:
 - fractions, **top-left origin**, relative to the panel for elements inside a panel;
-- types: `entity` (box/ellipse + label, `category` → legend), `text`, `chart`, `legend`, `scalebar`, `image`, `group`;
+- types: `entity` (box/ellipse + label, `category` → legend; optional `"icon":"cell"` inside, left of
+  or above the label), `icon` (`{"id","type":"icon","name":"laser","x","y","w","h","label","source"}`:
+  flat vector icon + label below; arrows may end at it), `text`, `chart`, `legend`, `scalebar`, `image`,
+  `group`; panel `"shape":"membrane|nucleus|cell"` for compartments. Icon names + rules:
+  `references/design_rules.md` §6 — **only for objects the source names, never decoration**;
 - arrows `{"id","from","to","kind","label","source"}`, kinds activates|promotes|inhibits|flow|produces|
   converts|binds|associates|next; ends may be entities or whole panels (`"panel:P1"`). Leave out
   `connection`: opposite pairs (A→B, B→A) become two arcs and arrows are routed around other boxes

@@ -64,6 +64,7 @@ ARROW_KINDS = {
     "associates": dict(arrowstyle="-", linestyle=":"),
     "next": dict(arrowstyle="-|>", linestyle="-"),
 }
+ENT_KINDS = ("entity", "icon")   # boxes arrows clip to, route around and are checked against
 SVG_NS = "http://www.w3.org/2000/svg"
 INK_NS = "http://www.inkscape.org/namespaces/inkscape"
 
@@ -325,6 +326,476 @@ def to_tl(pts):
     return [(x, 1 - y) for x, y in pts]
 
 
+# ---------------------------------------------------------------- icon library (vector, matplotlib primitives only)
+# Each icon is drawn in a unit square (0..1, y up) mapped onto a square on the canvas, so it keeps its aspect
+# ratio. Flat style: one accent colour per icon (Okabe-Ito; light tint fill, mid tint, darker stroke of the same
+# hue), neutral greys for instrument bodies, one stroke width that scales mildly with the icon size. The parts
+# become one SVG group named after the element id (labels stay real <text>). Keep ICON_NAMES in ga_check.py in sync.
+ICON_GROUPS = {
+    "biology": ["cell", "nucleus", "mitochondrion", "receptor", "channel", "protein", "peptide", "molecule", "dna",
+                "rna", "virus", "bacterium", "antibody", "plant"],
+    "lab": ["flask", "beaker", "cuvette", "laser", "lens", "detector", "microscope", "pump", "tube", "computer",
+            "database", "chip"],
+    "generic": ["document", "chart", "gear"],
+}
+ICON_ALIASES = {"membrane_receptor": "receptor", "ion_channel": "channel", "transporter": "channel", "blob": "protein",
+                "small_molecule": "molecule", "gene": "dna", "sample_cell": "cuvette", "sample": "cuvette",
+                "camera": "detector", "pipe": "tube", "tubing": "tube", "monitor": "computer", "cylinder": "database",
+                "sensor": "chip", "paper": "document", "process": "gear", "seedling": "plant"}
+ICON_COLOR = dict(cell="#56B4E9", nucleus="#0072B2", mitochondrion="#E69F00", receptor="#009E73", channel="#009E73",
+                  protein="#CC79A7", peptide="#D55E00", molecule="#D55E00", dna="#0072B2", rna="#CC79A7",
+                  virus="#D55E00", bacterium="#009E73", antibody="#0072B2", plant="#009E73", flask="#009E73",
+                  beaker="#56B4E9", cuvette="#56B4E9", laser="#D55E00", lens="#56B4E9", detector="#0072B2",
+                  microscope="#0072B2", pump="#009E73", tube="#56B4E9", computer="#0072B2", database="#0072B2",
+                  chip="#009E73", document="#0072B2", chart="#0072B2", gear="#6B7785")
+MEMBRANE_ICONS = ("receptor", "channel")     # drawn across a lipid bilayer; snap into `shape:"membrane"` panels
+N_FILL, N_MID, N_DARK, N_EDGE, GLASS = "#EEF1F4", "#C3CBD4", "#6B7785", "#3E4A57", "#F4F8FB"
+MEM_FILL, MEM_HEAD, MEM_EDGE = "#FCEFD2", "#EBB858", "#B5832A"
+
+
+def icon_canonical(name):
+    n = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return ICON_ALIASES.get(n, n)
+
+
+def _rgb(c):
+    return matplotlib.colors.to_rgb(c)
+
+
+def tint(c, t):
+    return tuple(x + (1 - x) * t for x in _rgb(c))
+
+
+def shade(c, s):
+    return tuple(x * (1 - s) for x in _rgb(c))
+
+
+def _sine(x0, x1, yc, amp, periods, phase=0.0, n=64):
+    return [(x0 + (x1 - x0) * i / n, yc + amp * math.sin(2 * math.pi * periods * i / n + phase)) for i in range(n + 1)]
+
+
+class IconPen:
+    """Unit-square drawing pen: (0..1, y up) -> a square of side s_in inches centred at (cx, cy) (figure fractions,
+    matplotlib bottom-left origin)."""
+
+    def __init__(self, ax, gid, cx, cy, s_in, color, z=3.5):
+        from matplotlib.transforms import Affine2D
+        W, H = ax.figure.get_size_inches()
+        sw, sh = s_in / W, s_in / H
+        self.Affine2D = Affine2D
+        self.T = Affine2D().scale(sw, sh).translate(cx - sw / 2, cy - sh / 2) + ax.transAxes
+        self.ax, self.gid, self.z, self.parts = ax, gid, z, []
+        self.ext = None   # drawn extent in unit coordinates (x0, y0, x1, y1)
+        self.lw = max(0.6, min(1.3, 1.1 * s_in / 0.8))
+        self.C, self.F, self.M, self.S = _rgb(color), tint(color, .80), tint(color, .42), shade(color, .42)
+
+    def _kw(self, fc, ec, lw, ls="-", alpha=None):
+        return dict(facecolor="none" if fc is None else fc, edgecolor="none" if ec is None else ec,
+                    linewidth=0 if ec is None else self.lw * lw, linestyle=ls, joinstyle="round", capstyle="round",
+                    alpha=alpha)
+
+    def _add(self, p, pre=None):
+        p.set_transform(pre + self.T if pre is not None else self.T)
+        p.set_clip_on(False)
+        p.set_zorder(self.z)
+        p.set_gid(f"{self.gid}:p{len(self.parts)}")
+        self.ax.add_patch(p)
+        self.parts.append(p)
+        try:
+            path = p.get_path().transformed(p.get_patch_transform())
+            e = (path.transformed(pre) if pre is not None else path).get_extents()
+            self.ext = (e.x0, e.y0, e.x1, e.y1) if self.ext is None else (
+                min(self.ext[0], e.x0), min(self.ext[1], e.y0), max(self.ext[2], e.x1), max(self.ext[3], e.y1))
+        except Exception:
+            pass
+        return p
+
+    def circle(self, x, y, r, fc=None, ec=None, lw=1.0, **k):
+        return self._add(Ellipse((x, y), 2 * r, 2 * r, **self._kw(fc, ec, lw, **k)))
+
+    def ellipse(self, x, y, w, h, angle=0.0, fc=None, ec=None, lw=1.0, **k):
+        return self._add(Ellipse((x, y), w, h, angle=angle, **self._kw(fc, ec, lw, **k)))
+
+    def rect(self, x, y, w, h, fc=None, ec=None, lw=1.0, r=0.0, angle=0.0, about=None, **k):
+        style = f"round,pad=0,rounding_size={r}" if r else "square,pad=0"
+        p = FancyBboxPatch((x, y), w, h, boxstyle=style, **self._kw(fc, ec, lw, **k))
+        pre = self.Affine2D().rotate_deg_around(*(about or (x + w / 2, y + h / 2)), angle) if angle else None
+        return self._add(p, pre)
+
+    def poly(self, pts, fc=None, ec=None, lw=1.0, **k):
+        from matplotlib.patches import Polygon
+        return self._add(Polygon(pts, closed=True, **self._kw(fc, ec, lw, **k)))
+
+    def path(self, verts, codes, fc=None, ec=None, lw=1.0, **k):
+        from matplotlib.patches import PathPatch
+        from matplotlib.path import Path
+        return self._add(PathPatch(Path(verts, codes), **self._kw(fc, ec, lw, **k)))
+
+    def line(self, pts, ec, lw=1.0, cap="round", **k):
+        from matplotlib.patches import PathPatch
+        from matplotlib.path import Path
+        kw = self._kw(None, ec, lw, **k)
+        kw["capstyle"] = cap
+        return self._add(PathPatch(Path(pts), fill=False, **kw))
+
+    def blob(self, cx, cy, radii, rx=1.0, ry=1.0, rot=0.0, fc=None, ec=None, lw=1.0, **k):
+        """Smooth closed curve through points at equal angles (Catmull-Rom -> cubic Bezier)."""
+        from matplotlib.path import Path
+        n = len(radii)
+        pts = [(cx + rx * r * math.cos(2 * math.pi * i / n + rot), cy + ry * r * math.sin(2 * math.pi * i / n + rot))
+               for i, r in enumerate(radii)]
+        verts, codes = [pts[0]], [Path.MOVETO]
+        for i in range(n):
+            p0, p1, p2, p3 = pts[i - 1], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
+            verts += [(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6),
+                      (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6), p2]
+            codes += [Path.CURVE4] * 3
+        return self.path(verts + [pts[0]], codes + [Path.CLOSEPOLY], fc=fc, ec=ec, lw=lw, **k)
+
+    def leaf(self, base, tip, width, fc=None, ec=None, lw=1.0):
+        from matplotlib.path import Path
+        mx, my = (base[0] + tip[0]) / 2, (base[1] + tip[1]) / 2
+        dx, dy = tip[0] - base[0], tip[1] - base[1]
+        L = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / L * width, dx / L * width
+        verts = [base, (mx + nx, my + ny), tip, (mx - nx, my - ny), base, base]
+        codes = [Path.MOVETO, Path.CURVE3, Path.CURVE3, Path.CURVE3, Path.CURVE3, Path.CLOSEPOLY]
+        return self.path(verts, codes, fc=fc, ec=ec, lw=lw)
+
+
+def convex_hull(pts):
+    """Andrew's monotone chain; returns the hull counter-clockwise without repeating the first point."""
+    pts = sorted(set(pts))
+    if len(pts) <= 2:
+        return pts
+    def half(seq):
+        h = []
+        for q in seq:
+            while len(h) >= 2 and (h[-1][0] - h[-2][0]) * (q[1] - h[-2][1]) - (h[-1][1] - h[-2][1]) * (q[0] - h[-2][0]) <= 0:
+                h.pop()
+            h.append(q)
+        return h
+    lower, upper = half(pts), half(reversed(pts))
+    return lower[:-1] + upper[:-1]
+
+
+def _membrane(p, y0=.36, y1=.60, skip=(), n=11):
+    """Short lipid-bilayer segment: pale band + two rows of head groups."""
+    p.rect(0.0, y0, 1.0, y1 - y0, fc=MEM_FILL)
+    r = (y1 - y0) * 0.15
+    for i in range(n):
+        x = (i + 0.5) / n
+        if any(a <= x <= b for a, b in skip):
+            continue
+        for y in (y1 - r, y0 + r):
+            p.circle(x, y, r, fc=MEM_HEAD, ec=MEM_EDGE, lw=0.45)
+
+
+def _ic_cell(p, o):
+    radii = [1.0, .97, 1.02, .98, 1.0, 1.03, .97, 1.01, .99, 1.02]
+    p.blob(.5, .5, radii, rx=.46, ry=.40, fc=p.F, ec=p.S, lw=1.5)
+    p.blob(.5, .5, radii, rx=.42, ry=.36, ec=p.M, lw=.7)
+    p.ellipse(.26, .62, .15, .075, angle=25, fc=p.M, ec=p.S, lw=.6)
+    p.ellipse(.29, .35, .13, .065, angle=-20, fc=p.M, ec=p.S, lw=.6)
+    for x, y, r in ((.46, .24, .028), (.80, .32, .026), (.44, .76, .024), (.17, .48, .022)):
+        p.circle(x, y, r, fc=p.S)
+    p.circle(.61, .53, .165, fc=p.M, ec=p.S)
+    p.circle(.65, .57, .055, fc=p.S)
+
+
+def _ic_nucleus(p, o):
+    p.circle(.5, .5, .44, fc=p.F, ec=p.S, lw=1.4)
+    p.circle(.5, .5, .385, ec=p.S, lw=.7, ls=(0, (2.4, 1.8)))
+    for x0, x1, y, ph in ((.20, .50, .66, 0.0), (.18, .80, .47, 1.7), (.27, .73, .30, 3.1)):
+        p.line(_sine(x0, x1, y, .035, (x1 - x0) / .16, ph), ec=p.M, lw=1.6)
+    p.circle(.65, .64, .095, fc=p.M, ec=p.S, lw=.8)
+
+
+def _ic_mitochondrion(p, o):
+    ang = 18.0
+    p.ellipse(.5, .5, .94, .54, angle=ang, fc=p.M, ec=p.S, lw=1.4)
+    p.ellipse(.5, .5, .80, .40, angle=ang, fc=p.F)
+    a, b, c, s = .40, .20, math.cos(math.radians(ang)), math.sin(math.radians(ang))
+    pts = []
+    for i in range(97):
+        t = i / 96
+        x = -a * .88 + 2 * a * .88 * t
+        y = b * .80 * math.sqrt(max(0.0, 1 - (x / a) ** 2)) * math.sin(2 * math.pi * 3.5 * t)
+        pts.append((.5 + x * c - y * s, .5 + x * s + y * c))
+    p.line(pts, ec=p.S, lw=1.1)
+
+
+def _ic_receptor(p, o):
+    if o.get("membrane", True):
+        _membrane(p, skip=[(.36, .64)])
+    p.rect(.385, .30, .085, .36, fc=p.M, ec=p.S, r=.035)
+    p.rect(.530, .30, .085, .36, fc=p.M, ec=p.S, r=.035)
+    p.ellipse(.375, .79, .19, .32, angle=22, fc=p.C, ec=p.S)
+    p.ellipse(.625, .79, .19, .32, angle=-22, fc=p.C, ec=p.S)
+    p.rect(.33, .07, .34, .20, fc=p.F, ec=p.S, r=.07)
+
+
+def _ic_channel(p, o):
+    if o.get("membrane", True):
+        _membrane(p, skip=[(.25, .75)])
+    p.rect(.27, .24, .19, .52, fc=p.M, ec=p.S, r=.08)
+    p.rect(.54, .24, .19, .52, fc=p.M, ec=p.S, r=.08)
+    for y in (.88, .48, .10):
+        p.circle(.5, y, .042, fc=p.C, ec=p.S, lw=.6)
+
+
+def _ic_protein(p, o):
+    p.blob(.5, .5, [.42, .34, .44, .37, .30, .43, .38, .32, .41], rot=.3, fc=p.M, ec=p.S, lw=1.3)
+    p.blob(.37, .61, [.11, .08, .10, .09, .11], rot=.5, fc=p.F)
+
+
+def _ic_peptide(p, o):
+    pts = [(.12, .36), (.29, .62), (.46, .38), (.62, .64), (.78, .40), (.90, .64)]
+    p.line(pts, ec=p.S, lw=1.6)
+    for i, (x, y) in enumerate(pts):
+        p.circle(x, y, .085, fc=p.C if i % 2 == 0 else p.M, ec=p.S, lw=.9)
+
+
+def _ic_molecule(p, o):
+    cx, cy, r = .42, .50, .25
+    hexa = [(cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))) for a in range(30, 390, 60)]
+    p.line([hexa[0], (.80, .72)], ec=p.S, lw=1.4)
+    p.line([hexa[3], (.12, .29)], ec=p.S, lw=1.4)
+    p.poly(hexa, fc=p.F, ec=p.S, lw=1.4)
+    p.circle(cx, cy, .14, ec=p.S, lw=.9)
+    p.circle(.83, .74, .07, fc=p.C, ec=p.S, lw=.8)
+    p.circle(.10, .27, .055, fc=p.M, ec=p.S, lw=.8)
+
+
+def _ic_dna(p, o):
+    x0, x1, amp, per = .06, .94, .30, 1.5
+    pair_cols = [("#E69F00", "#009E73"), ("#56B4E9", "#CC79A7")]
+    for k in range(12):
+        t = (k + .5) / 12
+        x = x0 + (x1 - x0) * t
+        ya, yb = .5 + amp * math.sin(2 * math.pi * per * t), .5 - amp * math.sin(2 * math.pi * per * t)
+        if abs(ya - yb) < .12:
+            continue
+        ca, cb = pair_cols[k % 2]
+        p.line([(x, ya), (x, .5)], ec=ca, lw=1.6, cap="butt")
+        p.line([(x, .5), (x, yb)], ec=cb, lw=1.6, cap="butt")
+    p.line(_sine(x0, x1, .5, -amp, per), ec=p.S, lw=2.4)
+    p.line(_sine(x0, x1, .5, amp, per), ec=p.C, lw=2.4)
+
+
+def _ic_rna(p, o):
+    cols = ["#E69F00", "#009E73", "#56B4E9", "#CC79A7"]
+    for k in range(9):
+        t = (k + .5) / 9
+        x, y = .06 + .88 * t, .64 + .12 * math.sin(2 * math.pi * 1.25 * t)
+        p.line([(x, y), (x, y - .24)], ec=cols[k % 4], lw=1.8)
+    p.line(_sine(.06, .94, .64, .12, 1.25), ec=p.C, lw=2.6)
+
+
+def _ic_virus(p, o):
+    for k in range(12):
+        a = 2 * math.pi * k / 12
+        p.line([(.5 + .27 * math.cos(a), .5 + .27 * math.sin(a)), (.5 + .40 * math.cos(a), .5 + .40 * math.sin(a))],
+               ec=p.S, lw=1.1)
+        p.circle(.5 + .43 * math.cos(a), .5 + .43 * math.sin(a), .045, fc=p.C, ec=p.S, lw=.6)
+    p.poly([(.5 + .31 * math.cos(math.radians(a)), .5 + .31 * math.sin(math.radians(a))) for a in range(0, 360, 60)],
+           fc=p.M, ec=p.S, lw=1.4)
+    p.line(_sine(.37, .63, .5, .06, 1.5), ec=p.S, lw=1.1)
+
+
+def _ic_bacterium(p, o):
+    p.line(_sine(.70, .98, .50, .05, 1.5), ec=p.S, lw=1.1)
+    p.rect(.05, .32, .67, .36, fc=p.M, ec=p.S, lw=1.4, r=.18)
+    p.rect(.09, .36, .59, .28, ec=p.F, lw=.8, r=.14)
+    p.line(_sine(.22, .56, .50, .05, 2.5), ec=p.S, lw=1.0)
+    for x, y in ((.17, .45), (.62, .58), (.60, .42), (.30, .57)):
+        p.circle(x, y, .022, fc=p.S)
+
+
+def _ic_antibody(p, o):
+    hx, hy = .5, .46
+    p.rect(hx - .065, .06, .13, hy - .03, fc=p.C, ec=p.S, r=.05)
+    for sgn in (1, -1):
+        ang = 38 * sgn
+        lx = hx - .06 - .078 if sgn > 0 else hx + .06 + .013
+        p.rect(lx, hy + .16, .065, .28, fc=p.M, ec=p.S, r=.03, angle=ang, about=(hx, hy))
+        p.rect(hx - .06, hy - .02, .12, .44, fc=p.C, ec=p.S, r=.05, angle=ang, about=(hx, hy))
+
+
+def _ic_plant(p, o):
+    pot = "#E69F00"
+    p.line([(.5, .32), (.5, .52), (.49, .70), (.5, .84)], ec=p.S, lw=1.6)
+    p.leaf((.5, .50), (.17, .66), .11, fc=p.M, ec=p.S)
+    p.leaf((.5, .64), (.84, .79), .11, fc=p.M, ec=p.S)
+    p.leaf((.5, .83), (.38, .98), .06, fc=p.C, ec=p.S)
+    p.poly([(.31, .29), (.69, .29), (.64, .04), (.36, .04)], fc=tint(pot, .45), ec=shade(pot, .45))
+    p.rect(.27, .26, .46, .08, fc=tint(pot, .25), ec=shade(pot, .45), r=.02)
+
+
+def _ic_flask(p, o):
+    body = [(.40, .92), (.40, .62), (.13, .11), (.87, .11), (.60, .62), (.60, .92)]
+    p.poly(body, fc=GLASS, ec=N_EDGE, lw=1.3)
+    yl = .40
+    xl, xr = .40 - (.62 - yl) * .27 / .51, .60 + (.62 - yl) * .27 / .51
+    p.poly([(xl + .025, yl), (xr - .025, yl), (.84, .135), (.16, .135)], fc=p.M)
+    p.circle(.44, .26, .03, fc=p.F)
+    p.circle(.55, .31, .02, fc=p.F)
+    p.rect(.36, .90, .28, .06, fc=N_MID, ec=N_EDGE, r=.015)
+
+
+def _ic_beaker(p, o):
+    p.poly([(.18, .90), (.22, .08), (.78, .08), (.82, .90)], fc=GLASS, ec=N_EDGE, lw=1.3)
+    p.poly([(.205, .52), (.225, .105), (.775, .105), (.795, .52)], fc=p.M)
+    p.line([(.12, .94), (.18, .90)], ec=N_EDGE, lw=1.3)
+    for y in (.30, .45, .60, .75):
+        p.line([(.27, y), (.37, y)], ec=N_EDGE, lw=.7)
+
+
+def _ic_cuvette(p, o):
+    p.poly([(.64, .10), (.76, .20), (.76, .94), (.64, .84)], fc=N_FILL, ec=N_EDGE)
+    p.poly([(.64, .12), (.75, .21), (.75, .58), (.64, .50)], fc=p.M)
+    p.poly([(.24, .84), (.36, .94), (.76, .94), (.64, .84)], fc=N_FILL, ec=N_EDGE)
+    p.rect(.24, .10, .40, .74, fc=GLASS, ec=N_EDGE, lw=1.3)
+    p.rect(.26, .12, .36, .38, fc=p.M)
+    p.line([(.30, .78), (.30, .56)], ec="white", lw=1.4)
+
+
+def _ic_laser(p, o):
+    p.line([(.71, .5), (.99, .5)], ec=tint(o["color"], .55), lw=5.0, cap="butt")
+    p.line([(.71, .5), (.99, .5)], ec=p.C, lw=2.0, cap="butt")
+    p.rect(.03, .30, .62, .40, fc=N_DARK, ec=N_EDGE, lw=1.2, r=.05)
+    for x in (.41, .47, .53, .59):
+        p.line([(x, .38), (x, .62)], ec=N_MID, lw=1.0)
+    p.poly([(.12, .40), (.31, .40), (.215, .585)], fc="#F0E442", ec="#222222", lw=.7)
+    p.line([(.215, .53), (.215, .465)], ec="#222222", lw=.9)
+    p.circle(.215, .43, .011, fc="#222222")
+    p.rect(.65, .42, .07, .16, fc=N_MID, ec=N_EDGE)
+
+
+def _ic_lens(p, o):
+    from matplotlib.path import Path
+    v = [(.5, .94), (.70, .80), (.70, .20), (.5, .06), (.30, .20), (.30, .80), (.5, .94), (.5, .94)]
+    c = [Path.MOVETO] + [Path.CURVE4] * 6 + [Path.CLOSEPOLY]
+    p.path(v, c, fc=tint(o["color"], .62), ec=p.S, lw=1.3, alpha=.92)
+    p.line([(.415, .76), (.39, .58)], ec="white", lw=1.6)
+
+
+def _ic_detector(p, o):
+    p.rect(.62, .70, .20, .10, fc=N_MID, ec=N_EDGE, r=.02)
+    p.rect(.30, .24, .62, .50, fc=N_MID, ec=N_EDGE, lw=1.2, r=.06)
+    for x in (.50, .58, .66):
+        p.line([(x, .33), (x, .52)], ec=N_DARK, lw=1.0)
+    p.rect(.10, .34, .22, .30, fc=N_DARK, ec=N_EDGE)
+    p.ellipse(.10, .49, .09, .32, fc=p.C, ec=p.S)
+    p.circle(.82, .63, .035, fc=p.C)
+
+
+def _ic_microscope(p, o):
+    p.circle(.37, .23, .04, fc="#F0E442", ec=N_EDGE, lw=.7)
+    p.poly([(.58, .14), (.70, .14), (.70, .62), (.61, .80), (.50, .86), (.45, .78), (.56, .71), (.58, .60)],
+           fc=N_MID, ec=N_EDGE)
+    p.rect(.14, .05, .62, .09, fc=N_DARK, ec=N_EDGE, r=.03)
+    p.rect(.56, .33, .06, .07, fc=N_MID, ec=N_EDGE)
+    p.rect(.18, .35, .46, .045, fc=N_DARK, ec=N_EDGE)
+    p.rect(.25, .395, .24, .02, fc=p.M)
+    p.poly([(.31, .52), (.43, .52), (.41, .445), (.33, .445)], fc=p.C, ec=p.S)
+    p.rect(.29, .52, .16, .045, fc=N_DARK, ec=N_EDGE)
+    p.rect(.31, .565, .12, .21, fc=N_FILL, ec=N_EDGE)
+    p.rect(.31, .74, .095, .17, fc=N_MID, ec=N_EDGE, r=.015, angle=22, about=(.37, .74))
+    p.circle(.645, .40, .045, fc=N_FILL, ec=N_EDGE)
+
+
+def _ic_pump(p, o):
+    p.rect(.08, .12, .84, .76, fc=N_FILL, ec=N_EDGE, lw=1.2, r=.07)
+    p.rect(.13, .78, .20, .05, fc=p.M)
+    arc = [(.5 + .30 * math.cos(math.radians(a)), .48 + .30 * math.sin(math.radians(a))) for a in range(200, -21, -10)]
+    p.line([(.0, .38)] + arc + [(1.0, .38)], ec=p.C, lw=2.2)
+    p.circle(.5, .48, .22, fc=p.F, ec=p.S, lw=1.1)
+    for a in (90, 210, 330):
+        p.circle(.5 + .135 * math.cos(math.radians(a)), .48 + .135 * math.sin(math.radians(a)), .06, fc=p.M, ec=p.S)
+    p.circle(.5, .48, .035, fc=p.S)
+
+
+def _ic_tube(p, o):
+    p.ellipse(.12, .5, .10, .26, fc=p.M, ec=p.S)
+    p.rect(.12, .37, .74, .26, fc=p.F)
+    p.line([(.12, .63), (.86, .63)], ec=p.S)
+    p.line([(.12, .37), (.86, .37)], ec=p.S)
+    p.line([(.20, .575), (.80, .575)], ec="white", lw=1.4)
+    for x in (.36, .52, .68):
+        p.line([(x - .04, .555), (x + .03, .50), (x - .04, .445)], ec=p.C, lw=1.5)
+    p.ellipse(.86, .5, .10, .26, fc=p.M, ec=p.S)
+
+
+def _ic_computer(p, o):
+    p.poly([(.44, .30), (.56, .30), (.60, .14), (.40, .14)], fc=N_MID, ec=N_EDGE)
+    p.rect(.26, .08, .48, .07, fc=N_MID, ec=N_EDGE, r=.03)
+    p.rect(.06, .28, .88, .60, fc=N_DARK, ec=N_EDGE, lw=1.2, r=.04)
+    p.rect(.11, .34, .78, .48, fc=p.F)
+    p.line([(.17, .42), (.30, .56), (.42, .49), (.56, .68), (.68, .60), (.82, .74)], ec=p.C, lw=1.5)
+
+
+def _ic_database(p, o):
+    p.ellipse(.5, .16, .68, .18, fc=p.M, ec=p.S)
+    p.rect(.16, .16, .68, .64, fc=p.M)
+    p.line([(.16, .16), (.16, .80)], ec=p.S)
+    p.line([(.84, .16), (.84, .80)], ec=p.S)
+    for yc in (.37, .58):
+        p.line([(.5 + .34 * math.cos(math.radians(a)), yc + .09 * math.sin(math.radians(a))) for a in range(180, 361, 10)],
+               ec=p.S, lw=.9)
+    p.ellipse(.5, .80, .68, .18, fc=p.F, ec=p.S)
+
+
+def _ic_chip(p, o):
+    for i in range(4):
+        t = .29 + i * .14
+        for x, y, w, h in ((.06, t - .03, .14, .06), (.80, t - .03, .14, .06), (t - .03, .06, .06, .14),
+                           (t - .03, .80, .06, .14)):
+            p.rect(x, y, w, h, fc=N_MID, ec=N_EDGE, lw=.6)
+    p.rect(.18, .18, .64, .64, fc=N_DARK, ec=N_EDGE, lw=1.2, r=.05)
+    p.rect(.33, .33, .34, .34, fc=p.C, r=.03)
+    p.rect(.41, .41, .18, .18, fc=p.F, r=.02)
+    p.circle(.27, .73, .028, fc=N_FILL)
+
+
+def _ic_document(p, o):
+    p.poly([(.18, .05), (.82, .05), (.82, .72), (.62, .95), (.18, .95)], fc="white", ec=N_EDGE, lw=1.2)
+    p.poly([(.62, .95), (.62, .72), (.82, .72)], fc=N_FILL, ec=N_EDGE)
+    p.rect(.27, .78, .26, .06, fc=p.C)
+    for y, x1 in ((.62, .72), (.51, .72), (.40, .72), (.29, .60), (.18, .66)):
+        p.line([(.27, y), (x1, y)], ec=N_MID, lw=1.8)
+
+
+def _ic_chart(p, o):
+    for x, h, fc in ((.22, .30, p.F), (.43, .50, p.M), (.64, .72, p.C)):
+        p.rect(x, .10, .14, h, fc=fc, ec=p.S, lw=.8)
+    p.line([(.12, .92), (.12, .10), (.92, .10)], ec=N_EDGE, lw=1.3)
+
+
+def _ic_gear(p, o):
+    pts = []
+    for k in range(8):
+        a = 45 * k
+        for r, d in ((.35, -14), (.46, -8), (.46, 8), (.35, 14)):
+            pts.append((.5 + r * math.cos(math.radians(a + d)), .5 + r * math.sin(math.radians(a + d))))
+    p.poly(pts, fc=p.M, ec=p.S, lw=1.2)
+    p.circle(.5, .5, .23, ec=p.S, lw=.6)
+    p.circle(.5, .5, .12, fc="white", ec=p.S)
+
+
+ICONS = {n: globals()["_ic_" + n] for g in ICON_GROUPS.values() for n in g}
+
+
+def icon_parts(ax, name, gid, cx, cy, s_in, color=None, z=3.5, **opts):
+    """Draw icon `name` centred at (cx, cy) (figure fractions, bottom-left origin), side s_in inches.
+    Returns the list of patches (gids gid:p0, gid:p1, ...)."""
+    n = icon_canonical(name)
+    col = color or ICON_COLOR.get(n, "#0072B2")
+    pen = IconPen(ax, gid, cx, cy, s_in, col, z=z)
+    ICONS[n](pen, dict(opts, color=col))
+    return pen
+
+
 # ---------------------------------------------------------------- data
 def _num(v):
     try:
@@ -514,6 +985,7 @@ def draw(spec, spec_dir, adj):
     ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
     ax.set_gid("layer:canvas")
     registry = {}   # id -> dict(kind, artist(s), box)
+    svg_groups = []  # icon parts to gather into one <g id=...> after saving
     texts = []      # (id, text artist, container Box or None)
     sizes = {}      # id -> requested font size (before shrink)
     notes = []
@@ -543,7 +1015,103 @@ def draw(spec, spec_dir, adj):
         registry["title"] = dict(kind="text", artist=t)
         texts.append(("title", t, Box(0.0, 0.0, 1.0, max(content_top - 0.004, top + 0.03))))
 
-    def draw_elements(elements, parent):
+    def est_lines(s, width_frac, size):
+        lines = wrap_text(pretty(str(s)), max(3.0, width_frac * W * 72 / size)).split("\n")
+        return lines, max(text_em(l) for l in lines) * size / 72, len(lines) * 1.22 * size / 72   # inches
+
+    def draw_icon_element(el, parent, ctx):
+        eid = el["id"]
+        name = icon_canonical(el.get("name"))
+        if name not in ICONS:
+            registry[eid] = dict(kind="icon_error", error=f"unknown icon '{el.get('name')}'")
+            return
+        b = parent.sub(el["x"], el["y"], el["w"], el["h"])
+        bw, bh = b.w * W, b.h * H
+        lab = el.get("label") or ""
+        lsize = el.get("size", base * 0.85)
+        lsize_adj = lsize * adj.get(eid + ":label", {}).get("fscale", 1.0)
+        band = (ctx or {}).get("band")
+        snapped = bool(band) and name in MEMBRANE_ICONS and el.get("snap", True)
+        lpos = el.get("label_pos") or ("right" if snapped else "below")
+        if lpos not in ("below", "above", "right", "left", "none"):
+            lpos = "below"
+        if lpos == "none":
+            lab = ""
+        gap = 0.05
+        lab_box, ha, va, lx, ly = None, "center", "top", 0.0, 0.0
+        if snapped:     # transmembrane part aligned with the bilayer of the membrane panel
+            s = (band[1] - band[0]) * H / 0.24
+            cx = b.x0 + (s / 2 / W if lab and lpos == "right" else b.w / 2)
+            cy = 1 - (band[0] + band[1]) / 2 + 0.02 * s / H
+            if lab:
+                lx, ly, ha, va = cx + (s / 2 + gap) / W, cy + 0.29 * s / H, "left", "center"
+                lab_box = Box(lx, 1 - ly - 0.3 * s / H, max(0.02, b.x0 + b.w - lx), 0.6 * s / H)
+        elif lab and lpos in ("below", "above"):
+            _, _, lh = est_lines(lab, b.w, lsize_adj)
+            s = max(0.12, min(bw, bh - lh - gap))
+            top = max(0.0, (bh - s - gap - lh) / 2)
+            cx = b.x0 + b.w / 2
+            if lpos == "below":
+                cy = 1 - (b.y0 + (top + s / 2) / H)
+                lx, ly = cx, 1 - (b.y0 + (top + s + gap) / H)
+                lab_box = Box(b.x0, b.y0 + (top + s + gap * 0.5) / H, b.w, (lh + gap) / H)
+            else:
+                cy = 1 - (b.y0 + (top + lh + gap + s / 2) / H)
+                lx, ly, va = cx, 1 - (b.y0 + (top + lh) / H), "bottom"
+                lab_box = Box(b.x0, b.y0 + top / H, b.w, (lh + gap * 0.5) / H)
+        elif lab and lpos in ("right", "left"):
+            s = max(0.12, min(bh, bw * 0.42))
+            cy = 1 - (b.y0 + b.h / 2)
+            if lpos == "right":
+                cx = b.x0 + s / 2 / W
+                lx, ly, ha, va = b.x0 + (s + gap) / W, cy, "left", "center"
+                lab_box = Box(lx, b.y0, max(0.02, b.x0 + b.w - lx), b.h)
+            else:
+                cx = b.x0 + b.w - s / 2 / W
+                lx, ly, ha, va = b.x0 + b.w - (s + gap) / W, cy, "right", "center"
+                lab_box = Box(b.x0, b.y0, max(0.02, b.w - (s + gap) / W), b.h)
+        else:
+            s = max(0.12, min(bw, bh))
+            cx, cy = b.center()
+        col = el.get("color") or ICON_COLOR.get(name)
+        pen = icon_parts(ax, name, eid, cx, cy, s, color=col, membrane=(not snapped) and el.get("membrane", True))
+        t = None
+        sw, sh = s / W, s / H
+        ux = lambda u: cx + (u - 0.5) * sw
+        uy = lambda u: cy + (u - 0.5) * sh
+        e = pen.ext or (0.04, 0.04, 0.96, 0.96)
+        pad = 0.02
+        art = (ux(e[0] - pad), uy(e[1] - pad), ux(e[2] + pad), uy(e[3] + pad))   # drawn extent, bottom-left origin
+        rects = [art]
+        if lab:
+            t = put_text(eid + ":label", lab, lx, ly, lsize, ha=ha, va=va, color=el.get("text_color", "#111111"),
+                         wrap_w=lab_box.w, weight=el.get("weight", "normal"))
+            texts.append((eid + ":label", t, lab_box))
+            _, ew, eh = est_lines(lab, lab_box.w, lsize_adj)
+            ew, eh = min(ew / W, lab_box.w), eh / H
+            x0 = {"center": lx - ew / 2, "left": lx, "right": lx - ew}[ha]
+            y0 = {"top": ly - eh, "bottom": ly, "center": ly - eh / 2}[va]
+            rects.append((x0, y0, x0 + ew, y0 + eh))
+        from matplotlib.patches import PathPatch
+        from matplotlib.path import Path
+        # arrows clip to the CONVEX hull of art + label (matplotlib bisects along the arrow, so the shape must be
+        # convex for the arrow to stop at its outer edge instead of running through the label)
+        hull = convex_hull([(r[i], r[j]) for r in rects for i in (0, 2) for j in (1, 3)])
+        clip = PathPatch(Path(hull + [hull[0]], [Path.MOVETO] + [Path.LINETO] * (len(hull) - 1) + [Path.CLOSEPOLY]),
+                         transform=ax.transAxes, facecolor="none", edgecolor="none")
+        clip.set_visible(False)
+        ax.add_patch(clip)
+        ux0, uy0 = min(r[0] for r in rects), min(r[1] for r in rects)
+        ux1, uy1 = max(r[2] for r in rects), max(r[3] for r in rects)
+        anc = dict(anchor=(cx, (art[1] + art[3]) / 2))
+        if name in MEMBRANE_ICONS:   # arrows arrive at the extracellular part, leave from the cytoplasmic part
+            anc = dict(anchor=(cx, cy), anchor_in=(cx, uy(0.80)), anchor_out=(cx, uy(0.17)))
+        registry[eid] = dict(kind="icon", artist=clip, text=t, box=Box(ux0, 1 - uy1, ux1 - ux0, uy1 - uy0),
+                             name=name, snapped=snapped, icon_in=round(s, 3), **anc)
+        svg_groups.append(dict(id=eid, rx=re.compile(re.escape(eid) + r":p\d+$"), extra=[eid + ":label"],
+                               label=f"icon: {name}"))
+
+    def draw_elements(elements, parent, ctx=None):
         for el in elements:
             eid = el["id"]
             typ = el.get("type", "entity")
@@ -563,12 +1131,42 @@ def draw(spec, spec_dir, adj):
                     inner = 0.9
                 ax.add_patch(p)
                 p.set_gid(eid + ":shape")
-                t = put_text(eid, el.get("label", ""), *b.center(), el.get("size", base),
-                             weight=el.get("weight", "normal"), color=el.get("text_color", "#111111"),
-                             wrap_w=b.w * inner)
                 cont = b if shape != "ellipse" else Box(b.x0 + b.w * 0.08, b.y0 + b.h * 0.1, b.w * 0.84, b.h * 0.8)
-                registry[eid] = dict(kind="entity", artist=p, text=t, box=b)
+                tx, ty, wrap = b.center()[0], b.center()[1], b.w * inner
+                icon = icon_canonical(el.get("icon")) if el.get("icon") else None
+                if icon and icon not in ICONS:
+                    registry[eid + ":icon"] = dict(kind="icon_error", error=f"unknown icon '{el.get('icon')}'")
+                elif icon:   # icon left of (wide box) or above (tall box) the label, inside the box
+                    bw, bh = b.w * W, b.h * H
+                    pos = el.get("icon_pos") or ("top" if bw < 1.3 * bh else "left")
+                    pad = min(bw, bh) * 0.10
+                    inset = bw * (0.13 if shape == "ellipse" else 0.0)
+                    if pos == "top":
+                        s = max(0.12, min(bh * (0.40 if shape == "ellipse" else 0.46), bw * 0.6))
+                        off = pad * (1.6 if shape == "ellipse" else 0.8)
+                        icx, icy = b.x0 + b.w / 2, 1 - (b.y0 + (off + s / 2) / H)
+                        top = (off + s + pad * 0.3) / H
+                        cont = Box(b.x0 + (pad * 0.5 + inset) / W, b.y0 + top, b.w - (pad + 2 * inset) / W,
+                                   max(0.01, b.h - top - pad * 0.4 / H))
+                    else:
+                        s = max(0.12, min(bh * (0.56 if shape == "ellipse" else 0.72), bw * 0.34))
+                        xl = inset + pad * 0.9
+                        icx, icy = b.x0 + (xl + s / 2) / W, 1 - (b.y0 + b.h / 2)
+                        left = (xl + s + pad * 0.6) / W
+                        cont = Box(b.x0 + left, b.y0 + b.h * 0.08, max(0.01, b.w - left - (pad * 0.6 + inset) / W),
+                                   b.h * 0.84)
+                    tx, ty, wrap = cont.x0 + cont.w / 2, 1 - (cont.y0 + cont.h / 2), cont.w
+                    icon_parts(ax, icon, eid + ":icon", icx, icy, s, color=el.get("icon_color") or edge,
+                               membrane=el.get("membrane", True))
+                    svg_groups.append(dict(id=eid + ":icon", rx=re.compile(re.escape(eid) + r":icon:p\d+$"), extra=[],
+                                           label=f"icon: {icon}"))
+                t = put_text(eid, el.get("label", ""), tx, ty, el.get("size", base),
+                             weight=el.get("weight", "normal"), color=el.get("text_color", "#111111"),
+                             wrap_w=wrap)
+                registry[eid] = dict(kind="entity", artist=p, text=t, box=b, icon=icon)
                 texts.append((eid, t, cont))
+            elif typ == "icon":
+                draw_icon_element(el, parent, ctx)
             elif typ == "text":
                 b = parent.sub(el["x"], el["y"], el.get("w", 0.3), el.get("h", 0.05))
                 ha = el.get("ha", "left")
@@ -636,34 +1234,89 @@ def draw(spec, spec_dir, adj):
                 registry[eid] = dict(kind="image", artist=iax, box=b)
             elif typ == "group":
                 b = parent.sub(el["x"], el["y"], el["w"], el["h"])
-                draw_elements(el.get("elements", []), b)
+                draw_elements(el.get("elements", []), b, ctx)
         return
 
     for pnl in spec.get("panels", []):
         b = root.sub(pnl["x"], pnl["y"], pnl["w"], pnl["h"])
         x, y = b.mpl_xy()
-        frame = FancyBboxPatch((x, y), b.w, b.h, boxstyle="round,pad=0.003,rounding_size=0.012",
-                               facecolor=pnl.get("fill", "#FAFAFA"), edgecolor=pnl.get("edge", "#9AA5B1"),
-                               lw=1.0, zorder=1)
+        pid, pshape, ctx = pnl["id"], pnl.get("shape", "box"), {}
+        if pshape == "nucleus":     # ellipse with a double (porous) envelope
+            ec = pnl.get("edge", "#2F6EA5")
+            frame = Ellipse(b.center(), b.w, b.h, facecolor=pnl.get("fill", "#EAF3FB"), edgecolor=ec, lw=1.6, zorder=1)
+            env = Ellipse(b.center(), b.w - 0.12 / W, b.h - 0.12 / H, facecolor="none", edgecolor=ec, lw=0.8,
+                          linestyle=(0, (3, 2.2)), zorder=1.01)
+            ax.add_patch(env)
+            env.set_gid(f"panel:{pid}:envelope")
+        elif pshape == "cell":      # rounded cell with a thick membrane outline
+            frame = FancyBboxPatch((x, y), b.w, b.h, boxstyle="round,pad=0,rounding_size=0.02",
+                                   facecolor=pnl.get("fill", "#F7FAFD"), edgecolor=pnl.get("edge", MEM_HEAD),
+                                   lw=5.0, zorder=1)
+            for k, d in enumerate((1, -1)):
+                dx, dy = d * 2.6 / 72 / W, d * 2.6 / 72 / H
+                ln = FancyBboxPatch((x - dx, y - dy), b.w + 2 * dx, b.h + 2 * dy, boxstyle="round,pad=0,rounding_size=0.02",
+                                    facecolor="none", edgecolor=MEM_EDGE, lw=0.7, zorder=1.01)
+                ax.add_patch(ln)
+                ln.set_gid(f"panel:{pid}:leaflet{k}")
+        elif pshape == "membrane":  # horizontal lipid bilayer across the panel; receptor/channel icons snap into it
+            from matplotlib.collections import PatchCollection, LineCollection
+            from matplotlib.patches import Circle
+            th = min(b.h * H, float(pnl.get("thickness_in", 0.30)))
+            yc = b.y0 + b.h / 2
+            y0, y1 = yc - th / 2 / H, yc + th / 2 / H
+            ctx["band"] = (y0, y1)
+            frame = Rectangle((b.x0, 1 - y1), b.w, th / H, facecolor=pnl.get("fill", MEM_FILL), edgecolor="none", zorder=1)
+            r = th * 0.15
+            n = max(2, int(b.w * W / (2.3 * r)))
+            step = b.w * W / n
+            heads, tails = [], []
+            for i in range(n):
+                xi = b.x0 * W + (i + 0.5) * step
+                for yh, sg in (((1 - y0) * H - r, -1), ((1 - y1) * H + r, 1)):
+                    heads.append(Circle((xi, yh), r))
+                    for dx in (-0.4 * r, 0.4 * r):
+                        tails.append([(xi + dx, yh + sg * r), (xi + dx * 0.8, yh + sg * (th / 2 - 1.15 * r))])
+            tl = LineCollection(tails, colors=MEM_EDGE, linewidths=0.6, alpha=0.55, zorder=1.01)
+            tl.set_transform(fig.dpi_scale_trans)
+            ax.add_collection(tl, autolim=False)
+            tl.set_gid(f"panel:{pid}:tails")
+            hd = PatchCollection(heads, facecolor=MEM_HEAD, edgecolor=MEM_EDGE, linewidth=0.45, zorder=1.02)
+            hd.set_transform(fig.dpi_scale_trans)
+            ax.add_collection(hd, autolim=False)
+            hd.set_gid(f"panel:{pid}:heads")
+        else:
+            frame = FancyBboxPatch((x, y), b.w, b.h, boxstyle="round,pad=0.003,rounding_size=0.012",
+                                   facecolor=pnl.get("fill", "#FAFAFA"), edgecolor=pnl.get("edge", "#9AA5B1"),
+                                   lw=1.0, zorder=1)
         ax.add_patch(frame)
-        frame.set_gid(f"panel:{pnl['id']}")
-        registry[f"panel:{pnl['id']}"] = dict(kind="panel", artist=frame, box=b, role=pnl.get("role"))
+        frame.set_gid(f"panel:{pid}")
+        registry[f"panel:{pid}"] = dict(kind="panel", artist=frame, box=b, role=pnl.get("role"), shape=pshape)
         if pnl.get("title"):
-            tid = f"panel:{pnl['id']}:title"
-            t = put_text(tid, pnl["title"], b.x0 + b.w / 2, 1 - (b.y0 + 0.012), pnl.get("title_size", base * 1.1),
-                         va="top", weight="bold", wrap_w=b.w * 0.95)
-            texts.append((tid, t, Box(b.x0, b.y0, b.w, b.h * 0.2)))
-        draw_elements(pnl.get("elements", []), b)
+            tid = f"panel:{pid}:title"
+            if pshape == "membrane":   # small italic name above the bilayer, right-aligned
+                t = put_text(tid, pnl["title"], b.x0 + b.w - 0.004, 1 - ctx["band"][0] + 0.008,
+                             pnl.get("title_size", base * 0.85), ha="right", va="bottom", style="italic",
+                             color=MEM_EDGE, wrap_w=b.w * 0.5)
+                texts.append((tid, t, None))
+            elif pshape == "nucleus":   # name at the bottom: arrows usually enter the nucleus from above
+                t = put_text(tid, pnl["title"], b.x0 + b.w / 2, 1 - (b.y0 + b.h * 0.90), pnl.get("title_size", base),
+                             va="bottom", weight="bold", wrap_w=b.w * 0.55)
+                texts.append((tid, t, Box(b.x0 + b.w * 0.2, b.y0 + b.h * 0.72, b.w * 0.6, b.h * 0.22)))
+            else:
+                t = put_text(tid, pnl["title"], b.x0 + b.w / 2, 1 - (b.y0 + 0.012), pnl.get("title_size", base * 1.1),
+                             va="top", weight="bold", wrap_w=b.w * 0.95)
+                texts.append((tid, t, Box(b.x0, b.y0, b.w, b.h * 0.2)))
+        draw_elements(pnl.get("elements", []), b, ctx)
     draw_elements(spec.get("elements", []), root)
 
     # ---- arrows last (need entity boxes for clipping and routing)
     all_arrows = list(spec.get("arrows", []))
     for pnl in spec.get("panels", []):
         all_arrows += pnl.get("arrows", [])
-    obstacles = {k: v["box"].rect() for k, v in registry.items() if v.get("kind") == "entity"}
+    obstacles = {k: v["box"].rect() for k, v in registry.items() if v.get("kind") in ENT_KINDS}
     soft = {k: v["box"].rect() for k, v in registry.items() if v.get("kind") in ("legend", "text", "chart") and v.get("box")}
     for pnl in spec.get("panels", []):
-        if pnl.get("title"):
+        if pnl.get("title") and pnl.get("shape", "box") in ("box", "cell"):
             pb = registry[f"panel:{pnl['id']}"]["box"]
             th = 1.5 * pnl.get("title_size", base * 1.1) / 72 / H
             soft[f"panel:{pnl['id']}:title"] = (pb.x0 + pb.w * 0.1, pb.y0, pb.x0 + pb.w * 0.9, pb.y0 + 0.012 + th)
@@ -697,7 +1350,8 @@ def draw(spec, spec_dir, adj):
             continue
         st = ARROW_KINDS.get(ar.get("kind", "activates"), ARROW_KINDS["activates"])
         col = ar.get("color", "#333333")
-        pA, pB = a["box"].center(), bb["box"].center()
+        pA = a.get("anchor_out") or a.get("anchor") or a["box"].center()
+        pB = bb.get("anchor_in") or bb.get("anchor") or bb["box"].center()
         if a["kind"] == "panel" or bb["kind"] == "panel":
             def edge(box, toward):
                 cx, cy = box.center(); tx, ty = toward
@@ -713,11 +1367,11 @@ def draw(spec, spec_dir, adj):
             conn = ar["connection"]
             m = re.search(r"rad\s*=\s*([-\d.]+)", conn)
             rad = float(m.group(1)) if m else 0.0
-        elif (ar["to"], ar["from"]) in pairs and a["kind"] == "entity" and bb["kind"] == "entity":
+        elif (ar["to"], ar["from"]) in pairs and a["kind"] in ENT_KINDS and bb["kind"] in ENT_KINDS:
             rad = 0.25
             conn = f"arc3,rad={rad}"
             auto = "opposite pair -> two arcs"
-        elif a["kind"] == "entity" and bb["kind"] == "entity":
+        elif a["kind"] in ENT_KINDS and bb["kind"] in ENT_KINDS:
             best = None
             for r in (0.0, 0.22, -0.22, 0.4, -0.4):
                 c = cost(to_tl(curve_points(pA, pB, r, W, H, n=16)), ar["from"], ar["to"]) + abs(r) * 0.2
@@ -734,8 +1388,8 @@ def draw(spec, spec_dir, adj):
         fa = FancyArrowPatch(pA, pB, arrowstyle=st["arrowstyle"],
                              linestyle=st["linestyle"], mutation_scale=ar.get("scale", 14), color=col,
                              lw=ar.get("lw", 2.4 if ar.get("kind") == "flow" else 1.6), shrinkA=2, shrinkB=2,
-                             patchA=a.get("artist") if a["kind"] == "entity" else None,
-                             patchB=bb.get("artist") if bb["kind"] == "entity" else None,
+                             patchA=a.get("artist") if a["kind"] in ENT_KINDS else None,
+                             patchB=bb.get("artist") if bb["kind"] in ENT_KINDS else None,
                              connectionstyle=conn, zorder=4)
         ax.add_patch(fa)
         fa.set_gid(ar["id"])
@@ -777,6 +1431,7 @@ def draw(spec, spec_dir, adj):
         t = put_text("footnote", footnote, 0.01, 0.012, base * 0.7, ha="left", va="bottom",
                      color="#555555", wrap_w=0.98)
         texts.append(("footnote", t, None))
+    registry["__svg_groups__"] = dict(kind="meta", groups=svg_groups)
     return fig, ax, registry, texts, sizes
 
 
@@ -820,7 +1475,11 @@ def check_layout(fig, registry, texts, sizes, min_pt):
             if rects_overlap(tb[keys[i]], tb[keys[j]], 0.001):
                 issues.append(dict(level="warn", check="text_overlap", ids=[keys[i], keys[j]],
                                    hint="move one element or shorten text"))
-    ents = {k: v["box"].rect() for k, v in registry.items() if v.get("kind") == "entity"}
+    ents = {k: v["box"].rect() for k, v in registry.items() if v.get("kind") in ENT_KINDS}
+    for k, v in registry.items():
+        if v.get("kind") == "icon_error":
+            issues.append(dict(level="fail", check="icon_unknown", id=k, detail=v["error"],
+                               valid=sorted(ICONS), hint="use one of the listed icon names (or an alias) or drop the icon"))
     ek = list(ents)
     for i in range(len(ek)):
         for j in range(i + 1, len(ek)):
@@ -918,9 +1577,10 @@ def check_layout(fig, registry, texts, sizes, min_pt):
 
 
 # ---------------------------------------------------------------- SVG post-processing
-def postprocess_svg(path, spec, texts, W):
-    """Centre-anchor multi-line centred labels (so later text edits stay centred) and gather the
-    flat matplotlib groups into one Inkscape layer per panel + connectors + annotations."""
+def postprocess_svg(path, spec, texts, W, icon_groups=()):
+    """Centre-anchor multi-line centred labels (so later text edits stay centred), gather each icon's parts
+    (+ its label) into one <g id=element id>, and gather the flat matplotlib groups into one Inkscape layer
+    per panel + connectors + annotations."""
     ET.register_namespace("", SVG_NS)
     ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
     ET.register_namespace("inkscape", INK_NS)
@@ -944,6 +1604,26 @@ def postprocess_svg(path, spec, texts, W):
             if "text-anchor" not in st:
                 st = st.replace("; fill", f"; text-anchor: {anchor}; fill") if "; fill" in st else st + f"; text-anchor: {anchor}"
             tx.set("style", st)
+    # icon groups: parts (one <g id=x:pN><path/></g> each) are unwrapped into a single <g id=x> with the label
+    canvas0 = byid.get("layer:canvas")
+    if canvas0 is not None:
+        for gspec in icon_groups:
+            kids = list(canvas0)
+            members = [c for c in kids if gspec["rx"].match(c.get("id") or "") or (c.get("id") in gspec["extra"])]
+            if not members:
+                continue
+            wrap = ET.Element("{%s}g" % SVG_NS)
+            wrap.set("id", gspec["id"])
+            wrap.set("{%s}label" % INK_NS, gspec["label"])
+            pos = kids.index(members[0])
+            for m in members:
+                canvas0.remove(m)
+                if gspec["rx"].match(m.get("id") or ""):
+                    for ch in list(m):
+                        wrap.append(ch)
+                else:
+                    wrap.append(m)
+            canvas0.insert(pos, wrap)
     # layer assignment
     owner = {}
     def walk(elements, pid):
@@ -1104,12 +1784,13 @@ def main():
     svg_ids_missing = []
     if "path" in out.get("svg", {}) and "error" not in out["svg"]:
         try:
-            out["svg"]["groups_layered"] = postprocess_svg(out["svg"]["path"], spec, texts, W)
+            out["svg"]["groups_layered"] = postprocess_svg(out["svg"]["path"], spec, texts, W,
+                                                           registry.get("__svg_groups__", {}).get("groups", []))
         except Exception as e:
             issues.append(dict(level="warn", check="svg_postprocess", detail=repr(e)))
         svg = open(out["svg"]["path"], encoding="utf-8").read()
         for k, v in registry.items():
-            if v.get("kind") in ("entity", "arrow", "chart", "text", "panel") and f'id="{k}' not in svg:
+            if v.get("kind") in ("entity", "icon", "arrow", "chart", "text", "panel") and f'id="{k}' not in svg:
                 svg_ids_missing.append(k)
         out["svg"]["text_elements"] = svg.count("<text")
         out["svg"]["sha256"] = sha256(out["svg"]["path"])
@@ -1123,6 +1804,10 @@ def main():
             layer_map[el["id"]] = dict(type=el.get("type", "entity"), panel=panel,
                                        label=el.get("label") or el.get("text") or el.get("title"),
                                        category=el.get("category"), source=el.get("source"))
+            ic = el.get("name") if el.get("type") == "icon" else el.get("icon")
+            if ic:
+                layer_map[el["id"]]["icon"] = icon_canonical(ic)
+                layer_map[el["id"]]["icon_svg_group"] = el["id"] if el.get("type") == "icon" else el["id"] + ":icon"
             if el.get("type") == "group":
                 walk(el.get("elements", []), panel)
     for pnl in spec.get("panels", []):

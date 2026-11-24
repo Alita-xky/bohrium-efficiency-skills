@@ -1,5 +1,5 @@
 {
- "_comment": "TEMPLATE relationship schematic. Replace every TODO; delete unused elements; keep ids unique.",
+ "_comment": "TEMPLATE relationship schematic. Entities may carry a small icon (\"icon\") only when the source names that object; replace each 'TODO <icon>' or delete the key. Replace every TODO; delete unused elements; keep ids unique.",
  "canvas": {
   "width_in": 10,
   "height_in": 6,
@@ -33,7 +33,8 @@
     "file": "TODO",
     "loc": "TODO",
     "quote": "TODO verbatim quote (relations/numbers)"
-   }
+   },
+   "icon": "TODO plant (keep only if the source names this object, else delete)"
   },
   {
    "id": "ww",
@@ -73,9 +74,9 @@
    "id": "aba",
    "type": "entity",
    "label": "TODO label from the source",
-   "x": 0.58,
+   "x": 0.56,
    "y": 0.42,
-   "w": 0.16,
+   "w": 0.19,
    "h": 0.12,
    "fill": "#E9F6F1",
    "edge": "#009E73",
@@ -84,7 +85,8 @@
     "file": "TODO",
     "loc": "TODO",
     "quote": "TODO verbatim quote (relations/numbers)"
-   }
+   },
+   "icon": "TODO molecule (keep only if the source names this object, else delete)"
   },
   {
    "id": "gs",
