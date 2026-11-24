@@ -147,6 +147,12 @@ def main():
                                                    by_rule=comp.get("issues_by_rule"))
     if pres:
         verification["content_preservation"] = dict(status=pres.get("status"), text_preserved_rate=pres.get("text_preserved_rate"))
+    ts = jl("type_scale.json")
+    if ts:
+        verification["type_scale"] = dict(file=os.path.join(a.outdir, "type_scale.json"), title_pt=(ts.get("title") or {}).get("size_pt"),
+                                          body_ladder=(ts.get("body") or {}).get("ladder"), spacing=ts.get("spacing"),
+                                          off_scale=((rr or {}).get("type_scale") or {}).get("off_scale"),
+                                          what="one title size for the deck, body text on a 3-step ladder, sizes off it are listed")
     result = {"case_id": case_id}
     missing = []
     for f in fields:

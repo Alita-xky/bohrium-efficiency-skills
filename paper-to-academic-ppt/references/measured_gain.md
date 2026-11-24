@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example)
 
-Generated 2026-11-23 16:40 by `python3 scripts/gain_check.py --out <dir>` on the shipped synthetic example (`examples/minimal`). Not an official case result and not the platform's baseline-agent comparison; it measures, on identical input, what the scripts add to a plain python-pptx workflow. Python 3.14.7.
+Generated 2026-11-24 15:30 by `python3 scripts/gain_check.py --out <dir>` on the shipped synthetic example (`examples/minimal`). Not an official case result and not the platform's baseline-agent comparison; it measures, on identical input, what the scripts add to a plain python-pptx workflow. Python 3.14.7.
 
 ## Same spec, two pipelines
 
@@ -20,7 +20,7 @@ A = a python-pptx script writing the same titles, bullets and notes into the def
 | PNG previews | 0 | 9 |
 | result.json | False | True |
 | contract fields filled | 0/5 | 5/5 |
-| wall time (s) | 0.1 | 4.2 |
+| wall time (s) | 0.1 | 2.8 |
 
 ## One injected defect per run (same spec otherwise)
 

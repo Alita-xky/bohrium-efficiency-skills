@@ -6,6 +6,7 @@ Usage:
       --materials '/app/work/materials/*.txt' /input/*.csv [--paper-map /app/work/paper_map.json] \
       --mode paper|talk|template|edit [--min-slides 8] [--max-slides 15] [--duration-min 15] [--plan talk_plan.json] \
       --out /app/output/check_report.json --map /app/output/evidence_map.json
+  python3 deck_check.py scale --pptx /app/output/deck.pptx [--type-scale /app/output/type_scale.json]
 
 FAIL (must fix before delivery)                       WARN (fix if cheap, else report)
 - fact quote not found verbatim in the materials       - fact locator points to another paragraph (suggests one)
@@ -13,6 +14,8 @@ FAIL (must fix before delivery)                       WARN (fix if cheap, else r
 - number on a slide that is in no material             - > 6 bullets, long bullets, notes repeat the slide
 - Fig./Table number that has no caption in the paper   - figure page differs from its caption page
 - chart CSV/column missing, TODO text left             - numeric claim backed only by a schematic figure
+                                                        - bar chart axis not from 0; `scale` mode: text sizes
+                                                          of the built deck off its type_scale.json ladder
 - content slide without speaker notes                  - limitations slide missing (paper/talk)
 - slide count outside limits; required story parts     - order not motivation -> method -> results -> conclusion
   missing (paper/talk); talk time budget off by >10%
@@ -134,6 +137,12 @@ def slide_text_items(sl):
             items.append(("bullet %d" % i, b.get("text", ""), b.get("src") or base_src))
         else:
             items.append(("bullet %d" % i, str(b[0] if isinstance(b, (list, tuple)) else b), base_src))
+    tk = K.takeaway_text(sl)
+    if tk and not any(tk == t for _, t, _ in items):
+        items.append(("takeaway", tk, base_src))
+    for key in ("quote", "quote_src"):
+        if isinstance(sl.get(key), str) and sl[key].strip():
+            items.append((key, sl[key], base_src))
     for col in ("left", "right"):
         c = sl.get(col) or {}
         if c.get("heading"):
@@ -209,7 +218,58 @@ def auto_sources(spec, docs, only_missing=False):
     return spec
 
 
+def scale_issues(pptx, scale_path=None):
+    """every explicitly written text size of the built deck vs its type_scale.json (title size, body ladder,
+    display / label / caption / note / table sizes); sizes inherited from the template's placeholders are the
+    template's own and pass. Returns (issues, scale) - issues = off-scale sizes."""
+    scale_path = scale_path or os.path.join(os.path.dirname(os.path.abspath(pptx)), "type_scale.json")
+    if not os.path.exists(scale_path):
+        return [], None
+    sc = json.load(open(scale_path, encoding="utf-8"))
+    allowed = set()
+    for k in ("display", "table", "caption"):
+        allowed.update(sc.get(k) or [])
+    allowed.update((sc.get("body") or {}).get("ladder") or [])
+    allowed.update(v for v in (sc.get("label"), sc.get("source_note"), (sc.get("title") or {}).get("size_pt")) if v)
+    tables = set(sc.get("table") or [])
+    issues = []
+    inv = K.inventory(K.Package(pptx))
+    for sl in inv["slides"]:
+        for sh in sl["shapes"]:
+            if sh["kind"] == "table":
+                mf = sh.get("min_font_pt")
+                if mf and not any(abs(mf - v) < 0.6 for v in tables | allowed):
+                    issues.append(dict(slide=sl["index"], shape=sh["name"], size=mf))
+                continue
+            for p in sh.get("paras", []):
+                bad = [r["sz"] for r in p.get("runs", []) if r.get("sz") and (r.get("text") or "").strip()
+                       and not any(abs(r["sz"] - v) < 0.6 for v in allowed)]
+                if bad:
+                    issues.append(dict(slide=sl["index"], shape=sh["name"], size=bad[0]))
+                    break
+    return issues, sc
+
+
+def scale_main(argv):
+    ap = argparse.ArgumentParser(prog="deck_check.py scale")
+    ap.add_argument("--pptx", required=True)
+    ap.add_argument("--type-scale", default=None)
+    a = ap.parse_args(argv)
+    issues, sc = scale_issues(a.pptx, a.type_scale)
+    if sc is None:
+        print(json.dumps(dict(status="no_type_scale", pptx=a.pptx)))
+        return 0
+    print(json.dumps(dict(status="pass" if not issues else "warn", title_pt=(sc.get("title") or {}).get("size_pt"),
+                          body_ladder=(sc.get("body") or {}).get("ladder"), off_scale=len(issues)), ensure_ascii=False))
+    for x in issues[:20]:
+        print("WARN type_scale slide %d %s: %.1f pt is not on the deck's type scale (see type_scale.json)"
+              % (x["slide"], x["shape"], x["size"]))
+    return 0
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "scale":
+        return scale_main(sys.argv[2:])
     ap = argparse.ArgumentParser()
     ap.add_argument("--spec", action="append", default=[])
     ap.add_argument("--pptx", default=None, help="audit an existing deck instead of a spec (sources are auto-matched)")
@@ -382,7 +442,12 @@ def main():
                     for c in [v.get("x")] + (v.get("y") if isinstance(v.get("y"), list) else [v.get("y")]):
                         if c and c not in cols:
                             add("fail", "chart", "column %s not in %s" % (c, os.path.basename(v["csv"])), i)
+                if v.get("kind", "bar") in ("bar", "barh") and (v.get("logy") or (v.get("ylim") and v["ylim"][0] not in (0, None))):
+                    add("warn", "bar_axis", "bar chart axis does not start at 0 (%s): the builder draws bars from 0; use a line "
+                        "chart if the range matters" % ("log scale" if v.get("logy") else "ylim %s" % v["ylim"][0]), i)
             if key == "figure":
+                if str(v.get("chart_type", "")).startswith("bar") and not v.get("data_csv"):
+                    add("warn", "bar_axis", "bar chart carried as an image without its data: its axis may not start at 0", i)
                 if v.get("image") and not os.path.exists(v["image"]):
                     add("fail", "figure", "image not found: %s" % v["image"], i)
                 if v.get("pdf") and not os.path.exists(v["pdf"]):

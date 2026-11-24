@@ -378,7 +378,7 @@ def text_height_pt(paras, width_pt, line_factor=None, indent_pt_per_level=27.0, 
         lf = line_factor or (1.32 if has_cjk(p.get("text", "")) else 1.2)
         w = width_pt - insets_pt[0] - p.get("level", 0) * indent_pt_per_level - bullet_pt
         n = wrap_count(p.get("text", ""), w, size)
-        h += n * size * lf + (size * 0.35 if i else 0)
+        h += n * size * lf + ((float(p["spc"]) if p.get("spc") is not None else size * 0.35) if i else 0)
     return h
 
 
@@ -980,6 +980,7 @@ def inventory(pkg, cat=None):
                     p["size"] = min(szs) if szs else lvl_sizes.get(p["level"] + 1, lvl_sizes.get(1, 18.0))
                 bp = tx.find(A + "bodyPr")
                 sh["autofit"] = None
+                sh["anchor"] = bp.get("anchor") if bp is not None else None
                 if bp is not None:
                     for k in ("normAutofit", "spAutoFit", "noAutofit"):
                         if bp.find(A + k) is not None:
@@ -1072,6 +1073,8 @@ def script_runs(text):
     for m in _SCRIPT_RE.finditer(t):
         if m.start() > 0 and t[m.start() - 1] == "\\":
             continue
+        if m.group(1) == "_" and re.search(r"[A-Za-z]{3,}$", t[:m.start()]) and re.match(r"[a-z0-9]{2,}", m.group(2)):
+            continue  # snake_case identifier (CSV column "full_finetune_wer"), not a subscript
         if m.start() > pos:
             out.append((t[pos:m.start()], 0))
         body = m.group(2)
@@ -1127,15 +1130,22 @@ def para_xml(p, mode="ph", emph_color="accent2"):
     if p.get("align"):
         ppr_attr.append('algn="%s"' % {"left": "l", "center": "ctr", "right": "r", "justify": "just"}.get(p["align"], p["align"]))
     bullet = p.get("bullet")
+    lead = ""  # optional line spacing (pct) / space before (pt) chosen by the layout engine
+    if p.get("lnspc"):
+        lead += '<a:lnSpc><a:spcPct val="%d"/></a:lnSpc>' % int(float(p["lnspc"]) * 1000)
+    if p.get("spc") is not None:
+        lead += '<a:spcBef><a:spcPts val="%d"/></a:spcBef>' % int(round(float(p["spc"]) * 100))
     if mode == "tb" and bullet:
         mar = 228600 + lvl * 342900
         ppr_attr += ['marL="%d"' % mar, 'indent="-228600"']
-        ppr_in = '<a:spcBef><a:spcPts val="600"/></a:spcBef><a:buClr><a:schemeClr val="accent1"/></a:buClr><a:buFont typeface="Arial"/><a:buChar char="%s"/>' % ("•" if lvl == 0 else "–")
+        ppr_in = (lead or '<a:spcBef><a:spcPts val="600"/></a:spcBef>') + '<a:buClr><a:schemeClr val="accent1"/></a:buClr><a:buFont typeface="Arial"/><a:buChar char="%s"/>' % ("•" if lvl == 0 else "–")
     elif bullet is False:
         ppr_attr += ['marL="0"', 'indent="0"']
-        ppr_in = "<a:buNone/>"
+        ppr_in = lead + "<a:buNone/>"
     elif mode == "tb":
-        ppr_in = '<a:spcBef><a:spcPts val="300"/></a:spcBef><a:buNone/>'
+        ppr_in = (lead or '<a:spcBef><a:spcPts val="300"/></a:spcBef>') + '<a:buNone/>'
+    else:
+        ppr_in = lead
     ppr = ("<a:pPr %s>%s</a:pPr>" % (" ".join(ppr_attr), ppr_in)) if (ppr_attr or ppr_in) else ""
     runs = []
     if p.get("field") == "slidenum":
@@ -1164,7 +1174,7 @@ def txbody_xml(paras, mode="ph", anchor=None, autofit="none", insets=True, wrap=
     fit = {"none": "<a:noAutofit/>", "shape": "<a:spAutoFit/>", "norm": "<a:normAutofit/>", None: ""}[autofit]
     body = "".join(para_xml(p, mode) for p in paras) or '<a:p><a:endParaRPr lang="en-US" dirty="0"/></a:p>'
     if mode == "ph" and autofit is None:
-        bpx = "<a:bodyPr/>"
+        bpx = '<a:bodyPr anchor="%s"/>' % anchor if anchor else "<a:bodyPr/>"
     else:
         bpx = "<a:bodyPr %s>%s</a:bodyPr>" % (" ".join(bp), fit)
     return "<%s>%s<a:lstStyle/>%s</%s>" % (tag, bpx, body, tag)
@@ -1212,11 +1222,111 @@ def rect_xml(sid, name, box, fill="accent1"):
             % (sid, xa(name), xfrm_xml(box), color_xml(fill)))
 
 
-def pic_xml(sid, name, rid, box, descr=""):
+def deco_xml(sid, name, box, fill="accent1", prst="rect", line=None, line_w=9525, radius=None):
+    """decorative shape without text (card background, accent bar, number badge base)"""
+    av = '<a:avLst><a:gd name="adj" fmla="val %d"/></a:avLst>' % int(radius) if radius is not None else "<a:avLst/>"
+    fillx = color_xml(fill) if fill else "<a:noFill/>"
+    linex = ('<a:ln w="%d">%s</a:ln>' % (line_w, color_xml(line))) if line else "<a:ln><a:noFill/></a:ln>"
+    return ('<p:sp><p:nvSpPr><p:cNvPr id="%d" name="%s"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>%s'
+            '<a:prstGeom prst="%s">%s</a:prstGeom>%s%s</p:spPr></p:sp>' % (sid, xa(name), xfrm_xml(box), prst, av, fillx, linex))
+
+
+# ----------------------------------------------------------------------------- design helpers shared by build and check
+TAKEAWAY_ROLES = {"results", "result", "analysis", "evaluation", "conclusion", "conclusions", "takeaway", "summary",
+                  "discussion", "evidence"}
+TAKEAWAY_PREFIX = re.compile(r"^\s*(?:take[- ]?aways?|take[- ]home(?: message)?|bottom line|key message|so what|"
+                             r"结论|要点|启示|一句话总结|核心结论|核心信息)\s*[:：]\s*", re.I)
+
+
+def _sim(a, b):
+    from difflib import SequenceMatcher
+    a, b = re.sub(r"\W+", "", str(a).lower()), re.sub(r"\W+", "", str(b).lower())
+    return SequenceMatcher(None, a, b).ratio() if a and b else 0.0
+
+
+def takeaway_text(sl):
+    """the sentence shown in the slide's bottom takeaway bar, or None. Sources (first wins): slide.takeaway
+    (string; false = never); a bullet that starts with 'Takeaway:'/'结论：'... (taken out of the list); on key slides
+    (results/analysis/conclusion/discussion roles) the talk field key_message unless it repeats the title."""
+    tk = sl.get("takeaway")
+    if tk is False or sl.get("role") in ("title", "section") or sl.get("layout") in ("title", "section", "quote"):
+        return None
+    if isinstance(tk, str) and tk.strip():
+        return tk.strip()
+    for b in sl.get("bullets") or []:
+        t = b.get("text", "") if isinstance(b, dict) else str(b)
+        if TAKEAWAY_PREFIX.match(t) and not (isinstance(b, dict) and b.get("level")):
+            return t.strip()
+    km = sl.get("key_message")
+    if isinstance(km, str) and km.strip() and str(sl.get("role", "")).lower() in TAKEAWAY_ROLES and \
+            len(km) <= 160 and _sim(km, sl.get("title", "")) < 0.6:
+        return km.strip()
+    return None
+
+
+_NUM_TOKEN = re.compile(r"(?<![\w.^_/])[-+−]?\d+(?:[.,]\d+)*(?:\s?(?:%|×|倍|x(?![A-Za-z])|pp\b|pts?\b|points?\b|"
+                        r"dB\b|ms\b|s\b|h\b|hours?\b|days?\b|小时|天|GB\b|MB\b|[KMB](?![A-Za-z])|BLEU\b|FPS\b))?")
+_REF_BEFORE = re.compile(r"(?:Fig(?:ure)?s?\.?|Tables?|Tab\.|Sec(?:tion)?s?\.?|§|Eqs?\.?|Equations?|Appendix|Alg\.?|p\.|pp\.|"
+                         r"Ref\.?|图|表|第|公式|[A-Za-z]\(|[A-Za-z]-|\[)\s*$", re.I)
+
+
+def number_tokens(text):
+    """[(token, score)] for the numbers of a phrase: 3 = with unit/%, 2 = decimal, 1 = integer >= 10, 0 = small
+    integer. References (Fig. 3, Table 2, SE(3), top-2, [12]) and years are skipped."""
+    out = []
+    t = str(text)
+    for m in _NUM_TOKEN.finditer(t):
+        tok = m.group(0).strip()
+        if _REF_BEFORE.search(t[max(0, m.start() - 12):m.start()]):
+            continue
+        core = re.match(r"[-+−]?\d+(?:[.,]\d+)*", tok).group(0)
+        if re.fullmatch(r"(19|20)\d\d", core):
+            continue
+        if tok != core:
+            sc = 3
+        elif "." in core:
+            sc = 2
+        elif len(core.lstrip("-+−")) >= 2:
+            sc = 1
+        else:
+            sc = 0
+        out.append((tok, sc))
+    return out
+
+
+CALLOUT_ROLES = {"results", "result", "analysis", "evaluation", "evidence", "conclusion", "conclusions", "takeaway",
+                 "summary", "discussion"}
+_RESULT_UNIT = re.compile(r"(%|×|倍|x|pp|pts?|points?|BLEU|dB|FPS)$")
+
+
+def key_number(text, role=None):
+    """the single result number of a phrase, copied verbatim with its unit (or None): exactly one number with
+    % / x / points / BLEU ..., at most two numbers in all, not part of a range ('1 to 50 h'), and - when role is
+    given - only on result / analysis / conclusion slides (never setup or motivation numbers)."""
+    if role is not None and str(role).lower() not in CALLOUT_ROLES:
+        return None
+    t = str(text)
+    if re.search(r"\d\s*(?:to|–|—|-|~|～|至|到)\s*\d", t):
+        return None
+    toks = number_tokens(t)
+    sal = [tok for tok, sc in toks if sc >= 2 and _RESULT_UNIT.search(tok)]
+    if len(sal) == 1 and len(toks) <= 2 and len(sal[0]) <= 9:
+        return sal[0]
+    return None
+
+
+def src_rect_xml(crop):
+    """crop = (l, t, r, b) fractions of the image cut away (display crop, the image bytes stay unchanged)"""
+    if not crop or not any(crop):
+        return ""
+    return '<a:srcRect l="%d" t="%d" r="%d" b="%d"/>' % tuple(int(round(v * 100000)) for v in crop)
+
+
+def pic_xml(sid, name, rid, box, descr="", crop=None):
     return ('<p:pic><p:nvPicPr><p:cNvPr id="%d" name="%s" descr="%s"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/>'
-            '</p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch>'
+            '</p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="%s"/>%s<a:stretch><a:fillRect/></a:stretch>'
             '</p:blipFill><p:spPr>%s<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>'
-            % (sid, xa(name), xa(descr), rid, xfrm_xml(box)))
+            % (sid, xa(name), xa(descr), rid, src_rect_xml(crop), xfrm_xml(box)))
 
 
 def table_xml(sid, name, box, rows, col_w, row_h, size_pt, header=True, highlight=(), aligns=None):
@@ -1363,15 +1473,16 @@ def make_default_template(path, fonts=None, colors=None, size=(SLIDE_W, SLIDE_H)
                lst='<a:lvl1pPr algn="r"><a:defRPr sz="1100">%s</a:defRPr></a:lvl1pPr>' % gray, anchor="ctr",
                body='<a:p><a:fld id="{B6F15528-21DE-4FAA-801E-634DDDAF4B2B}" type="slidenum"><a:rPr lang="en-US"/>'
                     '<a:t>‹#›</a:t></a:fld><a:endParaRPr lang="en-US"/></a:p>'),
-        rect_xml(7, "Title Rule", [mx, int(1.36 * I), cw, int(0.03 * I)], "accent1"),
-        rect_xml(8, "Footer Rule", [mx, ftr_y - int(0.05 * I), cw, int(0.01 * I)], "BFBFBF"),
+        rect_xml(7, "Title Rule", [mx, int(1.36 * I), cw, int(0.012 * I)], "D5DBE3"),
+        rect_xml(8, "Title Rule Accent", [mx, int(1.343 * I), int(1.1 * I), int(0.045 * I)], "accent1"),
+        rect_xml(9, "Footer Rule", [mx, ftr_y - int(0.05 * I), cw, int(0.01 * I)], "D5DBE3"),
     ]
     body_style = (_lvl(1, 285750, -285750, 2200, "•", 900) + _lvl(2, 685800, -228600, 1900, "–", 400) +
                   _lvl(3, 1028700, -228600, 1700, "•", 300) +
                   "".join(_lvl(n, 1028700 + (n - 3) * 342900, -228600, 1600, "•", 300) for n in range(4, 10)))
     title_style = ('<a:lvl1pPr algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1">'
                    '<a:lnSpc><a:spcPct val="90000"/></a:lnSpc><a:spcBef><a:spcPct val="0"/></a:spcBef><a:buNone/>'
-                   '<a:defRPr sz="3000" b="1" kern="1200"><a:solidFill><a:schemeClr val="tx2"/></a:solidFill>'
+                   '<a:defRPr sz="2800" b="1" kern="1200"><a:solidFill><a:schemeClr val="tx2"/></a:solidFill>'
                    '<a:latin typeface="+mj-lt"/><a:ea typeface="+mj-ea"/><a:cs typeface="+mj-cs"/></a:defRPr></a:lvl1pPr>')
     other_style = ('<a:defPPr><a:defRPr lang="en-US"/></a:defPPr><a:lvl1pPr marL="0" algn="l" defTabSz="914400" rtl="0" '
                    'eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="1800" kern="1200"><a:solidFill>'
@@ -1406,22 +1517,28 @@ def make_default_template(path, fonts=None, colors=None, size=(SLIDE_W, SLIDE_H)
 
     sub_lst = ('<a:lvl1pPr marL="0" indent="0"><a:buNone/><a:defRPr sz="2000"><a:solidFill><a:srgbClr val="404040"/>'
                '</a:solidFill></a:defRPr></a:lvl1pPr>')
-    band = rect_xml(20, "Title Band", [0, 0, W, int(0.18 * I)], "accent1")
+    band_h = int(0.6 * H)
+    white_lst = ('<a:lvl1pPr algn="l"><a:lnSpc><a:spcPct val="95000"/></a:lnSpc><a:defRPr sz="4000" b="1"><a:solidFill>'
+                 '<a:schemeClr val="bg1"/></a:solidFill></a:defRPr></a:lvl1pPr>')
     layouts.append(lay("title", "Title Slide", [
-        band,
-        _ph_sp(2, "Title 1", '<p:ph type="ctrTitle"/>', [int(0.8 * I), int(1.9 * I), W - int(1.6 * I), int(1.8 * I)],
-               lst='<a:lvl1pPr algn="l"><a:defRPr sz="3600" b="1"/></a:lvl1pPr>', anchor="b",
+        rect_xml(20, "Title Band", [0, 0, W, band_h], "tx2"),
+        rect_xml(21, "Title Band Accent", [0, band_h, W, int(0.07 * I)], "accent1"),
+        rect_xml(22, "Title Mark", [int(0.8 * I), int(0.75 * I), int(0.9 * I), int(0.07 * I)], "accent1"),
+        _ph_sp(2, "Title 1", '<p:ph type="ctrTitle"/>', [int(0.8 * I), int(1.0 * I), W - int(1.6 * I), band_h - int(1.35 * I)],
+               lst=white_lst, anchor="b",
                body='<a:p><a:r><a:rPr lang="en-US"/><a:t>Presentation title</a:t></a:r></a:p>'),
-        _ph_sp(3, "Subtitle 2", '<p:ph type="subTitle" idx="1"/>', [int(0.8 * I), int(3.95 * I), W - int(1.6 * I), int(2.0 * I)],
+        _ph_sp(3, "Subtitle 2", '<p:ph type="subTitle" idx="1"/>', [int(0.8 * I), band_h + int(0.4 * I), W - int(1.6 * I),
+                                                                   H - band_h - int(1.0 * I)],
                lst=sub_lst, body='<a:p><a:r><a:rPr lang="en-US"/><a:t>Authors · venue · date</a:t></a:r></a:p>'),
-        rect_xml(21, "Title Accent", [int(0.8 * I), int(3.8 * I), int(1.6 * I), int(0.05 * I)], "accent2"),
         ftr_phs % (4, 5, 6)]))
     layouts.append(lay("obj", "Title and Content", [tph(), bph(3, 1), ftr_phs % (4, 5, 6)]))
     layouts.append(lay("secHead", "Section Header", [
-        _ph_sp(2, "Title 1", '<p:ph type="title"/>', [int(0.8 * I), int(2.3 * I), W - int(1.6 * I), int(1.4 * I)],
-               lst='<a:lvl1pPr><a:defRPr sz="3200"/></a:lvl1pPr>', anchor="b",
+        rect_xml(20, "Section Background", [0, 0, W, H], "lt2"),
+        rect_xml(21, "Section Bar", [0, 0, int(0.3 * I), H], "accent1"),
+        _ph_sp(2, "Title 1", '<p:ph type="title"/>', [int(1.2 * I), int(2.55 * I), W - int(2.4 * I), int(1.6 * I)],
+               lst='<a:lvl1pPr><a:defRPr sz="4000"/></a:lvl1pPr>', anchor="b",
                body='<a:p><a:r><a:rPr lang="en-US"/><a:t>Section title</a:t></a:r></a:p>'),
-        _ph_sp(3, "Text 2", '<p:ph type="body" idx="1"/>', [int(0.8 * I), int(3.9 * I), W - int(1.6 * I), int(1.2 * I)],
+        _ph_sp(3, "Text 2", '<p:ph type="body" idx="1"/>', [int(1.2 * I), int(4.35 * I), W - int(2.4 * I), int(1.3 * I)],
                lst=sub_lst, body='<a:p><a:r><a:rPr lang="en-US"/><a:t>Section subtitle</a:t></a:r></a:p>'),
         ftr_phs % (4, 5, 6)]))
     half = (cw - int(0.3 * I)) // 2

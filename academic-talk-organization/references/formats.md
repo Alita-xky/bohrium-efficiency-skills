@@ -46,16 +46,19 @@ the template's master, layouts, fonts and colours are used as they are.
 | equations | a display equation is shown as its crop: `"figure": {"image": "figs/eq3_6_p2.png", "ref": "Eq. 3-6", "kind": "schematic", "caption": "…"}` (`paper_map.json` → `equations[]`); the PDF text layer garbles math, so never retype it from `materials/*.txt` |
 | `left`, `right` | two-column slide: each `{"heading", "bullets"}` or with a `figure`/`chart`/`table` |
 | `arrange` | `right` (visual left, text right; default) or `below`; `visual_share` 0.5–0.8 |
-| `layout` | force a kind: title, section, bullets, two_column, figure, figures, chart, table, blank |
+| `layout` | force a kind: title, section, bullets, two_column, figure, figures, chart, table, blank, cards, bignumber, quote, agenda (see slide_rules.md §8) |
+| `takeaway` | one sentence shown as an accent bar at the bottom (`false` = none); `key_message` on results/analysis/conclusion slides is shown the same way |
+| `quote`, `quote_src` | quote layout: verbatim sentence + where it is from |
 | `layout_name` | force a template layout by name or index (see template_report.json) |
 | `sources` | fact ids behind the slide as a whole (title claim) |
 | `derived` | `[{"value": "3.5", "formula": "31.4 - 27.9", "inputs": ["F8"]}]` numbers computed, not quoted |
 | `notes` | speaker notes: what to SAY that is not on the slide |
 | `key_message`, `transition`, `time_s`, `if_asked` | talk organisation fields (appended to the notes) |
 
-Layout choice is automatic: title → Title Slide layout, bullets → Title and Content, two_column → Two
-Content, figure/chart/table → Title Only + computed boxes inside the template's text area, section → Section
-Header. Missing layouts fall back in a fixed order and the fallback is written to build_report.json.
+Layout choice is automatic: title → Title Slide layout, bullets → Title and Content (default theme: cards /
+statement / agenda / two-column flow by content), two_column → Two Content, figure/chart/table → Title Only +
+computed boxes inside the template's text area, section → Section Header. Missing layouts fall back in a fixed
+order and the fallback is written to build_report.json (`design` per slide shows the layout engine's choice).
 
 ## talk_plan.json (talk organisation)
 ```json
@@ -79,6 +82,7 @@ Slides are positions at the time the op runs; `slide_id` (from inventory) is sta
 |---|---|---|
 | `deck.pptx` | deck_build / deck_edit | the editable deck (text boxes, placeholders, notes) |
 | `deck.pdf`, `previews/slide-NN.png`, `previews/contact_sheet.png` | deck_render | real LibreOffice renders |
+| `type_scale.json` | deck_build | the deck's title size, body ladder, spacing rule, display/caption/table sizes, per-slide sizes (checked by `deck_check scale`, referenced in render_report and result.json) |
 | `build_report.json`, `slides_outline.md` | deck_build | backend, template, layout per slide, font overrides, warnings; outline with notes |
 | `check_report.json`, `evidence_map.json`, `evidence_map.md` | deck_check | page-level evidence map + audit |
 | `render_report.json` | deck_render | overflow, min font, fonts requested vs embedded, tools |

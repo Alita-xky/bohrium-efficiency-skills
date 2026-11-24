@@ -88,6 +88,9 @@ def main():
         print(json.dumps(dict(status="build_failed", log=out[-2000:]), ensure_ascii=False))
         return 1
     fails += ["build: " + l.strip()[5:] for l in out.splitlines() if l.strip().startswith("FAIL")]
+    rc, out = run([os.path.join(HERE, "deck_check.py"), "scale", "--pptx", pptx])  # sizes vs type_scale.json
+    summary["type_scale"] = first_json(out)
+    warns += ["check: " + l.strip()[5:] for l in out.splitlines() if l.strip().startswith("WARN")]
     rnd = [os.path.join(HERE, "deck_render.py"), "--pptx", pptx, "--outdir", a.outdir, "--name", a.name]
     rc, out = run(rnd)
     summary["render"] = first_json(out)

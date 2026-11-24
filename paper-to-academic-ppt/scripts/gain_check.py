@@ -86,7 +86,9 @@ def slides(spec):
 
 
 def body_slide(spec):
-    return next((s for s in slides(spec) if s.get("bullets") and s.get("role") not in ("title",)), None)
+    """first content slide with bullets (title / outline / section slides need no sources or claims)"""
+    return next((s for s in slides(spec) if s.get("bullets") and s.get("role") not in
+                 ("title", "outline", "agenda", "overview", "section", "qa", "thanks", "references")), None)
 
 
 def d_number(spec, facts):

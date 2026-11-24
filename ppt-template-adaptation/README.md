@@ -13,8 +13,9 @@ fonts replaced and pictures lost after PDF export. This Skill makes template app
    overflow, < 12 pt, stretched pictures, off-slide shapes);
 3. **adaptation** — route A (deck → spec with exact text/pictures/tables/notes/captions → rebuild on the template's
    real layouts), route B (generate from materials), route C (rule-based in-place fixes with a before/after log);
-4. **explainable sizing** — placeholder text inherits template sizes; overflow shrinks along a logged ladder,
-   never below 12 pt; charts adopt the template's accent colours; pictures contain-fit;
+4. **explainable sizing** — placeholder text inherits template sizes; one title size for the deck and a 3-step
+   body ladder (`type_scale.json`, off-scale sizes warned), never below 12 pt; charts adopt the template's accent
+   colours (bars from 0); pictures margin-cropped, contain-fit and large;
 5. **after audit + preservation + renders** — `compliance.json`, `preserve.json` (every paragraph, number,
    picture and note of the source deck found in the result), LibreOffice PDF/PNGs, fonts requested vs embedded;
 6. **records** — evidence map (carried content auto-matched to the paper), version record, result.json.
@@ -27,6 +28,7 @@ fonts replaced and pictures lost after PDF export. This Skill makes template app
 | `scripts/extract_materials.py` | text extraction with `[pN:M]` locators (pdftotext → PyMuPDF → pdfplumber → OCR), tables, page previews |
 | `scripts/paper_map.py` | sections (two-column aware), captions, figure/table crops (caption above or below, running heads excluded), table cells `table_rows` (super/subscripts kept), numbered display-equation crops, key sentences, overview image (also without PIL/matplotlib); `crop` and `find` (verbatim sentences + `[pN:M]`) sub-commands |
 | `scripts/deck_build.py` | spec → .pptx (python-pptx or stdlib backend), font fitting ladder, charts from CSV, tables, figures, notes |
+| `scripts/deck_design.py` | type scale (one title size, 3-step body ladder → `type_scale.json`) + layout engine: cards, big-number callouts, agenda, section numbers, quote, takeaway bar |
 | `scripts/deck_render.py` | .pptx → PDF → PNGs + contact sheet; layout and font checks |
 | `scripts/deck_check.py` | spec (or existing .pptx) vs materials audit; writes the evidence map |
 | `scripts/deck_make.py` | check → build → render (→ template audit) in one call; `--case` also writes records + result.json |

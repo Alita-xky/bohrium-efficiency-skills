@@ -31,6 +31,27 @@
    "transition": "Start from the data regime we all work in."
   },
   {
+   "id": "S1b",
+   "role": "outline",
+   "title": "Outline: problem, idea, results, recommendation",
+   "bullets": [
+    "Problem: full fine-tuning overfits on little data",
+    "Idea: route each frame to 2 of 8 small experts",
+    "Results: the gain is largest with the least data",
+    "Limits and a recommendation for our languages"
+   ],
+   "sources": [
+    "F2",
+    "F3",
+    "F9",
+    "F12"
+   ],
+   "notes": "Tell the lab what decision we will reach at the end, so they listen to the results with that question in mind.",
+   "time_s": 15,
+   "key_message": "Four steps to a decision",
+   "transition": "Start with the data regime we all work in."
+  },
+  {
    "id": "S2",
    "role": "motivation",
    "title": "Full fine-tuning overfits when a language has under 10 h of labelled speech",

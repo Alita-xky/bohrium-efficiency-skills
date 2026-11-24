@@ -98,6 +98,7 @@ instruction you could not do and why. Add unmapped contract fields with `--set f
 | text overflows after edit (render FAIL) | shorten, or `duplicate_slide` + split; do not shrink below 12 pt |
 | picture is a bitmap and values are asked | read only what the paper text/tables state; never estimate from pixels |
 | template slots insufficient for a new slide | `add_slide` uses the deck's own layouts (fallbacks recorded); never edit the master |
+| new slide should match the deck | `add_slide` keeps the deck's fonts/colours (text in its placeholders, template sizes, large figure); other slides are never restyled |
 | CJK text renders as blanks (render FAIL "without any CJK font") | the pptx is fine; report missing CJK font, status partial for previews |
 | python-pptx missing | ops run on the stdlib XML engine automatically |
 | .ppt / .odp input | deck_prepare converts with LibreOffice to .pptx first; edit the converted copy and say so |

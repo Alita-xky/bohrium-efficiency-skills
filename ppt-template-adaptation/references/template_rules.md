@@ -32,10 +32,14 @@ checks the items below per slide and writes `compliance.json` (per-slide deviati
 Never imitate a placeholder with a text box; never edit the master to make content fit.
 
 ## 3. Size ladder and overflow
-- Placeholder text **inherits** the template sizes. Only if the estimated text height overflows the box does the
-  builder write a smaller size, stepping 100 → 92 → 85 → 78 → 72 → 66 → 60 % of the template size, never below
-  12 pt for body (titles ≥ 20 pt; captions/source notes 10–12 pt; tables ≥ 10 pt). Each override is logged
-  (`font_overrides` in build_report.json) — an explainable ladder, not silent shrinking.
+- Placeholder text **inherits** the template sizes; the deck's type scale is written to `type_scale.json`.
+  Titles: ONE size for every content slide — the template's title size, or one ladder step smaller (0.86, then
+  0.74 ×) for the whole deck when some title would need 3 lines; cover and section titles keep their layout size;
+  title boxes stay where the layout puts them. Body: a 3-step ladder = the template body size and two steps
+  (e.g. 32/28/24); a slide that needs less takes the next step (sub-levels one step below); at the template size
+  nothing is written (inheritance), spacing is the template's own. Below the ladder only to avoid overflow (≥ 12
+  pt, warned by `deck_check scale`); captions/source notes 12/10 pt; tables 24…10 pt. 7–12 short bullets flow
+  into the template's two-content layout at one common step. Each override is logged (`font_overrides` with `why`).
 - Still overflowing at the floor → FAIL: shorten (keep wording from the source) or split the slide.
 - Do not rely on "shrink text on overflow" (`normAutofit`): render_report warns when a template does.
 

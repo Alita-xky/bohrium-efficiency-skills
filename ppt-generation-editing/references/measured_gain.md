@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example)
 
-Generated 2026-11-23 16:42 by `python3 scripts/gain_check.py --out <dir>` on the shipped synthetic example (`examples/minimal`). Not an official case result and not the platform's baseline-agent comparison; it measures, on identical input, what the scripts add to a plain python-pptx workflow. Python 3.14.7.
+Generated 2026-11-24 15:31 by `python3 scripts/gain_check.py --out <dir>` on the shipped synthetic example (`examples/minimal`). Not an official case result and not the platform's baseline-agent comparison; it measures, on identical input, what the scripts add to a plain python-pptx workflow. Python 3.14.7.
 
 
 ## Same single text edit (replace_text on slide 4: '28.1%' → '27.9%')

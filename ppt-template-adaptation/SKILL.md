@@ -60,15 +60,20 @@ boxes become the visual's caption, "来源/Source: …" boxes its source note; s
 never used as paper references. Charts/SmartArt are carried as cropped images from the renders, a native chart's
 data are also written to `deck_media/sNN_<chart>_data.csv` and listed in `not_carried_over` (editability lost:
 say so in uncertainty). Text stays literal (`meta.math_markup: false`: "d_k" is not turned into a subscript).
-After to_spec: set `role` per slide, split any slide with > 6 bullets or a title > 2 lines into two slides (copy
-the text, add "（续）"/"(cont.)" to the second title, note the split in uncertainty).
+After to_spec: set `role` per slide. Do not split for length: 7–12 short bullets flow into the template's own
+two-content layout; split (copy the text, add "（续）"/"(cont.)" to the second title, note it in uncertainty)
+only if the build still reports a text-overflow FAIL.
+The builder never restyles the template: master, layouts, fonts and colours are kept, body text stays in body
+placeholders, one deck-wide title size and a 3-step body ladder (`type_scale.json`, inherited where they match),
+figures with white margins cropped and as large as the area allows, a native bar chart redrawn from its data
+with a 0-based axis and value labels (said in build_report).
 
 ## 4. Build + check + render + audit + preservation (1 call; routes A/B)
 ```bash
 python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json [--facts /app/work/facts.json] --outdir /app/output \
   --template /input/<template> --mode template [--preserve-from /input/<deck>.pptx] --case /input/case.json
 ```
-Builds on the template (placeholders inherit position/size/fonts; sizes shrink only along the logged ladder,
+Builds on the template (placeholders inherit position/size/fonts; sizes from the deck's `type_scale.json`, logged,
 never below 12 pt), renders PDF + PNGs + contact sheet, writes `compliance.json` (after) and `preserve.json`
 (every paragraph, number, picture and note of the source deck present). For route C run `deck_template.py audit`
 and `deck_render.py` on the fixed deck. Fix FAILs (shorten/split, change layout), re-run at most twice, look

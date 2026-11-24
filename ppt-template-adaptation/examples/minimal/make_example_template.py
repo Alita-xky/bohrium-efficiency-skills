@@ -35,7 +35,7 @@ os.remove(tpl_pptx)
 # 2. the draft deck (16:9 default template) built from a small spec
 work = os.path.join(out, "_draft_work")
 os.makedirs(work, exist_ok=True)
-spec = {"meta": {"title": "GateLite draft", "lang": "en"}, "footer": {"text": "Draft - synthetic example"},
+spec = {"meta": {"title": "GateLite draft", "lang": "en", "design": False}, "footer": {"text": "Draft - synthetic example"},
         "slides": [
             {"id": "S1", "role": "title", "title": "GateLite: Sparse Gated Adapters for Low-Resource Speech Recognition",
              "subtitle": ["A. Example and B. Sample"]},

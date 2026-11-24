@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example)
 
-Generated 2026-11-23 16:40 by `python3 scripts/gain_check.py --out <dir>` on the shipped synthetic example (`examples/minimal`). Not an official case result and not the platform's baseline-agent comparison; it measures, on identical input, what the scripts add to a plain python-pptx workflow. Python 3.14.7.
+Generated 2026-11-24 15:31 by `python3 scripts/gain_check.py --out <dir>` on the shipped synthetic example (`examples/minimal`). Not an official case result and not the platform's baseline-agent comparison; it measures, on identical input, what the scripts add to a plain python-pptx workflow. Python 3.14.7.
 
 
 ## Template adaptation (draft → adapted deck)
@@ -8,7 +8,7 @@ Generated 2026-11-23 16:40 by `python3 scripts/gain_check.py --out <dir>` on the
 | measured | draft (before) | adapted by this Skill |
 |---|---|---|
 | template compliance rate | 0.0 | 1.0 |
-| issues by rule | {"render": 4, "theme": 8, "slide_size": 1, "hard_font": 1, "title_position": 1, "off_palette": 1} | {"render": 1} |
+| issues by rule | {"render": 6, "theme": 8, "slide_size": 1, "hard_font": 1, "title_position": 1, "off_palette": 1} | {"render": 4} |
 | slides / pictures / tables / notes | 5 / 1 / 1 / 4 | 5 / 1 / 1 / 4 |
 | content preserved (text) | – | pass (1.0) |
 | result.json status | – | complete |

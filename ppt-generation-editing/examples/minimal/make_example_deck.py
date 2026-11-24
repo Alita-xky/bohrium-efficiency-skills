@@ -14,7 +14,7 @@ out = sys.argv[1] if len(sys.argv) > 1 else HERE
 os.makedirs(out, exist_ok=True)
 subprocess.run([sys.executable, os.path.join(HERE, "make_example_pdf.py"), out], check=True)
 pdf = os.path.join(out, "paper_synthetic.pdf")
-spec = {"meta": {"title": "GateLite draft", "lang": "en"}, "footer": {"text": "GateLite - draft for review"},
+spec = {"meta": {"title": "GateLite draft", "lang": "en", "design": False}, "footer": {"text": "GateLite - draft for review"},
         "slides": [
             {"id": "S1", "role": "title", "title": "GateLite: Sparse Gated Adapters for Low-Resource Speech Recognition",
              "subtitle": ["A. Example and B. Sample"], "notes": "Open with the low-resource problem."},

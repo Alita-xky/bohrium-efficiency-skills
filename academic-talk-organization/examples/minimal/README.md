@@ -3,7 +3,7 @@
 `make_example_pdf.py` writes a made-up 3-page paper (`paper_synthetic.pdf`) and `wer_by_hours.csv`. `case.json`
 asks for an 8-minute lab-meeting talk for colleagues who know CTC but not mixture-of-experts.
 `facts.json` (evidence table), `talk_plan.json` (goal, audience, section budget, 3 Q&A, 2 cuts) and `spec.json`
-(8 main slides with time_s / key_message / transition + 1 backup) are filled examples; `spec.json` uses paths
+(9 main slides incl. an outline slide, with time_s / key_message / transition + 1 backup) are filled examples; `spec.json` uses paths
 relative to a `work/` folder next to `input/`.
 
 ```bash

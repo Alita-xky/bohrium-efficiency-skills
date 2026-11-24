@@ -64,6 +64,11 @@ Spec (template `$SKILL/templates/spec_template.json`, fields `references/formats
 - titles are claims; ≤ 5 short bullets; figures/tables are the paper's own (`ref` = its numbering, `kind`
   data|schematic); backup slides have `role:"backup"` and are referenced from `qa`;
 - wording follows evidence strength ("reduces … (Table 1)" vs "the authors suggest …").
+- make the structure visible (design is automatic, `references/slide_rules.md` §8): slide 2 `role: outline` with
+  the section names as bullets (numbered agenda); if the slide limit allows, a `role: section` divider (title =
+  section name, `time_s` 5–10) before each section of a ≥ 12-minute talk. `key_message` on results, analysis and
+  conclusion slides is drawn as a takeaway bar (numbers checked): one short "so what" sentence, not the title
+  again. Short text slides become cards / big-number callouts; optional `layout` cards | bignumber | quote.
 - tables from `table_rows` (check against the crop), equations as their crop (`"ref":"Eq. N"`), symbols with
   `^`/`_` markup (`O(n^2 · d)`, `d_k`, `2.3 · 10^19`); field details in `references/formats.md`.
 

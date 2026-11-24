@@ -75,6 +75,12 @@ Start from `$SKILL/templates/spec_template.json`; full field list in `references
 - Numbers exactly as in the paper (precision, unit). Computed values → `derived` with formula.
 - Chinese task → Chinese slide text, `meta.lang:"zh"`, technical terms/numbers unchanged.
 - Long spec? Write slides 1–7 in spec.json and the rest in spec2.json (`--spec` twice).
+- Design is automatic (`references/slide_rules.md` §8, sizes in `type_scale.json`): 1–4 short bullets become
+  cards, a results bullet holding one number with a unit or % (27.9%, 3.5×) a big-number card, figures get ≥ 55 %
+  of the width, bars start at 0 with the paper's method highlighted. So: one idea and at most one key number per
+  bullet, "Head: detail" phrasing.
+  Optional: `layout` cards | bignumber | quote | two_column, `role` outline (numbered agenda) / section
+  (divider), `takeaway` (one-sentence bottom bar; its numbers are checked) on results and conclusion slides.
 
 ## 5. Build, check, render, look (2–4 calls) — a full deliverable exists after the first run
 ```bash

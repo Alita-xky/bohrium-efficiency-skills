@@ -12,7 +12,9 @@ Checks (render_report.json, level fail|warn):
   effective font size, template inheritance resolved), body text < min pt (captions/footers >= 9-10 pt),
   shapes outside the slide, overlapping content shapes, stretched pictures, missing speaker notes,
   fonts: theme + hard-coded fonts resolved with fc-match (available / metric-compatible / substituted),
-  fonts actually embedded in the PDF (pdffonts), slide titles findable in the PDF text layer.
+  fonts actually embedded in the PDF (pdffonts), slide titles findable in the PDF text layer; design warnings:
+  content slide whose content fills < 50 % of the area between title and footer, body text < 14 pt, native bar
+  chart whose value axis does not start at 0.
 Missing tools are reported as such (status render_failed / previews_missing); nothing is faked.
 """
 import argparse, json, os, re, shutil, sys
@@ -146,11 +148,82 @@ def pdf_page_texts(pdf):
         return None
 
 
+DESIGN_MIN_PT = 14.0
+
+
+def bar_axis_issue(pkg, chart_part):
+    """native bar chart whose value axis has no fixed minimum 0 (auto-scaled axes may start at e.g. 22)"""
+    import xml.etree.ElementTree as ET
+    C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+    try:
+        root = ET.fromstring(pkg.read(chart_part))
+    except Exception:
+        return None
+    if root.find(".//" + C + "barChart") is None and root.find(".//" + C + "bar3DChart") is None:
+        return None
+    for ax in root.iter(C + "valAx"):
+        sc = ax.find(C + "scaling")
+        mn = sc.find(C + "min") if sc is not None else None
+        lg = sc.find(C + "logBase") if sc is not None else None
+        if lg is not None:
+            return "bar chart on a log axis (no zero baseline)"
+        if mn is None:
+            return "bar chart value axis is auto-scaled (may not start at 0): set its minimum to 0"
+        try:
+            if float(mn.get("val", "0")) != 0:
+                return "bar chart value axis starts at %s, not 0 (exaggerates differences)" % mn.get("val")
+        except ValueError:
+            pass
+    return None
+
+
+def fill_ratio(s, W, H, kinds):
+    """share of the content area (title bottom .. footer top) covered by content: text = box width x estimated
+    text height, pictures/tables/charts/filled shapes = their box. None for title/section/blank slides."""
+    if kinds & {"title", "section", "blank"}:
+        return None
+    sh_all = [sh for sh in s["shapes"] if sh.get("box")]
+    titles = [sh for sh in sh_all if sh.get("ph_type") in ("title", "ctrTitle")]
+    if not titles:
+        return None
+    tb = titles[0]["box"]
+    top = tb[1] + tb[3]
+    foot = [sh["box"][1] for sh in sh_all if sh.get("ph_type") in ("ftr", "sldNum", "dt") or sh["name"].startswith(("Footer", "Slide Number"))]
+    bottom = min([y for y in foot if y > top] or [int(H * 0.93)])
+    if bottom - top < H * 0.2:
+        return None
+    rects = []
+    for sh in sh_all:
+        if sh in titles or sh.get("ph_type") in ("ftr", "sldNum", "dt") or sh["name"].startswith(("Footer", "Slide Number", "Source Note", "Date")):
+            continue
+        b = sh["box"]
+        if sh["kind"] in ("picture", "table", "chart", "graphic", "group"):
+            rects.append(b)
+        elif sh.get("text", "").strip():
+            ov = K.estimate_overflow(sh)
+            th = min(b[3], int(ov[0] * K.EMU_PT)) if ov else b[3]
+            y = b[1] + ((b[3] - th) // 2 if sh.get("anchor") == "ctr" else (b[3] - th if sh.get("anchor") == "b" else 0))
+            rects.append([b[0], y, b[2], th])
+        elif sh["kind"] == "shape" and b[2] > W * 0.05 and b[3] > H * 0.05:
+            rects.append(b)  # card / panel backgrounds are part of the design
+    nx, ny = 64, 32
+    x0, x1 = int(W * 0.03), int(W * 0.97)
+    hit = 0
+    for i in range(nx):
+        x = x0 + (x1 - x0) * (i + 0.5) / nx
+        for j in range(ny):
+            y = top + (bottom - top) * (j + 0.5) / ny
+            if any(r[0] <= x <= r[0] + r[2] and r[1] <= y <= r[1] + r[3] for r in rects):
+                hit += 1
+    return hit / float(nx * ny)
+
+
 def check_deck(pptx, min_body, issues):
     pkg = K.Package(pptx)
     cat = K.catalog(pkg)
     inv = K.inventory(pkg, cat)
     W, H = inv["slide_w"], inv["slide_h"]
+    lay_kinds = {l["part"]: set(l["kinds"]) for l in cat["layouts"]}
     tol = int(0.05 * K.EMU_IN)
     per = []
     used_fonts = {}
@@ -189,6 +262,12 @@ def check_deck(pptx, min_body, issues):
                     add("fail" if not aux else "warn", i, "font %.1f pt below %s pt minimum" % (mf, floor), sh["name"])
                 elif sh["kind"] == "table" and mf < min_body:
                     add("warn", i, "table font %.1f pt (< %s pt body size)" % (mf, min_body), sh["name"])
+                elif not aux and sh["kind"] != "table" and mf < DESIGN_MIN_PT:
+                    add("warn", i, "body text %.1f pt (< %.0f pt is hard to read in a talk): shorten or split" % (mf, DESIGN_MIN_PT), sh["name"])
+            if sh.get("chart_part"):
+                msg = bar_axis_issue(pkg, sh["chart_part"])
+                if msg:
+                    add("warn", i, msg, sh["name"])
             ov = K.estimate_overflow(sh) if sh["kind"] != "table" else None
             if ov:
                 need, avail = ov
@@ -226,8 +305,14 @@ def check_deck(pptx, min_body, issues):
                 small = min(A_[2] * A_[3], B_[2] * B_[3]) or 1
                 if ix * iy > 0.15 * small:
                     add("warn", i, "shapes overlap (%s / %s)" % (content[a_i]["name"], content[b_i]["name"]))
+        lay = lay_kinds.get(s.get("layout_part"), set())
+        fr = fill_ratio(s, W, H, lay)
+        if fr is not None and fr < 0.5:
+            add("warn", i, "content fills only %d%% of the content area (> 50%% empty): use larger text/figure, cards, or merge "
+                "with another slide" % round(fr * 100))
         per.append(dict(slide=i, layout=s["layout"], title=s["title"][:120], n_text_shapes=len(texts), n_pictures=len(pics),
-                        n_tables=len(tables), notes_chars=len(s["notes"]), min_font_pt=min(mins) if mins else None))
+                        n_tables=len(tables), notes_chars=len(s["notes"]), min_font_pt=min(mins) if mins else None,
+                        fill=round(fr, 2) if fr is not None else None))
     fonts = []
     for f, where in sorted(used_fonts.items()):
         st = K.font_status(f)
@@ -334,6 +419,15 @@ def main():
                slide_size_in=[K.to_in(inv["slide_w"]), K.to_in(inv["slide_h"])], fonts=fonts, pdf_fonts=embedded,
                font_notes=font_notes, theme=inv.get("theme"), layouts=inv.get("layouts"), per_slide=per, issues=issues,
                n_fail=len(fails), n_warn=len(issues) - len(fails))
+    try:  # the deck's type scale (written by deck_build) and how many text sizes are off it (deck_check scale)
+        import deck_check as DC
+        ts_issues, ts = DC.scale_issues(a.pptx)
+        if ts is not None:
+            rep["type_scale"] = dict(path=os.path.join(os.path.dirname(os.path.abspath(a.pptx)), "type_scale.json"),
+                                     title_pt=(ts.get("title") or {}).get("size_pt"), body_ladder=(ts.get("body") or {}).get("ladder"),
+                                     off_scale=len(ts_issues), off_scale_slides=sorted({x["slide"] for x in ts_issues}))
+    except Exception as e:
+        rep["type_scale"] = dict(error=repr(e))
     rp = a.report or os.path.join(a.outdir, "render_report.json")
     with open(rp, "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=1)
