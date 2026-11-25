@@ -129,6 +129,10 @@ Edit mode needs no spec: inventory → ops.json → the command above.
 - Nodes: short labels are drawn **filled** in their category colour with white bold text (default); add
   `"sub"` for a second, smaller line (role, compartment, unit or condition from the source). Long text
   blocks stay light automatically (or `"style":"outline"`).
+- Steps with parameters: give `"sub"` as a **list** (`["IL-4 50 ng/mL", "GM-CSF 10 ng/mL", "5 d"]`) and the
+  node becomes a **card** — colour header with the step name, bulleted parameters below. Use cards for
+  set-up steps, route stages, method steps and conditions: every parameter the source states (dose,
+  time, temperature, instrument, n) belongs on the figure, each with its source.
 - Layout: the main chain in one column (top→bottom or left→right); side branches and mutual pairs
   (A ⇄ B) stacked in a parallel column. Never make a chain arrow pass between two side-by-side boxes.
   Opposite pairs become two parallel lines; blocked arrows get orthogonal elbows automatically

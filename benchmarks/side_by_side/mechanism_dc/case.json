@@ -1,0 +1,5 @@
+{"case_id": "mech-dc-bottleneck-03",
+ "workorder": "biological_mechanism_pathway",
+ "source": {"paper": "arXiv:1607.07244", "target_figure": "figure03"},
+ "materials": ["1607.07244.pdf"],
+ "output_contract": ["case_id", "editable_source", "exports", "source_map", "relation_table", "checks", "uncertainty", "status"]}

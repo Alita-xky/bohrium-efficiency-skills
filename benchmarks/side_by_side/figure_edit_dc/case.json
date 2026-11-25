@@ -1,0 +1,9 @@
+{"case_id": "edit-dc-mechanism-04",
+ "workorder": "biological_mechanism_pathway",
+ "mode": "edit",
+ "materials": ["figure03_mechanism.svg", "1607.07244.pdf"],
+ "output_contract": {"fields": {"edited_source": "编辑后的 SVG（保留原图层与 id）",
+                                "exports": "PDF/PNG",
+                                "change_log": "每处修改的前后值与原文依据",
+                                "unchanged_check": "未要求修改的元素是否保持不变",
+                                "status": "complete|partial|failed"}}}

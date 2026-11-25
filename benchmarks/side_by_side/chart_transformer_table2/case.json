@@ -1,0 +1,10 @@
+{"case_id": "chart-transformer-table2-02",
+ "workorder": "source_value_chart",
+ "materials": {"paper": "1706.03762.pdf", "data": "table2_transformer.csv",
+               "data_note": "table2_transformer.csv 由组织方按原文 Table 2 逐格转录；空格表示原文未报告；Transformer 两行的训练成本在原文中跨 EN-DE/EN-FR 两列合并显示"},
+ "output_contract": {"editable_source": "分层可编辑 SVG 路径",
+                     "exports": "PDF/PNG 路径、像素尺寸、dpi",
+                     "value_source_map": "每个绘制数值 -> CSV 行列 + 原文 Table 2 定位",
+                     "checks": "坐标轴/单位/图例/数值核对结果",
+                     "missing_values": "未报告数值的处理方式",
+                     "status": "complete|partial|failed"}}

@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `schematic`)
 
-Generated 2026-11-25 11:09 by `python3 scripts/gain_check.py --mode schematic --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-25 11:25 by `python3 scripts/gain_check.py --mode schematic --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
@@ -53,3 +53,18 @@ Flagged before delivery by B: **8/8**; A: 0 flagged (1 runs crashed without a de
 - One synthetic example per figure type; the platform's 3 hidden cases are different.
 - A is the library default, not a skilled human or the DeepSeek baseline agent; an agent could add some of B's settings by hand. The defect rows show what is caught automatically, not what a careful agent might notice.
 - Checks are string/geometry level: a wrong but quoted relation, or a poor choice of what to show, is not caught.
+
+## Side-by-side runs with a real agent (2026-11-25)
+
+Same case, same prompt and budget wording as the platform (64 requests / 900 s), one agent run **without**
+and one **with** this Skill; agent = Claude Haiku 5.5 headless (a stand-in: the platform uses a DeepSeek
+harness), cases written by us from public arXiv papers (`benchmarks/side_by_side/` in the repository). We
+compared the delivered files and their renders by eye and by the run's own reports. One run per arm — read it
+as a qualitative check, not a score.
+
+
+| | without Skill | with Skill v1.5 |
+|---|---|---|
+| case | study-design schematic of arXiv:1607.07244 (cells → stimulation → interventions → readouts) | same |
+| delivered | SVG + PDF + PNG; Chinese labels came out blank in its own PDF/PNG (no CJK font handling), marked `partial` | four numbered panels (source / stimulation / interventions / readouts), doses and times from the paper, legend for step / condition / intervention / readout, `complete` |
+| proof | element map without quote check | every element sourced and quote-checked, `rubric_coverage` (structure / process / relations / legend / units / panel labels) |

@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="720pt" height="468pt" viewBox="0 0 720 468" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-23T15:38:01.621382</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 468 
+L 720 468 
+L 720 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="layer:canvas">
+   <g id="panel:ext">
+    <path d="M 28.08 216.684 
+L 691.92 216.684 
+Q 700.56 216.684 700.56 211.068 
+L 700.56 51.012 
+Q 700.56 45.396 691.92 45.396 
+L 28.08 45.396 
+Q 19.44 45.396 19.44 51.012 
+L 19.44 211.068 
+Q 19.44 216.684 28.08 216.684 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #fbf6ee; stroke: #9aa5b1; stroke-linejoin: miter"/>
+   </g>
+   <g id="panel:cell">
+    <path d="M 28.08 422.604 
+L 691.92 422.604 
+Q 700.56 422.604 700.56 416.988 
+L 700.56 247.572 
+Q 700.56 241.956 691.92 241.956 
+L 28.08 241.956 
+Q 19.44 241.956 19.44 247.572 
+L 19.44 416.988 
+Q 19.44 422.604 28.08 422.604 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #f3f8fd; stroke: #9aa5b1; stroke-linejoin: miter"/>
+   </g>
+   <g id="lps:shape">
+    <path d="M 116.352 147.888 
+C 134.300946 147.888 151.517166 145.225183 164.208987 140.486003 
+C 176.900808 135.746822 184.032 129.318213 184.032 122.616 
+C 184.032 115.913787 176.900808 109.485178 164.208987 104.745997 
+C 151.517166 100.006817 134.300946 97.344 116.352 97.344 
+C 98.403054 97.344 81.186834 100.006817 68.495013 104.745997 
+C 55.803192 109.485178 48.672 115.913787 48.672 122.616 
+C 48.672 129.318213 55.803192 135.746822 68.495013 140.486003 
+C 81.186834 145.225183 98.403054 147.888 116.352 147.888 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #f2f2f2; stroke: #555555; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="tnf:shape">
+    <path d="M 300.24 149.76 
+L 419.76 149.76 
+Q 430.56 149.76 430.56 142.74 
+L 430.56 102.492 
+Q 430.56 95.472 419.76 95.472 
+L 300.24 95.472 
+Q 289.44 95.472 289.44 102.492 
+L 289.44 142.74 
+Q 289.44 149.76 300.24 149.76 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #fbe3d6; stroke: #d55e00; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="il10:shape">
+    <path d="M 543.888 149.76 
+L 663.408 149.76 
+Q 674.208 149.76 674.208 142.74 
+L 674.208 102.492 
+Q 674.208 95.472 663.408 95.472 
+L 543.888 95.472 
+Q 533.088 95.472 533.088 102.492 
+L 533.088 142.74 
+Q 533.088 149.76 543.888 149.76 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #dcebf7; stroke: #0072b2; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="bn:shape">
+    <path d="M 312.624 325.1664 
+C 339.547419 325.1664 365.371748 322.543032 384.40948 317.874062 
+C 403.447212 313.205092 414.144 306.871721 414.144 300.2688 
+C 414.144 293.665879 403.447212 287.332508 384.40948 282.663538 
+C 365.371748 277.994568 339.547419 275.3712 312.624 275.3712 
+C 285.700581 275.3712 259.876252 277.994568 240.83852 282.663538 
+C 221.800788 287.332508 211.104 293.665879 211.104 300.2688 
+C 211.104 306.871721 221.800788 313.205092 240.83852 317.874062 
+C 259.876252 322.543032 285.700581 325.1664 312.624 325.1664 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #eeeeee; stroke: #555555; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="cd86:shape">
+    <path d="M 219.024 405.288 
+L 406.224 405.288 
+Q 417.024 405.288 417.024 398.268 
+L 417.024 362.3256 
+Q 417.024 355.3056 406.224 355.3056 
+L 219.024 355.3056 
+Q 208.224 355.3056 208.224 362.3256 
+L 208.224 398.268 
+Q 208.224 405.288 219.024 405.288 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #e9f6f1; stroke: #009e73; stroke-width: 1.4; stroke-linejoin: miter"/>
+   </g>
+   <g id="a_lps_bn">
+    <path d="M 144.233717 147.852739 
+Q 214.056725 211.052038 282.55348 273.050898 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 280.280636 267.217016 
+L 282.55348 273.050898 
+L 276.522668 271.368844 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="a_lps_tnf">
+    <path d="M 186.735858 122.616 
+Q 236.737921 122.616 284.951129 122.616 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 279.351129 119.816 
+L 284.951129 122.616 
+L 279.351129 125.416 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="a_lps_il10">
+    <path d="M 186.735551 122.616 
+Q 358.559635 122.616 528.594865 122.616 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 522.994865 119.816 
+L 528.594865 122.616 
+L 522.994865 125.416 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="a_tnf_bn">
+    <path d="M 352.060322 152.388587 
+Q 336.005394 212.592126 320.411405 271.067215 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 324.559821 266.377797 
+L 320.411405 271.067215 
+L 319.14892 264.934831 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="a_tnf_il10">
+    <path d="M 423.961444 150.918334 
+Q 481.822804 167.407726 537.9638 151.409266 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 531.810843 150.251198 
+L 537.9638 151.409266 
+L 533.345571 155.636791 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="i_il10_tnf">
+    <path d="M 539.686556 94.313666 
+Q 481.825196 77.824274 423.963836 94.312985 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #0072b2; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 421.853584 86.907795 
+L 421.853584 86.907795 
+L 426.074087 101.718175 
+L 426.074087 101.718175 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #0072b2; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="a_bn_cd86">
+    <path d="M 312.624 327.871742 
+Q 312.624 340.239316 312.624 350.818035 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 315.424 345.218035 
+L 312.624 350.818035 
+L 309.824 345.218035 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="i_il10_cd86">
+    <path d="M 570.706175 151.783614 
+Q 456.92238 252.530973 343.138584 353.278333 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #0072b2; stroke-width: 1.6; stroke-linecap: round"/>
+    <path d="M 338.034138 347.513385 
+L 338.034138 347.513385 
+L 348.243031 359.043281 
+L 348.243031 359.043281 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #0072b2; stroke-width: 1.6; stroke-linecap: round"/>
+   </g>
+   <g id="title">
+    <text style="font-weight: 700; font-size: 17.6px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(61.772125 13.696609)">Modulated bottleneck model of DC maturation (redrawn from Marcou et</text>
+    <text style="font-weight: 700; font-size: 17.6px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(319.419625 32.852422)">al., Fig. 3)</text>
+   </g>
+   <g id="panel:ext:title">
+    <text style="font-weight: 700; font-size: 12.1px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #111111" x="360" y="55.828029" transform="rotate(-0 360 55.828029)">Extracellular medium: exogenous (LPS) and endogenous (cytokine) signals</text>
+   </g>
+   <g id="lps">
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(74.472937 119.476381)">LPS (TLR ligand,</text>
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(87.611062 131.448764)">exogenous)</text>
+   </g>
+   <g id="tnf">
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(332.990703 119.476381)">TNFα (pro-</text>
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(326.690625 131.448764)">inflammatory)</text>
+   </g>
+   <g id="il10">
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(577.0555 119.476381)">IL-10 (anti-</text>
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(570.338625 131.448764)">inflammatory)</text>
+   </g>
+   <g id="tnf_range">
+    <text style="font-style: italic; font-size: 8.5px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #111111" x="360" y="173.687358" transform="rotate(-0 360 173.687358)">autocrine, short range</text>
+   </g>
+   <g id="il10_range">
+    <text style="font-style: italic; font-size: 8.5px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #111111" x="603.648" y="173.687358" transform="rotate(-0 603.648 173.687358)">paracrine, long range</text>
+   </g>
+   <g id="panel:cell:title">
+    <text style="font-weight: 700; font-size: 12.1px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #111111" x="360" y="252.715748" transform="rotate(-0 360 252.715748)">Dendritic cell</text>
+   </g>
+   <g id="bn">
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(259.744078 297.129288)">common intermediate</text>
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; fill: #111111" transform="translate(256.073688 309.101456)">(bottleneck / integrator)</text>
+   </g>
+   <g id="cd86">
+    <text style="font-size: 11px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #111111" x="312.624" y="383.143372" transform="rotate(-0 312.624 383.143372)">CD86 (DC maturation marker)</text>
+   </g>
+   <g id="lg:handle:0">
+    <path d="M 471.168 272.255657 
+L 482.688 272.255657 
+L 482.688 260.735657 
+L 471.168 260.735657 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #555555; stroke: #333333; stroke-width: 0.5; stroke-linejoin: miter"/>
+   </g>
+   <g id="lg:label:0">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="270.581892" transform="rotate(-0 491.328 270.581892)">Exogenous microbial signal</text>
+   </g>
+   <g id="lg:handle:1">
+    <path d="M 471.168 294.104571 
+L 482.688 294.104571 
+L 482.688 282.584571 
+L 471.168 282.584571 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #d55e00; stroke: #333333; stroke-width: 0.5; stroke-linejoin: miter"/>
+   </g>
+   <g id="lg:label:1">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="292.430806" transform="rotate(-0 491.328 292.430806)">Pro-inflammatory cytokine</text>
+   </g>
+   <g id="lg:handle:2">
+    <path d="M 471.168 315.953486 
+L 482.688 315.953486 
+L 482.688 304.433486 
+L 471.168 304.433486 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #0072b2; stroke: #333333; stroke-width: 0.5; stroke-linejoin: miter"/>
+   </g>
+   <g id="lg:label:2">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="314.27972" transform="rotate(-0 491.328 314.27972)">Anti-inflammatory cytokine</text>
+   </g>
+   <g id="lg:handle:3">
+    <path d="M 471.168 337.8024 
+L 482.688 337.8024 
+L 482.688 326.2824 
+L 471.168 326.2824 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #555555; stroke: #333333; stroke-width: 0.5; stroke-linejoin: miter"/>
+   </g>
+   <g id="lg:label:3">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="336.128634" transform="rotate(-0 491.328 336.128634)">Integrator</text>
+   </g>
+   <g id="lg:handle:4">
+    <path d="M 471.168 359.651314 
+L 482.688 359.651314 
+L 482.688 348.131314 
+L 471.168 348.131314 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #009e73; stroke: #333333; stroke-width: 0.5; stroke-linejoin: miter"/>
+   </g>
+   <g id="lg:label:4">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="357.977627" transform="rotate(-0 491.328 357.977627)">Maturation readout</text>
+   </g>
+   <g id="lg:handle:5">
+    <path d="M 471.727336 377.756229 
+Q 477.649153 377.756229 482.117526 377.756229 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #333333; stroke-width: 1.3; stroke-linecap: round"/>
+    <path d="M 478.117526 375.756229 
+L 482.117526 377.756229 
+L 478.117526 379.756229 
+z
+" clip-path="url(#p7636acc7c4)" style="fill: #333333; stroke: #333333; stroke-width: 1.3; stroke-linecap: round"/>
+   </g>
+   <g id="lg:label:5">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="379.826463" transform="rotate(-0 491.328 379.826463)">activates / upregulates</text>
+   </g>
+   <g id="lg:handle:6">
+    <path d="M 471.727336 399.605143 
+Q 477.649153 399.605143 483.570971 399.605143 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #0072b2; stroke-width: 1.3; stroke-linecap: round"/>
+    <path d="M 483.570971 405.105143 
+L 483.570971 405.105143 
+L 483.570971 394.105143 
+L 483.570971 394.105143 
+" clip-path="url(#p7636acc7c4)" style="fill: none; stroke: #0072b2; stroke-width: 1.3; stroke-linecap: round"/>
+   </g>
+   <g id="lg:label:6">
+    <text style="font-size: 8px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start" x="491.328" y="401.675377" transform="rotate(-0 491.328 401.675377)">inhibits / downregulates</text>
+   </g>
+   <g id="footnote">
+    <text style="font-size: 7.15px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: start; fill: #555555" x="7.2" y="459.475148" transform="rotate(-0 7.2 459.475148)">Source: Marcou et al. (arXiv:1607.07244), Fig. 3 caption (p4) and Results p3. Arrows are functional, not necessarily direct, interactions (as stated in the source).</text>
+   </g>
+   <g id="a_tnf_il10:label">
+    <g id="patch_2">
+     <path d="M 460.268297 118.2375 
+L 503.379703 118.2375 
+Q 504.617203 118.2375 504.617203 117 
+L 504.617203 109.257407 
+Q 504.617203 108.019907 503.379703 108.019907 
+L 460.268297 108.019907 
+Q 459.030797 108.019907 459.030797 109.257407 
+L 459.030797 117 
+Q 459.030797 118.2375 460.268297 118.2375 
+z
+" style="fill: #ffffff; opacity: 0.85"/>
+    </g>
+    <text style="font-size: 8.25px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #333333" x="481.824" y="115.263633" transform="rotate(-0 481.824 115.263633)">upregulates</text>
+   </g>
+   <g id="i_il10_tnf:label">
+    <g id="patch_3">
+     <path d="M 454.995387 118.2375 
+L 508.652613 118.2375 
+Q 509.890113 118.2375 509.890113 117 
+L 509.890113 109.257407 
+Q 509.890113 108.019907 508.652613 108.019907 
+L 454.995387 108.019907 
+Q 453.757887 108.019907 453.757887 109.257407 
+L 453.757887 117 
+Q 453.757887 118.2375 454.995387 118.2375 
+z
+" style="fill: #ffffff; opacity: 0.85"/>
+    </g>
+    <text style="font-size: 8.25px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #0072b2" x="481.824" y="115.263633" transform="rotate(-0 481.824 115.263633)">downregulates</text>
+   </g>
+   <g id="i_il10_cd86:label">
+    <g id="patch_4">
+     <path d="M 415.493168 247.0779 
+L 500.778832 247.0779 
+Q 502.016332 247.0779 502.016332 245.8404 
+L 502.016332 238.097968 
+Q 502.016332 236.860468 500.778832 236.860468 
+L 415.493168 236.860468 
+Q 414.255668 236.860468 414.255668 238.097968 
+L 414.255668 245.8404 
+Q 414.255668 247.0779 415.493168 247.0779 
+z
+" style="fill: #ffffff; opacity: 0.85"/>
+    </g>
+    <text style="font-size: 8.25px; font-family: 'Arial', 'DejaVu Sans'; text-anchor: middle; fill: #0072b2" x="458.136" y="244.104194" transform="rotate(-0 458.136 244.104194)">modulates downstream</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p7636acc7c4">
+   <rect x="0" y="0" width="720" height="468"/>
+  </clipPath>
+ </defs>
+</svg>

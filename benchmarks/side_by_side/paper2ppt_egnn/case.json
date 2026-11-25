@@ -1,0 +1,22 @@
+{
+ "case_id": "dogfood-p2p-egnn-zh12",
+ "task": "将 egnn_icml2021.pdf 转为 12 页中文组会汇报 PPT（含讲解备注）",
+ "materials": [
+  "egnn_icml2021.pdf"
+ ],
+ "constraints": {
+  "slides": 12,
+  "language": "zh-CN",
+  "minutes": 15,
+  "audience": "计算化学/分子模拟方向研究生，熟悉 GNN，不熟悉等变网络"
+ },
+ "output_contract": {
+  "editable_deck": "可编辑 pptx 路径（含讲解备注）",
+  "exports": "PDF 与逐页 PNG 预览路径",
+  "page_evidence_map": "每页 -> 论文图/表/章节/页码定位",
+  "speaker_notes": "逐页讲解备注（不重复页面文字）",
+  "render_and_version_record": "源文件、导出件、字体/模板、修改记录",
+  "uncertainty": "无法核验或缺失的内容",
+  "status": "complete|partial|failed"
+ }
+}

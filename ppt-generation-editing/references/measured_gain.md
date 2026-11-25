@@ -34,3 +34,18 @@ For this single text edit python-pptx also leaves the untouched parts byte-ident
 
 - One synthetic example; the platform's 3 hidden cases differ. A is a plain script, not the DeepSeek baseline agent or a careful human; an agent could add some of B's steps by hand.
 - Checks are text/geometry level: whether a slide's emphasis or story is good is not machine-verified.
+
+## Side-by-side runs with a real agent (2026-11-25)
+
+Same case, same prompt and budget wording as the platform (64 requests / 900 s), one agent run **without**
+and one **with** this Skill; agent = Claude Haiku 5.5 headless (a stand-in: the platform uses a DeepSeek
+harness), cases written by us from public arXiv papers (`benchmarks/side_by_side/` in the repository). We
+compared the delivered files and their renders by eye and by the run's own reports. One run per arm — read it
+as a qualitative check, not a score.
+
+
+| | without Skill | with Skill v1.5 |
+|---|---|---|
+| case | five mentor edits on an EGNN group-meeting deck (arXiv:2102.09844) | same |
+| result | all edits applied with a slide diff and version copies | all edits applied as verified ops; untouched slides byte-identical; v0→v3 versions with rollback commands |
+| evidence | own diff file | `slide_diff.json/md`, `edit_log.json`, render check limited to changes the edits introduced, `rubric_coverage` |

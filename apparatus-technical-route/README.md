@@ -24,6 +24,9 @@ addressed ids of the original SVG and log before/after values.
   an icon only for an object the step names (`"icon":"plant"`).
 - Conditions (temperature, time, flow rate, wavelength, concentration, model numbers) appear only if
   the source states them, copied with units; otherwise write "not reported" (see example note).
+  Put them **on the figure**: each stage/instrument a card whose `"sub"` list holds all its stated
+  parameters (e.g. `["100 ng/mL", "24 h", "37 °C"]`) — a route of bare stage names looks empty next to
+  a hand-drawn figure that lists them.
 - Dimensions or scale bars only if reported; never imply a scale.
 - `fig_check.py --mode setup` fails a route whose stages are not connected in order.
 

@@ -1,0 +1,17 @@
+{
+ "case_id": "dogfood-edit-egnn-v1",
+ "materials": [
+  "egnn_groupmeeting_v1.pptx",
+  "egnn_icml2021.pdf"
+ ],
+ "output_contract": {
+  "revised_deck": "修改后的可编辑 pptx",
+  "renders": "PDF/PNG 预览",
+  "change_log": "逐条修改：页、对象、修改前/后、原因、来源",
+  "version_history": "版本列表与回滚方式",
+  "slide_diff": "逐页差异",
+  "evidence_check": "页面数字与论文的核对结果",
+  "uncertainty": "未完成或无法核验的内容",
+  "status": "complete|partial|failed"
+ }
+}

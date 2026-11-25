@@ -16,3 +16,6 @@ Each folder is a self-contained Skill (`SKILL.md` + scripts + templates + docs +
 | [`ppt-generation-editing/`](ppt-generation-editing/) | 学术 PPT 生成与编辑 | Source-preserving PPTX edits (text, slides, fonts, theme) with before/after log; untouched parts byte-identical. |
 
 License: MIT (see LICENSE).
+
+## Side-by-side cases
+`benchmarks/side_by_side/` holds ten cases (task + contract, papers by arXiv link) and a one-command script to run an agent with and without any of these Skills; our observations are in each Skill's `references/measured_gain.md`.

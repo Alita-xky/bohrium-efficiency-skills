@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `mechanism`)
 
-Generated 2026-11-25 11:09 by `python3 scripts/gain_check.py --mode mechanism --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-25 11:26 by `python3 scripts/gain_check.py --mode mechanism --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
@@ -53,3 +53,19 @@ Flagged before delivery by B: **8/8**; A: 0 flagged (1 runs crashed without a de
 - One synthetic example per figure type; the platform's 3 hidden cases are different.
 - A is the library default, not a skilled human or the DeepSeek baseline agent; an agent could add some of B's settings by hand. The defect rows show what is caught automatically, not what a careful agent might notice.
 - Checks are string/geometry level: a wrong but quoted relation, or a poor choice of what to show, is not caught.
+
+## Side-by-side runs with a real agent (2026-11-25)
+
+Same case, same prompt and budget wording as the platform (64 requests / 900 s), one agent run **without**
+and one **with** this Skill; agent = Claude Haiku 5.5 headless (a stand-in: the platform uses a DeepSeek
+harness), cases written by us from public arXiv papers (`benchmarks/side_by_side/` in the repository). We
+compared the delivered files and their renders by eye and by the run's own reports. One run per arm — read it
+as a qualitative check, not a score.
+
+
+| | without Skill | with Skill v1.4 | with Skill v1.5 |
+|---|---|---|---|
+| case | Fig. 3 model of arXiv:1607.07244 (LPS, TNFα, IL-10, bottleneck, CD86) | same | same |
+| relations | 8, numbered R1–R8, no quotes | 8, each with a verbatim quote | 8, each with a verbatim quote |
+| look | clean: orthogonal elbows, filled nodes, arrow samples in the legend | curved arrows crossing, labels on lines, arrow kinds shown as squares in the legend; agent stopped at `partial` | filled nodes with role sub-lines, mutual pair as two parallel lines, arrow samples in the legend, no crossing left |
+| proof | none | layer map, quote check, reproducible export | same + `rubric_coverage` (branch points, feedback loops listed) |

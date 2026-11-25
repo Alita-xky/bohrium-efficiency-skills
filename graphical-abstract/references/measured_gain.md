@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `graphical_abstract`)
 
-Generated 2026-11-25 11:10 by `python3 scripts/gain_check.py --mode graphical_abstract --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-25 11:26 by `python3 scripts/gain_check.py --mode graphical_abstract --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
@@ -53,3 +53,18 @@ Flagged before delivery by B: **8/8**; A: 0 flagged (1 runs crashed without a de
 - One synthetic example per figure type; the platform's 3 hidden cases are different.
 - A is the library default, not a skilled human or the DeepSeek baseline agent; an agent could add some of B's settings by hand. The defect rows show what is caught automatically, not what a careful agent might notice.
 - Checks are string/geometry level: a wrong but quoted relation, or a poor choice of what to show, is not caught.
+
+## Side-by-side runs with a real agent (2026-11-25)
+
+Same case, same prompt and budget wording as the platform (64 requests / 900 s), one agent run **without**
+and one **with** this Skill; agent = Claude Haiku 5.5 headless (a stand-in: the platform uses a DeepSeek
+harness), cases written by us from public arXiv papers (`benchmarks/side_by_side/` in the repository). We
+compared the delivered files and their renders by eye and by the run's own reports. One run per arm — read it
+as a qualitative check, not a score.
+
+
+| | without Skill | with Skill v1.4 | with Skill v1.5/1.6 |
+|---|---|---|---|
+| case | arXiv:1607.07244, Chinese four-part graphical abstract | same | same |
+| look | dense: header band, numbered steps with doses, mini chart, limits box | sparse: four plain panels, one sentence per box | numbered colour headers, steps with conditions, key numbers with units, model diagram; v1.6 parameter cards |
+| proof | none | element → source map, chart → CSV binding | same + glyph read-back + `rubric_coverage` (question / method / result / conclusion) |

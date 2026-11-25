@@ -1,0 +1,24 @@
+{
+ "case_id": "dogfood-tpl-transformer-16x9",
+ "materials": [
+  "draft_transformer_talk.pptx",
+  "group_template.potx",
+  "attention_is_all_you_need.pdf"
+ ],
+ "constraints": {
+  "template": "group_template.potx (16:9)",
+  "keep_content": true,
+  "language": "zh-CN"
+ },
+ "output_contract": {
+  "adapted_pptx": "套用模板后的可编辑 pptx",
+  "rendered_exports": "PDF/PNG 预览",
+  "layout_mapping": "原页 -> 模板版式映射",
+  "format_compliance": "逐页格式偏差（适配前/后）与修正记录",
+  "content_preservation": "文字、数字、图片、备注是否完整保留",
+  "source_trace": "页面内容 -> 论文定位",
+  "change_record": "修改记录、字体与模板版本",
+  "uncertainty": "无法核验或未能保留的内容",
+  "status": "complete|partial|failed"
+ }
+}

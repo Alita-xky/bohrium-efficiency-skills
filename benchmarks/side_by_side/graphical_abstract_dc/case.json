@@ -1,0 +1,8 @@
+{"case_id": "ga-dc-signal-integration-01",
+ "workorder": "graphical_abstract",
+ "task_file": "task.md",
+ "materials": ["1607.07244.pdf"],
+ "constraints": {"canvas": "16:9，宽度不小于 1600 px", "formats": ["svg", "pdf", "png"], "title_language": "zh"},
+ "output_contract": {
+   "required_fields": ["editable_source", "exports", "four_part_mapping", "element_source_map", "export_checks", "uncertainty", "status"],
+   "notes": "result.json 必须包含 case_id 与以上全部字段"}}

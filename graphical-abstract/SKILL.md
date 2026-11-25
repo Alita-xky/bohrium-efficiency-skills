@@ -36,8 +36,9 @@ contract field and an honest status), so a run that stops early still delivers. 
 - Four panels left → right with `role` problem | method | result | conclusion (`ga_check.py --mode
   graphical_abstract` fails if a role is missing); each gets a numbered colour header automatically.
   Each panel holds 2–4 short items in the paper's wording, each with a concrete number, name or
-  condition (dose, time, n, cell type) — e.g. method = numbered steps with conditions; conclusion =
-  the model as a small diagram plus one "limits" item. A GA is dense but readable, not four sentences.
+  condition (dose, time, n, cell type) — e.g. method = numbered steps as cards (`"sub"` as a list of the
+  step's conditions); conclusion = the model as a small diagram plus one "limits" item. A GA is dense
+  but readable, not four sentences.
 - Result panel: at least the key quantitative result(s) **with units**, copied from the source. A data
   file or a table → `chart` bound to it; numbers only in the text → chart with `data.values` and a
   `source.quote` that contains them, or a text box. Never estimate values from a plotted figure.
@@ -123,6 +124,10 @@ Edit mode needs no spec: inventory → ops.json → the command above.
 - Nodes: short labels are drawn **filled** in their category colour with white bold text (default); add
   `"sub"` for a second, smaller line (role, compartment, unit or condition from the source). Long text
   blocks stay light automatically (or `"style":"outline"`).
+- Steps with parameters: give `"sub"` as a **list** (`["IL-4 50 ng/mL", "GM-CSF 10 ng/mL", "5 d"]`) and the
+  node becomes a **card** — colour header with the step name, bulleted parameters below. Use cards for
+  set-up steps, route stages, method steps and conditions: every parameter the source states (dose,
+  time, temperature, instrument, n) belongs on the figure, each with its source.
 - Layout: the main chain in one column (top→bottom or left→right); side branches and mutual pairs
   (A ⇄ B) stacked in a parallel column. Never make a chain arrow pass between two side-by-side boxes.
   Opposite pairs become two parallel lines; blocked arrows get orthogonal elbows automatically

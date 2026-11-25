@@ -1,0 +1,1 @@
+{"case_id": "schem-dc-design-01", "workorder": "editable_relationship_schematic", "source": {"paper": "arXiv:1607.07244"}, "materials": ["1607.07244.pdf"], "output_contract": ["case_id", "editable_source", "exports", "element_source_map", "checks", "uncertainty", "status"]}

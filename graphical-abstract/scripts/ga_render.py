@@ -61,6 +61,15 @@ ARROW_WORDS = [("inhibit", "inhibits"), ("抑制", "inhibits"), ("⊣", "inhibit
                ("→", "activates"), ("->", "activates")]
 
 
+def tint(c, f=0.88):
+    """mix a colour with white (f = share of white)"""
+    try:
+        r, g, b_ = matplotlib.colors.to_rgb(c)
+    except Exception:
+        return "#F5F7FA"
+    return matplotlib.colors.to_hex((r + (1 - r) * f, g + (1 - g) * f, b_ + (1 - b_) * f))
+
+
 def luminance(c):
     try:
         r, g, b_ = matplotlib.colors.to_rgb(c)
@@ -1380,6 +1389,42 @@ def draw(spec, spec_dir, adj):
         for el in elements:
             eid = el["id"]
             typ = el.get("type", "entity")
+            sub_v = el.get("sub") or el.get("subtitle") or el.get("details")
+            sub_lines = sub_v if isinstance(sub_v, list) else ([sub_v] if sub_v else [])
+            is_card = typ == "entity" and el.get("shape", "round") != "ellipse" and not el.get("icon") and (
+                el.get("style") == "card" or (el.get("style") is None and (len(sub_lines) >= 2 or
+                                                                          sum(len(str(x)) for x in sub_lines) > 40)))
+            if is_card:   # step card: colour header with the name, light body with the source's parameters
+                b = parent.sub(el["x"], el["y"], el["w"], el["h"])
+                x, y = b.mpl_xy()
+                edge = el.get("edge", "#2B4C7E")
+                head_col = edge if luminance(edge) < 0.75 else "#2B4C7E"
+                fsz = el.get("size", base)
+                l1, _, h1 = est_lines(el.get("label", ""), b.w * 0.92, fsz)
+                hh = min(b.h * 0.45, (h1 + 0.10) / H)
+                body = FancyBboxPatch((x, y), b.w, b.h, boxstyle="round,pad=0.003,rounding_size=0.010",
+                                      facecolor=el.get("fill") if el.get("fill") and luminance(el.get("fill")) > 0.8 else tint(head_col, 0.90),
+                                      edgecolor=head_col, lw=1.2, zorder=3)
+                ax.add_patch(body)
+                body.set_gid(eid + ":shape")
+                head = FancyBboxPatch((x, y + b.h - hh), b.w, hh, boxstyle="round,pad=0.003,rounding_size=0.010",
+                                      facecolor=head_col, edgecolor=head_col, lw=1.2, zorder=3.05)
+                ax.add_patch(head)
+                head.set_gid(eid + ":header")
+                sq = Rectangle((x - 0.003, y + b.h - hh - 0.003), b.w + 0.006, min(hh, 0.012), facecolor=head_col,
+                               edgecolor="none", zorder=3.06)   # square the header's lower corners
+                ax.add_patch(sq)
+                sq.set_gid(eid + ":header_base")
+                t = put_text(eid, el.get("label", ""), b.x0 + b.w / 2, 1 - (b.y0 + hh / 2), fsz, weight="bold",
+                             color=el.get("text_color") or ("#FFFFFF" if luminance(head_col) < 0.55 else "#111111"), wrap_w=b.w * 0.92)
+                texts.append((eid, t, Box(b.x0, b.y0, b.w, hh)))
+                dsz = el.get("detail_size", fsz * 0.78)
+                det = "\n".join("• " + str(x_) if len(sub_lines) > 1 else str(x_) for x_ in sub_lines)
+                td = put_text(eid + ":sub", det, b.x0 + 0.006 + 0.004, 1 - (b.y0 + hh + 0.010), dsz, ha="left", va="top",
+                              color="#222222", wrap_w=b.w - 0.02)
+                texts.append((eid + ":sub", td, Box(b.x0, b.y0 + hh, b.w, b.h - hh)))
+                registry[eid] = dict(kind="entity", artist=body, text=t, box=b, icon=None)
+                continue
             if typ == "entity":
                 b = parent.sub(el["x"], el["y"], el["w"], el["h"])
                 x, y = b.mpl_xy()
@@ -1438,7 +1483,9 @@ def draw(spec, spec_dir, adj):
                     svg_groups.append(dict(id=eid + ":icon", rx=re.compile(re.escape(eid) + r":icon:p\d+$"), extra=[],
                                            label=f"icon: {icon}"))
                 fsz = el.get("size", base)
-                sub = el.get("sub") or el.get("subtitle")
+                sub = el.get("sub") or el.get("subtitle") or el.get("details")
+                if isinstance(sub, list):
+                    sub = " · ".join(map(str, sub))
                 if sub:   # second, smaller line under the label (role, unit, condition from the source)
                     lw_ = el.get("label", "")
                     l1, _, h1 = est_lines(lw_, wrap, fsz)
@@ -1479,9 +1526,15 @@ def draw(spec, spec_dir, adj):
                 n = max(1, len(entries))
                 fs = el.get("size", base * 0.8)
                 arts = []
+                # rows that fit at 1.7 line heights each; the rest flow into further columns
+                fit = max(1, int(b.h * H * 72 / (fs * 1.7)))
+                ncol = max(1, math.ceil(n / fit)) if el.get("columns") is None else int(el["columns"])
+                nrow = math.ceil(n / ncol)
+                colw = b.w / ncol
                 for i, e in enumerate(entries):
-                    cy = 1 - (b.y0 + b.h * (i + 0.5) / n)
-                    hx = b.x0 + 0.012
+                    ci_, ri_ = i // nrow, i % nrow
+                    cy = 1 - (b.y0 + b.h * (ri_ + 0.5) / nrow)
+                    hx = b.x0 + ci_ * colw + 0.012
                     m = e.get("marker")
                     col = e.get("color", "#333333")
                     if not m:   # an entry about an arrow kind gets a real arrow sample, not a colour square
@@ -1512,7 +1565,7 @@ def draw(spec, spec_dir, adj):
                                 va="center", ha="left", transform=ax.transAxes, zorder=6)
                     t.set_gid(lid)
                     arts.append(t)
-                    row = Box(hx + 0.018, b.y0 + b.h * i / n, max(0.01, b.x0 + b.w - hx - 0.018), b.h / n)
+                    row = Box(hx + 0.018, b.y0 + b.h * ri_ / nrow, max(0.01, b.x0 + (ci_ + 1) * colw - hx - 0.018), b.h / nrow)
                     texts.append((lid, t, row))
                 registry[eid] = dict(kind="legend", artist=arts, box=b, n_entries=len(entries))
             elif typ == "scalebar":

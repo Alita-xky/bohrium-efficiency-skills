@@ -1,0 +1,24 @@
+{
+ "case_id": "dogfood-talk-transformer-10min",
+ "materials": [
+  "attention_is_all_you_need.pdf"
+ ],
+ "constraints": {
+  "minutes": 10,
+  "main_slides": "8-10",
+  "backup_slides": "<=2",
+  "audience": "《深度学习》课程讨论课的本科高年级与研一学生，学过 RNN/LSTM，未系统学过注意力机制",
+  "language": "zh-CN（术语可保留英文）"
+ },
+ "output_contract": {
+  "talk_plan": "汇报目标、听众画像、分段时间预算、每页关键信息与过渡",
+  "slides": "可编辑 pptx（备注为讲稿）",
+  "previews": "PDF 与 PNG 渲染",
+  "timeline": "逐页起止时间",
+  "qa_prep": "至少 3 个可能的提问、回答要点、证据与备用页",
+  "evidence_mapping": "每页 -> 论文定位",
+  "version_log": "源文件、导出件、字体、修改记录",
+  "limitations": "未覆盖或无法核验的内容",
+  "status": "complete|partial|failed"
+ }
+}

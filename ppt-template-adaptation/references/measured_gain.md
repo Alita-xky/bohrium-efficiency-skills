@@ -28,3 +28,18 @@ Generated 2026-11-24 15:31 by `python3 scripts/gain_check.py --out <dir>` on the
 
 - One synthetic example; the platform's 3 hidden cases differ. A is a plain script, not the DeepSeek baseline agent or a careful human; an agent could add some of B's steps by hand.
 - Checks are text/geometry level: whether a slide's emphasis or story is good is not machine-verified.
+
+## Side-by-side runs with a real agent (2026-11-25)
+
+Same case, same prompt and budget wording as the platform (64 requests / 900 s), one agent run **without**
+and one **with** this Skill; agent = Claude Haiku 5.5 headless (a stand-in: the platform uses a DeepSeek
+harness), cases written by us from public arXiv papers (`benchmarks/side_by_side/` in the repository). We
+compared the delivered files and their renders by eye and by the run's own reports. One run per arm — read it
+as a qualitative check, not a score.
+
+
+| | without Skill | with Skill v1.4 | with Skill v1.5 |
+|---|---|---|---|
+| case | 8-slide Chinese draft on Transformer → group template (.potx) | same | same |
+| deck | layouts applied, but slide 3 title collides with the figure; Chinese blank in its own previews; `partial` | 100 % compliance (0 % before), all text preserved, "(续)" slides merged into the template's two-column layout; native chart only as an image → `partial` | same + the draft's native bar chart re-created as an **editable** chart from its data → `complete` |
+| evidence | before/after screenshots | `compliance_before/after.json`, `preserve.json`, numbers checked against the paper | same + `rubric_coverage` |

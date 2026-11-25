@@ -52,3 +52,19 @@ Flagged before delivery by B: **8/8**; A: 0 (the script writes whatever it is gi
 
 - One synthetic example; the platform's 3 hidden cases differ. A is a plain script, not the DeepSeek baseline agent or a careful human; an agent could add some of B's steps by hand.
 - Checks are text/geometry level: whether a slide's emphasis or story is good is not machine-verified.
+
+## Side-by-side runs with a real agent (2026-11-25)
+
+Same case, same prompt and budget wording as the platform (64 requests / 900 s), one agent run **without**
+and one **with** this Skill; agent = Claude Haiku 5.5 headless (a stand-in: the platform uses a DeepSeek
+harness), cases written by us from public arXiv papers (`benchmarks/side_by_side/` in the repository). We
+compared the delivered files and their renders by eye and by the run's own reports. One run per arm — read it
+as a qualitative check, not a score.
+
+
+| | without Skill | with Skill v1.4 | with Skill v1.5 |
+|---|---|---|---|
+| case | 12-slide Chinese lab-meeting deck on arXiv:2102.09844 (EGNN) | same | same |
+| deck | dense text slides with paper crops; Chinese blank in its own previews | clean cards, equations as crops, tables; some slides only 2–3 short points | paper figures, tables or equations on 6 of 12 slides, cards carry numbers with locators (no slide flagged by the new `thin_slide` check), CSV charts become editable native charts |
+| evidence | page map by hand | 34/34 quotes verified, every number found in the paper | same + `rubric_coverage` |
+| status | complete | complete | complete, 0 FAIL / 0 WARN |
