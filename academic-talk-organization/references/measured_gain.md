@@ -48,6 +48,17 @@ Flagged before delivery by B: **8/8**; A: 0 (the script writes whatever it is gi
 | list_of_objects | 4 | 4 | True |
 | chinese_names | 5 | 5 | True |
 
+## v1.4 talk checks on the bundled example (measured 2026-11-25)
+
+| check | example v1.3 (notes were stage directions) | example v1.4 (notes rewritten as spoken script) |
+|---|---|---|
+| whole script vs 8-min slot | 1.1 min (7 of 9 main slides flagged "thin") | 3.8 min, 0 flags |
+| audience doubts answered | not checked | 3 of 3 (each tagged to a Q&A item) |
+| paper figures/tables placed or cut with reason | not checked | 3 of 3 (Fig. 1 → slide 5, Table 1 → slide 6, Fig. 2 → slide 7 + backup 10) |
+| Q&A crib in the deck | only in talk_plan.md | also in the notes of the last main slide |
+
+Reproduce: run the example (README quick start) and read `talk_plan.md` / `selection_ledger.json`.
+
 ## Limits of this evidence
 
 - One synthetic example; the platform's 3 hidden cases differ. A is a plain script, not the DeepSeek baseline agent or a careful human; an agent could add some of B's steps by hand.

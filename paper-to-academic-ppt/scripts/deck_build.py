@@ -25,9 +25,10 @@ KIND_TO_LAYOUT = {"title": "title", "section": "section", "bullets": "content", 
                   "blank": "blank", "cards": "title_only", "bignumber": "title_only", "statement": "title_only",
                   "quote": "title_only", "agenda": "title_only"}
 LABELS = {"en": dict(source="Source: ", time="Time", transition="Transition", key="Key message", evidence="Evidence",
-                     ifasked="If asked", missing="Figure not available"),
+                     ifasked="If asked", missing="Figure not available", qa="Prepared Q&A (talk_plan.json)",
+                     backup="backup"),
           "zh": dict(source="来源：", time="时长", transition="过渡", key="核心信息", evidence="证据", ifasked="若被追问",
-                     missing="图像不可用")}
+                     missing="图像不可用", qa="问答预案（talk_plan.json）", backup="备用页")}
 
 
 # ----------------------------------------------------------------------------- spec helpers
@@ -150,6 +151,28 @@ def compose_notes(sl, lab, refs):
     if refs:
         parts.append("%s: %s" % (lab["evidence"], "; ".join(refs)))
     return "\n".join(parts)
+
+
+def qa_cue_target(slides):
+    """1-based index of the slide whose notes carry the Q&A cue list: the Q&A slide, else the last main slide"""
+    roles = [str(x.get("role", "")).lower() for x in slides]
+    for i, r in enumerate(roles, 1):
+        if r in ("qa", "questions"):
+            return i
+    main = [i for i, r in enumerate(roles, 1) if r not in ("backup", "appendix", "references")]
+    return main[-1] if main else None
+
+
+def qa_cue_text(qa, lab):
+    """the prepared questions as a speaker cue list: question -> first answer point (evidence; backup slide)"""
+    out = [lab["qa"] + ":"]
+    for k, q in enumerate(qa, 1):
+        ap_ = q.get("answer_points")
+        first = (ap_[0] if isinstance(ap_, list) and ap_ else ap_) or ""
+        tail = ", ".join(x for x in [", ".join(q.get("evidence") or []),
+                                     ("%s %s" % (lab["backup"], q["backup_slide"])) if q.get("backup_slide") else ""] if x)
+        out.append("%d. %s -> %s%s" % (k, q.get("question", ""), first, (" (%s)" % tail) if tail else ""))
+    return "\n".join(out)
 
 
 # ----------------------------------------------------------------------------- backends
@@ -1333,6 +1356,8 @@ def build_slide(be, cat, sl, no, ctx, facts):
         if ctx.slide_numbers and not any(p["type"] == "sldNum" for p in phs):
             rep["warnings"].append("layout has no slide-number placeholder; number omitted")
     notes = compose_notes(sl, ctx.lab, refs)
+    if getattr(ctx, "qa_cue_slide", None) == no and getattr(ctx, "qa_cues", None):
+        notes = (notes + "\n\n" if notes else "") + qa_cue_text(ctx.qa_cues, ctx.lab)
     be.notes(s, notes)
     rep["notes_chars"] = len(notes)
     rep["sources"] = refs
@@ -1468,6 +1493,7 @@ def main():
     ap.add_argument("--report", default=None)
     ap.add_argument("--backend", default="auto", choices=["auto", "pptx", "xml"])
     ap.add_argument("--keep-template-slides", action="store_true")
+    ap.add_argument("--plan", default=None, help="talk_plan.json: its Q&A goes into the notes of the Q&A / last main slide")
     a = ap.parse_args()
     spec = load_specs(a.spec)
     facts = load_facts(a.facts)
@@ -1500,6 +1526,9 @@ def main():
                  slide_size_in=[K.to_in(cat["slide_w"]), K.to_in(cat["slide_h"])])
     ctx = make_ctx(cat, spec, outdir, generated=not tpl_in)
     lang = ctx.lang
+    plan = load_json(a.plan) if a.plan and os.path.exists(a.plan) else (spec.get("plan") or {})
+    ctx.qa_cues = [q for q in (plan.get("qa") or meta.get("qa") or []) if isinstance(q, dict) and q.get("question")]
+    ctx.qa_cue_slide = qa_cue_target(spec["slides"]) if ctx.qa_cues else None
     def do_build(backend):
         ctx.section_no = 0
         reps = []

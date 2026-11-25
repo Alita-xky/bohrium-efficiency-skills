@@ -29,7 +29,10 @@ Backup slides are outside the time budget.
 | same sub-field experts | 5–10 % | paper's terms without definitions | full tables, ablations, error bars |
 | neighbouring field | 15–20 % | define each key term once (in notes or a one-line bullet) | main figure + one table |
 | non-specialists / management | 25–30 % | plain words, one example | headline numbers with comparison point |
-List the audience's likely doubts in `audience.likely_doubts` — each one gets a Q&A entry.
+List the audience's likely doubts in `audience.likely_doubts` — each one gets a Q&A entry that names it with
+`"doubt": <index>`. deck_check builds the table *doubt → answering Q&A item / slide / backup slide* in
+`talk_plan.md` and warns about any doubt nobody answers (matching falls back to word overlap when `doubt` is
+missing).
 
 ## 4. Narrative order and cuts
 - Keep the problem → method → results → conclusion spine, but order inside it by the goal, not by the paper's
@@ -60,3 +63,18 @@ If the paper does not answer a likely question, say so in the plan ("not reporte
 Per slide: the key message in spoken form, what to point at, the transition, the timing, and an
 "if asked" line. The builder appends `Key message / Transition / Time / If asked / Evidence` lines to the notes
 from the spec fields, so the notes double as a script and as a Q&A crib.
+
+**Script length = slot length.** Write `notes` as the words you will say. Reading speed: ~140 English words or
+~240 Chinese characters per minute (2.3 words/s, 4 characters/s). deck_check estimates each slide's script time
+and warns when it is under 30 % (the presenter will improvise or rush through) or over 150 % of `time_s` (the
+talk will overrun); `talk_plan.md` shows the slot/script table and the whole-script minutes against the slot.
+Cut detail from the notes into `if_asked` or a backup slide rather than adding slides.
+
+**Q&A crib on stage.** The prepared questions from `talk_plan.json` (question → first answer point → evidence
+→ backup slide) are appended to the notes of the Q&A slide, or of the last main slide when there is none.
+
+## 8. Selection ledger (reviewable cuts)
+Reviewers need to see what was left out, not only what was shown. deck_check lists every figure and table of
+the paper (from `paper_map.json`) with where it went: main slide N, backup slide N, `cut: <reason>` (from
+`cuts[]` whose `ref`/`content` names it) or "not presented (no reason recorded)", which is a warning. The
+ledger is written to `selection_ledger.json` and `talk_plan.md`.

@@ -79,7 +79,7 @@
     "F1",
     "F2"
    ],
-   "notes": "Stress the data regime: under 10 hours. Ask the audience how many of their languages fall below that.",
+   "notes": "Most of our target languages have only a few hours of transcribed speech. The usual recipe takes an encoder pre-trained on high-resource data and fine-tunes all of it for the new language. With a 300M-parameter encoder and under 10 hours of labels, that recipe overfits. Dense adapters help, but they spend the same capacity on every frame, including the easy ones. How many of our languages are below 10 hours? That is the regime this paper is about.",
    "transition": "So how do we adapt cheaply without overfitting?",
    "time_s": 55,
    "key_message": "Below 10 h of labelled speech, full fine-tuning overfits"
@@ -96,7 +96,7 @@
    "sources": [
     "F3"
    ],
-   "notes": "These are the three contributions as the paper states them; the next slide shows the block.",
+   "notes": "The paper's idea is to make the adapter sparse. Instead of one adapter that sees every frame, there are eight small experts, and a router sends each frame to two of them. A load-balancing term stops the router from always picking the same experts. They test this on five languages, with training sets from 1 to 50 hours. Keep the 1-to-50-hour range in mind; the results depend on it.",
    "time_s": 60,
    "key_message": "Only 2 of 8 small experts work on each frame",
    "transition": "Here is where the experts sit in the encoder."
@@ -146,7 +146,7 @@
     "F5",
     "F6"
    ],
-   "notes": "Walk left to right through the figure. It is a schematic, not a result.",
+   "notes": "Here is the block, from left to right. The big encoder stays frozen: all 24 layers. After each layer sits a set of 8 bottleneck experts of width 64, and the router keeps the top two for each frame. The balancing loss has weight 0.01. The only things that train are these adapters and the CTC output head, which is why the trained-parameter count stays small. This is a schematic from the paper, not a result.",
    "time_s": 75,
    "key_message": "The encoder stays frozen; only adapters and the CTC head train",
    "transition": "Does this beat what we use today?"
@@ -206,7 +206,7 @@
    "sources": [
     "F8"
    ],
-   "notes": "Point at the last row. The trained-parameter column matters: GateLite trains fewer parameters than the dense adapter.",
+   "notes": "This is the main comparison at 10 hours of training data, the paper's Table 1. Look at the last row: GateLite reaches 27.9 percent average word error rate, against 31.4 for full fine-tuning. Now look at the parameter column: it trains fewer parameters than the dense adapter and still wins. So the gain is not simply more trainable parameters, which is the first question I expect from you.",
    "time_s": 80,
    "key_message": "GateLite gives the lowest WER at 10 h with fewer trained parameters than a dense adapter",
    "transition": "And how does the gap change with more data?",
@@ -243,7 +243,7 @@
     "F9",
     "F14"
    ],
-   "notes": "Redrawn from the CSV behind Figure 2. At 50 h the two bars differ by 0.2 points.",
+   "notes": "This chart is redrawn from the data behind the paper's Figure 2, one group of bars per training size. With 1 or 5 hours, the gap between GateLite and the dense adapter is large. By 50 hours, the two are within a fraction of a point: 18.4 against 18.6. So the method is a low-data method. If a language already has 50 hours, it is not worth changing our pipeline for it.",
    "transition": "Two caveats before we decide.",
    "time_s": 70,
    "key_message": "The gain is large at 1-5 h and vanishes at 50 h",
@@ -273,7 +273,7 @@
     "F10",
     "F11"
    ],
-   "notes": "Say both limits before someone asks; spontaneous speech is the obvious next test.",
+   "notes": "Two limits, before someone asks. First, every test set is read speech; spontaneous speech was never evaluated, and that is where our recordings come from. Second, routing is not free: on a single GPU it adds 6 percent inference latency. Neither limit kills the idea, but the first one means our own test on spontaneous speech is the real experiment.",
    "time_s": 45,
    "key_message": "Untested on spontaneous speech; routing costs 6% latency",
    "transition": "So, my recommendation."
@@ -300,7 +300,7 @@
     "F12",
     "F13"
    ],
-   "notes": "End with the decision we need: pick two languages under 10 h and compare against our dense adapter.",
+   "notes": "So my recommendation for the lab: try GateLite only where it should help, on languages with under 10 hours of data. Concretely, pick two such languages, train GateLite next to our current dense adapter with the same data, and compare word error rate on our spontaneous test sets. At 50 hours we skip it; the paper shows almost no difference there.",
    "time_s": 55,
    "key_message": "Try it for languages with under 10 h of data"
   },

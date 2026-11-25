@@ -70,7 +70,8 @@
    "evidence": [
     "F8"
    ],
-   "backup_slide": null
+   "backup_slide": null,
+   "doubt": 0
   },
   {
    "type": "generality",
@@ -83,7 +84,8 @@
     "F9",
     "F13"
    ],
-   "backup_slide": "S10"
+   "backup_slide": "S10",
+   "doubt": 1
   },
   {
    "type": "cost",
@@ -95,13 +97,15 @@
    "evidence": [
     "F11"
    ],
-   "backup_slide": null
+   "backup_slide": null,
+   "doubt": 2
   }
  ],
  "cuts": [
   {
    "content": "LoRA comparison details (Table 1 row)",
-   "reason": "kept in the table, not discussed: the lab already uses adapters"
+   "reason": "kept in the table, not discussed: the lab already uses adapters",
+   "ref": "Table 1"
   },
   {
    "content": "load-balancing loss derivation",

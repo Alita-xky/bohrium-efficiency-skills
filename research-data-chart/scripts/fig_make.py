@@ -357,7 +357,20 @@ def main():
         dict(edit_log=os.path.join(od, "edit_log.json"), note="every change is addressed by element id and verified on the output file",
              sources_of_new_values=[dict(id=(c.get("op") or {}).get("id"), source=(c.get("op") or {}).get("source"))
                                     for c in (el or {}).get("changes", []) if (c.get("op") or {}).get("source")] or None)
-    val["data"] = dict(charts=data_map, layer_map=os.path.join(od, "layer_map.json")) if data_map else None
+    ga = (rr.get("glyph_audit") or {}) if rr else {}
+    if ga and os.path.exists(os.path.join(od, "glyph_map.json")):
+        gsum = ga.get("charts") or {}
+        glyph_binding = dict(glyph_map_json=os.path.join(od, "glyph_map.json"), glyph_map_csv=os.path.join(od, "glyph_map.csv"),
+                             per_chart=gsum, glyphs=sum(v.get("glyphs", 0) for v in gsum.values()),
+                             verified=sum(v.get("verified", 0) for v in gsum.values()),
+                             not_reported=sum(v.get("not_reported", 0) for v in gsum.values()),
+                             how="each bar/point has its own SVG id; its value is read back from the rendered axes and "
+                                 "compared with its CSV cell (file:line:column); by_cell gives the reverse lookup")
+    else:
+        glyph_binding = None
+    if glyph_binding and val.get("provenance"):
+        val["provenance"]["glyph_to_cell"] = glyph_binding
+    val["data"] = dict(charts=data_map, layer_map=os.path.join(od, "layer_map.json"), glyph_to_cell=glyph_binding) if data_map else None
     val["checks"] = dict(spec_audit=dict(status=cr.get("status"), fails=check_fail, n_warn=cr.get("n_warn"),
                                          report=os.path.join(od, "check_report.json")) if cr else None,
                          render_layout=dict(status=rr.get("status"), fails=render_fail,
@@ -366,6 +379,10 @@ def main():
                          edit_verification=dict(applied=(steps.get("edit") or {}).get("applied"),
                                                 not_applied_or_unverified=(steps.get("edit") or {}).get("not_applied_or_unverified"),
                                                 unchanged_check=(el or {}).get("unchanged_check")) if edit else None,
+                         glyph_readback=dict(verified=glyph_binding["verified"], glyphs=glyph_binding["glyphs"],
+                                             not_reported=glyph_binding["not_reported"],
+                                             mismatches=[i.get("id") for i in rr.get("issues", []) if i.get("check") == "glyph_mismatch"][:20],
+                                             map=glyph_binding["glyph_map_csv"]) if glyph_binding else None,
                          export=dict(svg_text_elements=(sf or {}).get("text_elements"), png_pixels=png_px, pdf_fonts=pf),
                          reproducibility=rerun)
     val["inputs"] = dict(case=a.case, files=[dict(file=x["file"], sha256=x["sha256"]) for x in inputs][:40])

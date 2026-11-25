@@ -82,6 +82,8 @@ def main():
         bld += ["--template", a.template]
     if a.keep_template_slides:
         bld += ["--keep-template-slides"]
+    if a.plan and a.mode == "talk":
+        bld += ["--plan", a.plan]
     rc, out = run(bld)
     summary["build"] = first_json(out)
     if rc != 0 or not os.path.exists(pptx):

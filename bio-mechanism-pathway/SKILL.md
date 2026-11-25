@@ -147,6 +147,8 @@ model that cannot view images can still fix the layout:
 | text_overflow (FAIL) | shorten with source wording or enlarge the box |
 | glyph_missing / cjk_font_missing | replace the character (`->`, `alpha`), or use English labels and report it |
 | quote_not_found (warn) | re-copy the quote from `--find` output |
+| glyph_mismatch (FAIL, charts) | `clipped`: widen or drop `ylim`/`xlim` (or log axis); `tick`: fix the x column; `legend`: one colour per series |
+| series_colours_repeat (FAIL) | give the chart a `colors` list with one distinct colour per series |
 
 If you can view images, open the PNG once. Stop after two fix rounds; list what remains under uncertainty.
 
@@ -176,7 +178,8 @@ under uncertainty. Without fig_make: `make_result.py --case /input/case.json --o
 ## Final checklist
 1. `/app/output` (written by fig_make): editable SVG (one Inkscape layer per panel), PDF, PNG, the spec
    copy, `layer_map.json`, `check_report.json`, `render_report.json` (+ `edit_log.json`),
-   `version_record.json`, `reproduce.sh`, `result.json`.
+   `glyph_map.json/.csv` (charts: every bar/point ↔ its source cell, read back), `version_record.json`,
+   `reproduce.sh`, `result.json`.
 2. No value on the figure is absent from the materials (or it is marked derived with formula).
 3. Meaningful colours/arrow kinds are in the legend; units on axes and scale bars; "n.r." explained.
 4. `result.json` has `case_id` and every contract field; status honest; limits listed.

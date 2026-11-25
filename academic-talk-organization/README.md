@@ -17,7 +17,10 @@ produce a reviewable **talk plan** and an **evidence-bound deck** in checkable s
    speaker notes become a script (key message / transition / time / if asked / evidence lines appended);
 4. **checks in talk mode** — time budget ±10 %, key messages and transitions, Q&A references valid, numbers in
    the plan's messages and answers found in the materials, plus all paper checks (quotes, numbers, figure
-   numbers, notes, density, order) and render checks (overflow, fonts, min size);
+   numbers, notes, density, order) and render checks (overflow, fonts, min size); since v1.4 also the
+   spoken-script length against each slide's time, audience doubts → answering Q&A/slide, and the selection
+   ledger (every paper Fig./Table → main slide, backup or recorded cut: `selection_ledger.json`); the Q&A crib
+   goes into the speaker notes of the Q&A / last main slide;
 5. **records** — `talk_plan.md` (timeline with start times, Q&A table, cuts), evidence map, version record,
    contract-complete `result.json`.
 
@@ -109,7 +112,9 @@ python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/outp
   agent's judgement following references/talk_patterns.md and are shown for review, not machine-verified.
 
 ## Maintenance
-Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
+Version 1.4 (2026-11-25: script-length vs slot check, audience-doubt coverage, selection ledger, Q&A crib in
+the notes; example notes rewritten as a spoken script). Version 1.3 (2026-11-24: automatic slide design and
+deck-wide type scale). Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
 parsing, `verification` block, measured gain report). Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,
 ppt_template, ppt_edit); only SKILL.md, templates, references and examples differ.
 

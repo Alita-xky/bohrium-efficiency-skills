@@ -1,6 +1,6 @@
 ---
 name: talk-organizer-evidence-deck
-description: "Organise an academic talk (lab meeting, defence, review, conference) from a paper or research materials: a checkable talk goal, audience profile, section time budget, one key message per slide with evidence strength, transitions, cuts with reasons and Q&A preparation with backup slides, delivered as an editable .pptx with speaker-script notes, real PDF/PNG renders, a page-level evidence map, talk_plan.md and a contract-complete result.json. Use whenever a task asks to plan, structure, script or time an academic presentation for a given audience and duration."
+description: "Organise an academic talk (lab meeting, defence, review, conference) from a paper or research materials: a checkable talk goal, audience profile, section time budget, one key message per slide with evidence strength, transitions, cuts with reasons and Q&A preparation with backup slides, checked for script length vs slot, audience-doubt coverage and a selection ledger of every paper figure/table, delivered as an editable .pptx with speaker-script notes, real PDF/PNG renders, a page-level evidence map, talk_plan.md and a contract-complete result.json. Use whenever a task asks to plan, structure, script or time an academic presentation for a given audience and duration."
 ---
 
 # Talk organiser: goal → audience → order → key messages → Q&A, all evidence-bound
@@ -56,11 +56,15 @@ Rows `{"id","kind","text","source":{"file","loc","ref","quote"}}` with **verbati
 Plan (template `$SKILL/templates/talk_plan_template.json`, method `references/talk_patterns.md`):
 - `goal` as a checkable outcome; `audience` {who, knows, cares_about, likely_doubts};
 - `sections` with minutes (sum = duration), slide ids, key message, `evidence_strength` strong|moderate|weak;
-- `qa`: ≥ 3 questions (mechanism, data, controls/baselines, limits, cost) with answer points, fact ids and a
-  backup slide id where useful; `cuts`: what was left out / moved to backup and why.
+- `qa`: ≥ 3 questions (mechanism, data, controls/baselines, limits, cost) with answer points, fact ids, a
+  backup slide id where useful and `doubt`: the index (0-based) of the `audience.likely_doubts` entry it answers —
+  every likely doubt gets an answer; `cuts`: what was left out / moved to backup and why, with `ref` ("Fig. 4")
+  when it is a paper figure/table (the selection ledger lists every Fig./Table: main slide, backup or cut).
 Spec (template `$SKILL/templates/spec_template.json`, fields `references/formats.md`, rules `references/slide_rules.md`):
 - every main slide has `time_s` (sum within ±10 % of the duration; backup slides excluded), `key_message`,
-  `transition` (to the next slide), `notes` (spoken script, not the bullets), optional `if_asked`;
+  `transition` (to the next slide), `notes` (the spoken script, not the bullets: what you say, in full sentences,
+  about as long as the slot — ~2.3 English words or ~4 Chinese characters per second; the check warns below 30 %
+  or above 150 % of `time_s`), optional `if_asked`;
 - titles are claims; ≤ 5 short bullets; figures/tables are the paper's own (`ref` = its numbering, `kind`
   data|schematic); backup slides have `role:"backup"` and are referenced from `qa`;
 - wording follows evidence strength ("reduces … (Table 1)" vs "the authors suggest …").
@@ -79,7 +83,10 @@ python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work
 ```
 Talk mode adds: goal/audience present, time budget ±10 %, key messages and transitions, ≥ 3 Q&A with valid
 fact ids and backup slides, cuts recorded, numbers in the plan's key messages and answers found in the
-materials. Outputs `talk_plan.md` (goal, audience, section budget, slide timeline with start times, Q&A, cuts)
+materials, **script length vs slide time** (per slide and whole talk), **audience doubts → answering Q&A/slide**,
+and the **selection ledger** (`selection_ledger.json`: every Fig./Table of the paper → main slide, backup or
+recorded cut). The Q&A cue list (question → first answer point, evidence, backup slide) is written into the
+speaker notes of the Q&A slide, or of the last main slide, so the presenter has it on stage. Outputs `talk_plan.md` (goal, audience, section budget, slide timeline with start times, Q&A, cuts)
 plus deck, PDF, PNGs, evidence map. Fix every FAIL, re-run (max twice), look at `previews/contact_sheet.png` once.
 
 ## 6. Records and result.json (0–2 calls)
@@ -110,6 +117,8 @@ plan, Q&A, timeline, deck, evidence map, render/version records, uncertainty, st
 
 ## Final checklist
 1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/`, `talk_plan.json`, `talk_plan.md`, `evidence_map.json/.md`,
-   `check_report.json`, `render_report.json`, `slides_outline.md`, `version_record.json`, `result.json`.
-2. Times add up; every main slide has a key message and transition; ≥ 3 Q&A with evidence.
+   `check_report.json`, `render_report.json`, `selection_ledger.json`, `slides_outline.md`, `version_record.json`,
+   `result.json`.
+2. Times add up; every main slide has a key message, transition and a spoken script that fits its time; ≥ 3 Q&A
+   with evidence; every likely doubt answered; every paper Fig./Table placed or its cut explained.
 3. No FAIL left (or listed in uncertainty with `status: partial`); `result.json` has every contract field.

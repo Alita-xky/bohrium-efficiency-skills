@@ -73,10 +73,10 @@ plotting library on identical input, measured, with the defects it does and does
 | Rubric point | Where to look / how to re-check |
 |---|---|
 | completion, completeness | `result.json` (`case_id`, every contract field, `status`), SVG/PDF/PNG, `layer_map.json` |
-| correctness | `check_report.json`: every printed number found in the materials, verbatim quotes, arrow ends, legend colours, units |
+| correctness | `check_report.json`: every printed number found in the materials, verbatim quotes, arrow ends, legend colours, units; charts: `glyph_map.csv` (each bar/point read back from the rendered figure = its CSV cell) |
 | verifiability, stability | `version_record.json` (inputs + sha256, tools, export parameters), `reproduce.sh`, `result.json.verification.reproducibility` (two runs, SHA-256 equal) |
 | quality / efficiency gain, gain verifiability | `references/measured_gain.md`, `scripts/gain_check.py` (one command, same input for A and B) |
-| new capability, method | spec-bound drawing (each element keeps its id + source), automatic layout checks in words for text-only models, source-preserving SVG edits with per-op verification, CJK font discovery |
+| new capability, method | two-way glyph ↔ data-cell map with read-back verification (charts), spec-bound drawing (each element keeps its id + source), automatic layout checks in words for text-only models, source-preserving SVG edits with per-op verification, CJK font discovery |
 | exception handling | SKILL.md exception table; defect rows in `measured_gain.md` (what is flagged, what only warns) |
 
 ## Requirements
@@ -106,7 +106,10 @@ without quote, chart without data binding, unconnected route stages, template TO
 missing contract field (status downgraded to partial), edit addressed to a missing id, recolour that
 did not take effect (verification), new text overlapping existing text, arrow through a box,
 crossing arrows, legend colour not matching its category, CJK font without the glyphs, unknown icon
-name, biology/lab icon without a material source, icon of an object no material mentions.
+name, biology/lab icon without a material source, icon of an object no material mentions; charts
+(v1.4 glyph audit, 6-chart fault file): bars clipped by `ylim` (2 caught), two series in one colour
+(caught), empty cells (7 of 7 listed as n.r.), log-scale bars, horizontal bars, line and scatter points
+(all 33 drawn glyphs read back and matched to their CSV line/column).
 
 ## Limits
 Shapes are boxes/ellipses/arrows/charts/legends/scale bars/embedded images plus a built-in set of 29
@@ -118,7 +121,9 @@ paths cannot be re-typed. Number provenance is string-level; derived values must
 `derived:{formula,inputs}`. CJK output needs an installed CJK font (reported if absent).
 
 ## Maintenance
-v1.3 (2026-11-24: built-in vector icon library — standalone `icon` elements and icons inside entities,
+v1.4 (2026-11-25: chart glyph audit — per-bar/point SVG ids, `glyph_map.json/.csv` with source
+line/column, read-back value, tick, legend colour and error bar; clipping and repeated series colours
+fail). v1.3 (2026-11-24: built-in vector icon library — standalone `icon` elements and icons inside entities,
 membrane/nucleus/cell compartments with receptor snapping, icon checks). v1.2 (2026-11-23: one-command fig_make.py, byte-identical re-runs, contract auto-mapping, measured
 gain report, data-path lookup, CJK font discovery). v1.1 (dogfood fixes). stdlib + matplotlib only. Add a layout by adding a template; checkers are
 layout-agnostic.

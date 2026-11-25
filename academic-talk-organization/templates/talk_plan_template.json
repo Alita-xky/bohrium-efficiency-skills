@@ -9,7 +9,7 @@
   {"name": "Results", "minutes": 3.5, "slides": ["S5", "S6", "S7"], "key_message": "TODO", "evidence_strength": "moderate"},
   {"name": "Limits + take-home", "minutes": 2, "slides": ["S8", "S9"], "key_message": "TODO", "evidence_strength": "strong"}],
  "qa": [
-  {"type": "mechanism", "question": "TODO", "answer_points": ["TODO"], "evidence": ["F3"], "backup_slide": "S10"},
-  {"type": "data", "question": "TODO", "answer_points": ["TODO"], "evidence": ["F7"], "backup_slide": null},
-  {"type": "limits", "question": "TODO", "answer_points": ["TODO"], "evidence": ["F10"], "backup_slide": null}],
- "cuts": [{"content": "TODO what from the paper is not presented", "reason": "TODO why (goal/audience/time)"}]}
+  {"type": "mechanism", "doubt": 0, "question": "TODO", "answer_points": ["TODO"], "evidence": ["F3"], "backup_slide": "S10"},
+  {"type": "data", "doubt": 1, "question": "TODO", "answer_points": ["TODO"], "evidence": ["F7"], "backup_slide": null},
+  {"type": "limits", "doubt": 2, "question": "TODO", "answer_points": ["TODO"], "evidence": ["F10"], "backup_slide": null}],
+ "cuts": [{"content": "TODO what from the paper is not presented", "ref": "TODO Fig./Table number if it is one, else omit", "reason": "TODO why (goal/audience/time)"}]}

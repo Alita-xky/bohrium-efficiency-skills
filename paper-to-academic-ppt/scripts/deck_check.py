@@ -267,6 +267,107 @@ def scale_main(argv):
     return 0
 
 
+# ----------------------------------------------------------------------------- talk helpers
+CJK_RE = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+STOP = set("the a an of to in on for and or with is are was were be by that this it as at from how what why does do did can "
+           "which who will would should could than then their there its our your not no but if into over under about".split())
+
+
+def speak_seconds(text):
+    """speaking time of a notes script: ~4 Chinese characters/s (240/min), ~2.3 English words/s (140 wpm)"""
+    t = str(text or "")
+    cjk = len(CJK_RE.findall(t))
+    words = len(re.findall(r"[A-Za-z0-9][A-Za-z0-9.%\-]*", CJK_RE.sub(" ", t)))
+    return cjk / 4.0 + words / 2.3
+
+
+def topic_tokens(text):
+    t = str(text or "").lower()
+    toks = {w for w in re.findall(r"[a-z][a-z0-9\-]{2,}", t) if w not in STOP}
+    cjk = "".join(CJK_RE.findall(t))
+    toks |= {cjk[i:i + 2] for i in range(len(cjk) - 1)}
+    return toks
+
+
+def covers(doubt, text):
+    d = topic_tokens(doubt)
+    return len(d & topic_tokens(text)) / len(d) if d else 0.0
+
+
+def doubt_coverage(plan, slides):
+    """audience.likely_doubts -> the Q&A items / slides that answer them (explicit qa[].doubt index or text, else word overlap)"""
+    aud = plan.get("audience") or {}
+    doubts = aud.get("likely_doubts") if isinstance(aud, dict) else None
+    doubts = [str(d) for d in (doubts or []) if str(d).strip() and "TODO" not in str(d)]
+    qa = [q for q in (plan.get("qa") or []) if isinstance(q, dict)]
+    rows = []
+    tags = [q.get("doubt") for q in qa if str(q.get("doubt", "")).strip().isdigit()]
+    one_based = bool(tags) and min(int(t) for t in tags) >= 1 and max(int(t) for t in tags) == len(doubts)  # 1..n given
+    for k, d in enumerate(doubts):
+        hits = []
+        for j, q in enumerate(qa, 1):
+            tag = q.get("doubt")
+            ap_ = q.get("answer_points")
+            txt = " ".join([str(q.get("question", ""))] + (ap_ if isinstance(ap_, list) else [str(ap_ or "")]))
+            idx = int(tag) - (1 if one_based else 0) if str(tag if tag is not None else "").strip().isdigit() else None
+            if idx == k or (isinstance(tag, str) and idx is None and (tag.strip() == d or covers(d, tag) >= 0.6)):
+                hits.append(dict(where="Q&A %d" % j, how="tagged", backup=q.get("backup_slide")))
+            elif covers(d, txt) >= 0.4:
+                hits.append(dict(where="Q&A %d" % j, how="overlap %.2f" % covers(d, txt), backup=q.get("backup_slide")))
+        for i, sl in enumerate(slides, 1):
+            txt = " ".join(str(sl.get(x, "")) for x in ("title", "key_message")) + " " + " ".join(map(str, sl.get("if_asked") or []))
+            c = covers(d, txt)
+            if c >= 0.5:
+                hits.append(dict(where="slide %d%s" % (i, " (backup)" if str(sl.get("role", "")).lower() in ("backup", "appendix") else ""),
+                                 how="overlap %.2f" % c))
+        rows.append(dict(doubt=d, answered_by=hits))
+    return rows
+
+
+def selection_ledger(pm, slides, plan):
+    """every figure/table of the paper -> main slide(s) / backup slide(s) / recorded cut / not presented"""
+    def keyof(m):
+        return ("table" if m.group(1).lower().startswith(("tab", "表")) else "figure", m.group(2))
+    used = {}
+    for i, sl in enumerate(slides, 1):
+        bk = str(sl.get("role", "")).lower() in ("backup", "appendix")
+        refs = set()
+        for _, v in K.spec_visuals(sl):
+            for m in CAPREF_RE.finditer(str(v.get("ref", ""))):
+                refs.add((keyof(m), "shown"))
+        for _, t, _ in slide_text_items(sl):
+            for m in CAPREF_RE.finditer(t):
+                refs.add((keyof(m), "cited"))
+        for k, how in refs:
+            used.setdefault(k, []).append(dict(slide=i, id=sl.get("id"), backup=bk, how=how))
+    cut_of = {}
+    for c in plan.get("cuts") or []:
+        txt = (" ".join(str(c.get(x, "")) for x in ("ref", "content")) if isinstance(c, dict) else str(c))
+        for m in CAPREF_RE.finditer(txt):
+            cut_of.setdefault(keyof(m), c.get("reason") if isinstance(c, dict) else txt)
+    rows = []
+    for c in (pm or {}).get("figures_tables", []):
+        num = re.sub(r"\D", "", str(c.get("label", "")).split()[-1] if c.get("label") else "")
+        if not num:
+            continue
+        k = ("table" if c.get("kind") == "table" else "figure", num)
+        u = used.get(k, [])
+        main = sorted({x["slide"] for x in u if not x["backup"]})
+        bk = sorted({x["slide"] for x in u if x["backup"]})
+        if main:
+            disp = "main slide %s" % ", ".join(map(str, main)) + ((" + backup %s" % ", ".join(map(str, bk))) if bk else "")
+        elif bk:
+            disp = "backup slide %s" % ", ".join(map(str, bk))
+        elif k in cut_of:
+            disp = "cut: %s" % cut_of[k]
+        else:
+            disp = "not presented (no reason recorded)"
+        rows.append(dict(ref=("Table " if k[0] == "table" else "Figure ") + num, page=c.get("page"),
+                         caption=str(c.get("caption") or c.get("label") or "")[:120], shown_on=main, backup_on=bk,
+                         disposition=disp, ok=not disp.startswith("not presented")))
+    return rows
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "scale":
         return scale_main(sys.argv[2:])
@@ -539,6 +640,7 @@ def main():
     # ---- talk plan
     plan = json.load(open(a.plan, encoding="utf-8")) if a.plan and os.path.exists(a.plan) else (spec.get("plan") or {})
     timeline = []
+    speech_fit, speech_total, doubt_rows, ledger = [], None, [], []
     dur = a.duration_min or plan.get("duration_min") or meta.get("duration_min")
     if a.mode == "talk":
         for k in ("goal", "audience"):
@@ -581,6 +683,37 @@ def main():
                     add("fail", "number", "number %s in %s is not in any material" % (tok, where))
         if not (plan.get("cuts") or meta.get("cuts")):
             add("warn", "cuts", "no record of what was left out and why (plan.cuts)")
+        # spoken script vs slide time (the classic 'slide count and talk length do not match' failure)
+        tot_speak = 0.0
+        for i, s in enumerate(slides, 1):
+            if str(s.get("role", "")).lower() in ("backup", "appendix"):
+                continue
+            ts, sp = float(s.get("time_s", 0) or 0), speak_seconds(s.get("notes"))
+            tot_speak += sp
+            speech_fit.append(dict(slide=i, id=s.get("id"), time_s=ts, speak_s=round(sp)))
+            if ts and sp > 1.5 * ts and sp - ts > 15:
+                add("warn", "speech_fit", "notes take ~%ds to say (%.0f%% of the %ds slot): trim the script or move detail to "
+                    "if_asked/backup" % (sp, 100 * sp / ts, ts), i)
+            elif ts >= 45 and sp < 0.3 * ts:
+                add("warn", "speech_fit", "notes cover only ~%ds of the %ds slot: write what you will actually say" % (sp, ts), i)
+        if dur and tot_speak:
+            speech_total = dict(script_min=round(tot_speak / 60, 1), slot_min=float(dur))
+            if tot_speak > 1.3 * float(dur) * 60:
+                add("warn", "speech_fit", "the whole script takes ~%.1f min to read aloud, the slot is %s min: cut notes, not slides"
+                    % (tot_speak / 60, dur))
+        # every likely doubt of the audience gets an answer (Q&A item or slide)
+        doubt_rows = doubt_coverage(dict(plan, audience=plan.get("audience") or meta.get("audience") or {},
+                                         qa=plan.get("qa") or meta.get("qa") or []), slides)
+        for r in doubt_rows:
+            if not r["answered_by"]:
+                add("warn", "doubts", "audience doubt not answered by any Q&A item or slide: '%s' (add a qa item with "
+                    "\"doubt\": its index)" % r["doubt"][:70])
+        # where every figure/table of the paper went
+        ledger = selection_ledger(pm, slides, dict(plan, cuts=plan.get("cuts") or meta.get("cuts") or []))
+        missing = [r["ref"] for r in ledger if not r["ok"]]
+        if missing:
+            add("warn", "ledger", "paper %s not presented and not in plan.cuts: show it, move it to backup, or record why "
+                "it is cut" % ", ".join(missing[:8]))
         t = 0.0
         for i, s in enumerate(slides, 1):
             ts = float(s.get("time_s", 0) or 0)
@@ -594,6 +727,12 @@ def main():
                facts_not_in_materials=[k for k, s in fact_status.items() if s.get("not_in_materials")],
                numbers_checked=sum(len(e["numbers"]) for e in emap), n_fail=len(fails), n_warn=len(issues) - len(fails),
                issues=issues, timeline=timeline or None)
+    if a.mode == "talk":
+        rep.update(speech_fit=dict(total=speech_total, slides=speech_fit, rate="4 CJK chars/s, 2.3 English words/s"),
+                   doubt_coverage=doubt_rows, selection_ledger=ledger)
+        with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), "selection_ledger.json"), "w", encoding="utf-8") as f:
+            json.dump(dict(figures_tables=ledger, cuts=plan.get("cuts") or meta.get("cuts") or [],
+                           doubt_coverage=doubt_rows), f, ensure_ascii=False, indent=1)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=1)
@@ -654,6 +793,26 @@ def main():
             for q in qa:
                 T.append("| %s | %s | %s | %s |" % (q.get("question"), "; ".join(q.get("answer_points", [])) if isinstance(
                     q.get("answer_points"), list) else q.get("answer_points"), ", ".join(q.get("evidence", [])), q.get("backup_slide") or "-"))
+            T.append("")
+        if doubt_rows:
+            T += ["## Audience doubts -> where they are answered", "", "| likely doubt | answered by | backup slide |", "|---|---|---|"]
+            for r in doubt_rows:
+                T.append("| %s | %s | %s |" % (r["doubt"], "; ".join("%s (%s)" % (h["where"], h["how"]) for h in r["answered_by"]) or
+                                               "**not answered**", ", ".join(sorted({str(h["backup"]) for h in r["answered_by"] if h.get("backup")})) or "-"))
+            T.append("")
+        if speech_fit:
+            T += ["## Script length vs slide time", "", "Speaking rate: ~4 Chinese characters/s or ~2.3 English words/s (240 chars, "
+                  "140 words per minute)." + ((" Whole script ~%.1f min for a %s-min slot." % (speech_total["script_min"], dur))
+                                              if speech_total else ""), "", "| slide | slot s | script s | fit |", "|---|---|---|---|"]
+            for r in speech_fit:
+                fit = "-" if not r["time_s"] else ("long" if r["speak_s"] > 1.5 * r["time_s"] and r["speak_s"] - r["time_s"] > 15
+                                                   else "thin" if r["time_s"] >= 45 and r["speak_s"] < 0.3 * r["time_s"] else "ok")
+                T.append("| %s %s | %d | %d | %s |" % (r["slide"], r["id"] or "", r["time_s"], r["speak_s"], fit))
+            T.append("")
+        if ledger:
+            T += ["## Selection ledger: every figure/table of the paper", "", "| paper item | page | where it went |", "|---|---|---|"]
+            for r in ledger:
+                T.append("| %s | %s | %s |" % (r["ref"], r["page"] or "-", r["disposition"]))
             T.append("")
         cuts = plan.get("cuts") or meta.get("cuts") or []
         if cuts:

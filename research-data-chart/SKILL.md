@@ -1,6 +1,6 @@
 ---
 name: source-value-chart-builder
-description: "Create or edit a scientific data chart whose every plotted value comes from the case's own data (CSV/XLSX tables or tables copied from the paper with locators), delivering a layered editable SVG, PDF/PNG previews, a value-to-source map, axis/unit/legend/number checks and a contract-complete result.json. Use for any request to plot, replot, restyle or correct a research chart."
+description: "Create or edit a scientific data chart whose every plotted value comes from the case's own data (CSV/XLSX tables or tables copied from the paper with locators), delivering a layered editable SVG, PDF/PNG previews, a glyph-to-cell map (every bar/point has its own SVG id, its value read back from the rendered axes and matched to its CSV line/column), axis/unit/legend/number checks and a contract-complete result.json. Use for any request to plot, replot, restyle or correct a research chart."
 ---
 
 # 科研数据图表生成与编辑 — source-bound figure Skill
@@ -38,6 +38,11 @@ contract field and an honest status), so a run that stops early still delivers. 
   the PDF → copy its rows from `<file>.layout.txt` into `/app/work/table_<n>.csv` exactly as printed
   (flattened superscripts: `2.3 · 1019` → `2.3e19`) and cite "Table n (p..)"; `fig_check.py` verifies
   every number printed on the figure against text and CSVs.
+- Every bar/point gets its own SVG id (`<chart>:bar:<series>:<category>`, points `<chart>:series:<k>#<i>`)
+  and a row in `glyph_map.csv/.json`: source file:line:column, source string, value **read back from the
+  rendered axes**, tick label under it, legend colour and error-bar length. Any mismatch (clipped by
+  `ylim`, wrong tick, colour ≠ legend swatch, two series in one colour) is a FAIL; `by_cell` answers
+  "which glyph shows this cell". Cite it in result.json as the value-to-source evidence.
 - Never read values off a raster figure unless the task explicitly asks for digitisation; then label
   them "digitised (±error)" and say so in result.json.
 - Choose the chart by the data: categories → bars from 0 (`barh` when > 6 categories or long names);
@@ -144,6 +149,8 @@ model that cannot view images can still fix the layout:
 | text_overflow (FAIL) | shorten with source wording or enlarge the box |
 | glyph_missing / cjk_font_missing | replace the character (`->`, `alpha`), or use English labels and report it |
 | quote_not_found (warn) | re-copy the quote from `--find` output |
+| glyph_mismatch (FAIL, charts) | `clipped`: widen or drop `ylim`/`xlim` (or log axis); `tick`: fix the x column; `legend`: one colour per series |
+| series_colours_repeat (FAIL) | give the chart a `colors` list with one distinct colour per series |
 
 If you can view images, open the PNG once. Stop after two fix rounds; list what remains under uncertainty.
 
@@ -173,7 +180,8 @@ under uncertainty. Without fig_make: `make_result.py --case /input/case.json --o
 ## Final checklist
 1. `/app/output` (written by fig_make): editable SVG (one Inkscape layer per panel), PDF, PNG, the spec
    copy, `layer_map.json`, `check_report.json`, `render_report.json` (+ `edit_log.json`),
-   `version_record.json`, `reproduce.sh`, `result.json`.
+   `glyph_map.json/.csv` (charts: every bar/point ↔ its source cell, read back), `version_record.json`,
+   `reproduce.sh`, `result.json`.
 2. No value on the figure is absent from the materials (or it is marked derived with formula).
 3. Meaningful colours/arrow kinds are in the legend; units on axes and scale bars; "n.r." explained.
 4. `result.json` has `case_id` and every contract field; status honest; limits listed.

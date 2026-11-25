@@ -820,18 +820,22 @@ def load_series(el, spec_dir):
         ecols = d.get("err") if isinstance(d.get("err"), list) else [d.get("err")] * len(ycols)
         labels = d.get("series_labels") or ycols
         series = []
+        fname = os.path.basename(path)
+        cell = lambda i, col, ec: dict(file=fname, row=i + 2, column=col, err_column=ec or None)  # row = line in the file
         if d.get("group") and len(ycols) == 1:
             gv = get(d["group"])
             for g in dict.fromkeys(gv):
                 idx = [i for i, v in enumerate(gv) if v == g]
                 yraw = [get(ycols[0])[i] for i in idx]
                 series.append(dict(label=str(g), x=[xs[i] for i in idx], y=[_num(v) for v in yraw], raw=yraw,
-                                   err=[_num(get(ecols[0])[i]) for i in idx] if ecols[0] else None))
+                                   err=[_num(get(ecols[0])[i]) for i in idx] if ecols[0] else None,
+                                   cells=[cell(i, ycols[0], ecols[0]) for i in idx]))
         else:
             for yc, ec, lb in zip(ycols, ecols, labels):
                 yraw = get(yc)
                 series.append(dict(label=str(lb), x=list(xs), y=[_num(v) for v in yraw], raw=yraw,
-                                   err=[_num(v) for v in get(ec)] if ec else None))
+                                   err=[_num(v) for v in get(ec)] if ec else None,
+                                   cells=[cell(i, yc, ec) for i in range(len(rows))]))
     else:
         vals = d.get("values", {})
         origin = "inline"
@@ -840,10 +844,13 @@ def load_series(el, spec_dir):
             labels = vals.get("series_labels") or [f"series {i + 1}" for i in range(len(ys))]
             errs = vals.get("err") or [None] * len(ys)
             series = [dict(label=lb, x=list(vals.get("x") or range(len(y))), y=[_num(v) for v in y],
-                           raw=[str(v) for v in y], err=e) for y, e, lb in zip(ys, errs, labels)]
+                           raw=[str(v) for v in y], err=e,
+                           cells=[dict(file="spec data.values (quoted source)", row=i + 1, column="y[%d]" % k) for i in range(len(y))])
+                      for k, (y, e, lb) in enumerate(zip(ys, errs, labels))]
         else:
             series = [dict(label="", x=list(vals.get("x") or range(len(ys))), y=[_num(v) for v in ys],
-                           raw=[str(v) for v in ys], err=vals.get("err"))]
+                           raw=[str(v) for v in ys], err=vals.get("err"),
+                           cells=[dict(file="spec data.values (quoted source)", row=i + 1, column="y") for i in range(len(ys))])]
     numeric_x = bool(d.get("x_numeric"))
     if numeric_x:
         for s in series:
@@ -864,18 +871,20 @@ def draw_chart(fig, el, b, base, adj):
     multi = len(series) > 1
     highlight = set(map(str, el.get("highlight", [])))
     n_missing, missing_where = 0, []
+    glyphs = []   # every drawn data glyph -> its source cell (audited after rendering: glyph_audit)
     if kind in ("bar", "barh"):
         nb = len(series)
         width = 0.8 / max(1, nb)
         horiz = kind == "barh"
         for gi, sr in enumerate(series):
             lookup = {str(xv): i for i, xv in enumerate(sr["x"])}
-            ys, es, raws = [], [], []
+            ys, es, raws, cells = [], [], [], []
             for cat in cats:
                 i = lookup.get(cat)
                 ys.append(sr["y"][i] if i is not None else float("nan"))
                 es.append(sr["err"][i] if (i is not None and sr.get("err")) else 0)
                 raws.append(sr["raw"][i] if i is not None else "")
+                cells.append((sr.get("cells") or [None] * len(sr["x"]))[i] if i is not None else None)
             pos = [ci - 0.4 + width * (gi + 0.5) if multi else ci for ci in range(len(cats))]
             if multi:
                 col = colors[gi % len(colors)]
@@ -888,9 +897,21 @@ def draw_chart(fig, el, b, base, adj):
             kw = dict(color=col, edgecolor=edge, linewidth=lw, label=sr["label"] if multi else None)
             err = es if sr.get("err") else None
             if horiz:
-                cax.barh(pos, ys, height=width * 0.95 if multi else 0.7, xerr=err, capsize=2, **kw)
+                bc = cax.barh(pos, ys, height=width * 0.95 if multi else 0.7, xerr=err, capsize=2, **kw)
             else:
-                cax.bar(pos, ys, width=width * 0.95 if multi else 0.7, yerr=err, capsize=2, **kw)
+                bc = cax.bar(pos, ys, width=width * 0.95 if multi else 0.7, yerr=err, capsize=2, **kw)
+            segs = []
+            if getattr(bc, "errorbar", None) is not None:
+                try:
+                    segs = [sg for lc in bc.errorbar.lines[2] for sg in lc.get_segments()]
+                except Exception:
+                    segs = []
+            for ci, (patch, cat, v, r, cl, e) in enumerate(zip(bc.patches, cats, ys, raws, cells, es)):
+                gid = "%s:bar:%d:%d" % (el["id"], gi, ci)
+                patch.set_gid(gid)
+                glyphs.append(dict(glyph=gid, kind=kind, artist=patch, series=sr["label"] if multi else "", series_index=gi,
+                                   category=cat, cat_index=ci, pos=pos[ci], value=v, raw=r, err=e if sr.get("err") else None,
+                                   cell=cl, segs=segs, multi=multi))
             for p, v, r, c in zip(pos, ys, raws, cats):
                 if math.isnan(v):
                     n_missing += 1
@@ -926,11 +947,19 @@ def draw_chart(fig, el, b, base, adj):
         for gi, sr in enumerate(series):
             xs = sr["x"] if s["numeric_x"] else list(range(len(sr["x"])))
             col = colors[gi % len(colors)]
+            gid = "%s:series:%d" % (el["id"], gi)
             if kind == "line":
-                cax.errorbar(xs, sr["y"], yerr=sr.get("err"), marker="o", ms=3, color=col, lw=1.4, capsize=2,
-                             label=sr["label"] if multi else None)
+                ec_ = cax.errorbar(xs, sr["y"], yerr=sr.get("err"), marker="o", ms=3, color=col, lw=1.4, capsize=2,
+                                   label=sr["label"] if multi else None)
+                ec_.lines[0].set_gid(gid)
             else:
-                cax.scatter(xs, sr["y"], s=14, color=col, label=sr["label"] if multi else None)
+                pc = cax.scatter(xs, sr["y"], s=14, color=col, label=sr["label"] if multi else None)
+                pc.set_gid(gid)
+            for k, (xv, yv) in enumerate(zip(xs, sr["y"])):
+                glyphs.append(dict(glyph="%s#%d" % (gid, k), kind=kind, artist=None, series=sr["label"] if multi else "",
+                                   series_index=gi, category=str(sr["x"][k]), cat_index=None if s["numeric_x"] else k, x=xv,
+                                   value=yv, raw=sr["raw"][k], err=(sr.get("err") or [None] * len(xs))[k],
+                                   cell=(sr.get("cells") or [None] * len(xs))[k], color=col, multi=multi))
             n_missing += sum(1 for v in sr["y"] if math.isnan(v))
         if not s["numeric_x"]:
             cax.set_xticks(list(range(len(cats))))
@@ -971,7 +1000,125 @@ def draw_chart(fig, el, b, base, adj):
     for sp in ("top", "right"):
         cax.spines[sp].set_visible(False)
     return cax, dict(data_origin=s["origin"], n_points=sum(len(sr["y"]) for sr in series), n_series=len(series),
-                     n_missing=n_missing, missing=missing_where[:30], horiz=(kind == "barh"))
+                     n_missing=n_missing, missing=missing_where[:30], horiz=(kind == "barh"), glyphs=glyphs,
+                     numeric_x=s["numeric_x"])
+
+
+def _rgb(c):
+    try:
+        return tuple(round(float(v), 3) for v in matplotlib.colors.to_rgb(c))
+    except Exception:
+        return None
+
+
+def glyph_audit(registry):
+    """Read every drawn data glyph back from the rendered axes and compare it with its source cell:
+    value (bar end / point position through the axis transform, log scales included), category (the tick
+    label at the glyph's position), series (legend swatch colour = glyph colour), error bar half-length and
+    visibility inside the axis limits. Returns (rows, issues, summary)."""
+    rows, issues, summ = [], [], {}
+    for cid, v in registry.items():
+        if not isinstance(v, dict) or v.get("kind") != "chart" or not v.get("glyphs"):
+            continue
+        cax = v["artist"]
+        horiz = v.get("horiz")
+        inv = cax.transData.inverted()
+        lo, hi = sorted(cax.get_xlim() if horiz else cax.get_ylim())
+        span = (hi - lo) or 1.0
+        tol = 0.005 * span
+        ticks = [t.get_text() for t in (cax.get_yticklabels() if horiz else cax.get_xticklabels())]
+        leg = cax.get_legend()
+        leg_col = {}
+        if leg is not None:
+            hs = getattr(leg, "legend_handles", None) or getattr(leg, "legendHandles", [])
+            for h, t in zip(hs, leg.get_texts()):
+                c = None
+                if isinstance(h, tuple) and h:   # errorbar container -> its data line
+                    h = h[0]
+                for get in ("get_facecolor", "get_color", "get_markerfacecolor"):
+                    try:
+                        c = getattr(h, get)()
+                        if hasattr(c, "__len__") and len(c) and hasattr(c[0], "__len__"):
+                            c = c[0]
+                        break
+                    except Exception:
+                        continue
+                leg_col[t.get_text()] = _rgb(c) if c is not None else None
+        cols = {}
+        n_ok = 0
+        for g in v["glyphs"]:
+            val = g["value"]
+            row = dict(chart=cid, glyph=g["glyph"], kind=g["kind"], series=g["series"], category=g["category"],
+                       source_value=g["raw"], source=("%s:%s:%s" % (g["cell"]["file"], g["cell"]["row"], g["cell"]["column"]))
+                       if g.get("cell") else None, err_source=None if g.get("err") in (None, 0) else g["err"])
+            if val is None or (isinstance(val, float) and math.isnan(val)):
+                row.update(drawn_value=None, status="not_reported (n.r. mark)")
+                rows.append(row)
+                continue
+            checks = []
+            if g["artist"] is not None:   # bar: read its far end back through the axis transform
+                bb = g["artist"].get_window_extent()
+                (x0, y0), (x1, y1) = inv.transform([[bb.x0, bb.y0], [bb.x1, bb.y1]])
+                drawn = (x1 if horiz else y1) if val >= 0 else (x0 if horiz else y0)
+                centre = (y0 + y1) / 2 if horiz else (x0 + x1) / 2
+                cols.setdefault(g["series"], set()).add(_rgb(g["artist"].get_facecolor()))
+                col = _rgb(g["artist"].get_facecolor())
+                for sg in g.get("segs") or []:
+                    if len(sg) != 2:   # NaN value -> empty error segment
+                        continue
+                    (sx0, sy0), (sx1, sy1) = sg
+                    at = (sy0 + sy1) / 2 if horiz else (sx0 + sx1) / 2
+                    if abs(at - g["pos"]) < 1e-6:
+                        row["err_drawn"] = round(abs((sx1 - sx0) if horiz else (sy1 - sy0)) / 2, 6)
+                        if g.get("err") and abs(row["err_drawn"] - g["err"]) > max(tol, 1e-9):
+                            checks.append("error bar %.4g drawn, source %.4g" % (row["err_drawn"], g["err"]))
+            else:             # point: its plotted y
+                drawn, centre, col = val, g.get("x"), _rgb(g.get("color"))
+                cols.setdefault(g["series"], set()).add(col)
+            if not math.isfinite(drawn):
+                row.update(drawn_value=None, status="unverifiable (bar end not finite on this axis)")
+                rows.append(row)
+                continue
+            row["drawn_value"] = float("%.6g" % drawn)
+            if abs(drawn - val) > tol and not (cax.get_yscale() == "log" and val > 0 and abs(math.log10(drawn) - math.log10(val)) < 0.002):
+                checks.append("drawn %.4g, source %.4g" % (drawn, val))
+            if val > hi + tol or val < lo - tol:
+                checks.append("outside the axis range [%.4g, %.4g]: clipped" % (lo, hi))
+            ci = g.get("cat_index")
+            if ci is not None and centre is not None and ticks:
+                k = int(round(centre))
+                lab = ticks[k] if 0 <= k < len(ticks) else ""
+                row["tick_label"] = lab
+                if norm_label(lab) != norm_label(pretty(g["category"])):
+                    checks.append("sits under tick '%s', source category '%s'" % (lab, g["category"]))
+            if g.get("multi") and leg_col:
+                key = g["series"] if g["series"] in leg_col else pretty(g["series"])
+                lc = leg_col.get(key)
+                if key not in leg_col:
+                    checks.append("series '%s' has no legend entry" % g["series"])
+                elif lc is not None and col is not None and lc != col:
+                    checks.append("colour %s differs from its legend swatch %s" % (col, lc))
+            row["status"] = "ok" if not checks else "MISMATCH: " + "; ".join(checks)
+            n_ok += not checks
+            rows.append(row)
+            if checks:
+                issues.append(dict(level="fail", check="glyph_mismatch", id=g["glyph"], source=row["source"], detail=checks))
+        rep_cols = [s_ for s_, c in cols.items() if len(c) == 1]
+        seen = {}
+        for s_ in rep_cols:
+            seen.setdefault(next(iter(cols[s_])), []).append(s_)
+        dup = [x for x in seen.values() if len(x) > 1]
+        if dup:
+            issues.append(dict(level="fail", check="series_colours_repeat", id=cid, series=dup[:4],
+                               hint="two series share one colour: give the chart a 'colors' list with one colour per series"))
+        nd = sum(1 for r in rows if r["chart"] == cid and r.get("drawn_value") is not None)
+        summ[cid] = dict(glyphs=len(v["glyphs"]), drawn=nd, verified=n_ok,
+                         not_reported=sum(1 for r in rows if r["chart"] == cid and r.get("drawn_value") is None))
+    return rows, issues, summ
+
+
+def norm_label(t):
+    return re.sub(r"[\s$\\{}^_]", "", str(t or "")).lower()
 
 
 # ---------------------------------------------------------------- drawing
@@ -1778,6 +1925,27 @@ def main():
             out[ext] = dict(path=p, error=repr(e))
             issues.append(dict(level="fail", check="export", format=ext, detail=repr(e)))
     W = float(spec.get("canvas", {}).get("width_in", 13.33))
+    g_rows, g_issues, g_summary = [], [], {}
+    try:
+        g_rows, g_issues, g_summary = glyph_audit(registry)
+    except Exception as e:  # the audit must never block delivery
+        issues.append(dict(level="warn", check="glyph_audit", detail=repr(e)[:200]))
+    issues.extend(g_issues)
+    if g_rows:
+        gm = os.path.join(args.outdir, "glyph_map.json")
+        by_cell = {r["source"]: r["glyph"] for r in g_rows if r.get("source")}
+        with open(gm, "w", encoding="utf-8") as f:
+            json.dump(dict(note="every data glyph of the figure <-> its source cell (file:line:column). 'glyph' is the "
+                                "id of the element in the SVG (points: series group id + '#index'); drawn_value is "
+                                "read back from the rendered axes", charts=g_summary, glyphs=g_rows, by_cell=by_cell),
+                      f, ensure_ascii=False, indent=1)
+        with open(gm[:-5] + ".csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["glyph_svg_id", "chart", "series", "category", "source_value", "drawn_value", "err_source",
+                        "err_drawn", "source_file:line:column", "tick_label", "status"])
+            for r in g_rows:
+                w.writerow([r["glyph"], r["chart"], r["series"], r["category"], r["source_value"], r.get("drawn_value"),
+                            r.get("err_source"), r.get("err_drawn"), r.get("source"), r.get("tick_label"), r["status"]])
     plt.close(fig)
 
     # SVG: centre anchors + panel layers, then sanity (ids present, text kept as text)
@@ -1826,6 +1994,8 @@ def main():
         if v.get("kind") == "chart" and k in layer_map:
             for f in ("data_origin", "n_points", "n_series", "n_missing", "missing"):
                 layer_map[k][f] = v.get(f)
+            if g_summary.get(k):
+                layer_map[k]["glyph_audit"] = g_summary[k]
         if v.get("kind") == "arrow" and v.get("auto"):
             auto[k] = v["auto"]
             if k in layer_map:
@@ -1839,7 +2009,8 @@ def main():
     report = dict(status="ok" if not fails else "needs_fix", outputs=out, fonts=fams[:3],
                   font_notes=font_notes, fix_attempts=attempts, shrunk_labels=shrunk,
                   rotated_ticks={k: v["rotation"] for k, v in adj.items() if "rotation" in v},
-                  auto_routing=auto, issues=issues, n_elements=len(layer_map), canvas=spec.get("canvas", {}))
+                  auto_routing=auto, issues=issues, n_elements=len(layer_map), canvas=spec.get("canvas", {}),
+                  glyph_audit=dict(charts=g_summary, map=os.path.join(args.outdir, "glyph_map.json")) if g_rows else None)
     with open(os.path.join(args.outdir, "render_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     print(json.dumps(dict(status=report["status"], fails=len(fails), warns=len(warns),
