@@ -17,7 +17,7 @@ Two-column PDFs: the paragraph file uses reading order (columns are not interlea
 from it match the checker. Superscripts are flattened by PDF text extraction ("2.3 · 1019" = 2.3×10^19).
 Nothing is summarised or guessed: it only copies what the files contain and records what failed.
 """
-import argparse, csv, json, os, re, shutil, subprocess, sys
+import argparse, csv, glob, json, os, re, shutil, subprocess, sys, time
 
 TEXT_EXT = {".txt", ".md", ".json", ".yaml", ".yml", ".tex", ".bib", ".html", ".xml"}
 TABLE_EXT = {".csv", ".tsv"}
@@ -240,7 +240,34 @@ def main():
             print("   CAPTION", c)
     print("NEXT: grep -n -i '<keyword>' %s/*.txt  (each hit line starts with its locator [pX:Y]);"
           " tables: grep -n -A15 'Table N' %s/*.layout.txt" % (mdir, mdir))
+    start_draft(a)
     return 0
+
+
+def start_draft(a):
+    """Clock for the [budget] lines + a background safety draft (fig_draft.py) so a deliverable exists early."""
+    if os.environ.get("FIG_DRAFT"):
+        return
+    t0p = os.path.join(a.work, ".t0")
+    if not os.path.exists(t0p):
+        open(t0p, "w").write(str(time.time()))
+    if os.path.exists(os.path.join(a.work, ".final_started")) or not os.path.exists(os.path.join(a.input, "case.json")):
+        return
+    try:
+        outdir = os.environ.get("FIG_OUTDIR", "/app/output")
+        try:
+            skill = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "SKILL.md"), encoding="utf-8").read(400)
+        except Exception:
+            skill = ""
+        chart = "chart" in skill and bool(glob.glob(os.path.join(a.input, "**", "*.csv"), recursive=True))
+        p = subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fig_draft.py"),
+                              "--work", a.work, "--input", a.input, "--outdir", outdir],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        open(os.path.join(a.work, "draft.pid"), "w").write(str(p.pid))
+        print("SAFETY DRAFT: %s/result.json (status partial%s) is written in the background within a minute as a "
+              "fallback; your fig_make.py run replaces it." % (outdir, ", with a chart bound to the CSV" if chart else ""))
+    except Exception as e:
+        print("WARN safety draft not started: %r" % e)
 
 
 if __name__ == "__main__":

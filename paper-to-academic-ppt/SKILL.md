@@ -18,6 +18,9 @@ mkdir -p /app/work /app/output
 # 1 task + contract + paper map (text with [pN:M] locators, figure/table crops, tables, equations)   [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+#   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
+#   partial) built from the paper map; your step-4 run replaces it. Every make run prints [budget] (s used of 900):
+#   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
 # 2 verbatim quotes with locators                                                                  [1-3 calls]
 python3 $SKILL/scripts/paper_map.py find "we propose" "outperform" "limitation" "Table 2"
 # 3 write /app/work/facts.json and /app/work/spec.json (templates/; rules in references/)            [2-3 calls]
@@ -116,6 +119,7 @@ add them with `--set`, otherwise make_result marks them `not_provided` (never fa
 ## Exception handling (decide, then state it in result.json → uncertainty)
 | Situation | Action |
 |---|---|
+| running out of requests / time | a complete deliverable is already on disk (safety draft or your last run); run step 4 once with what you have, never start new polishing |
 | PDF has no text layer / scanned | extract_materials OCRs (tesseract); cite OCR text as lower confidence; check numbers against page images |
 | PDF encrypted / unreadable | try `qpdf --decrypt in.pdf out.pdf`; else build from other materials, `status: partial` |
 | figure crop wrong / caption not found | set `bbox` by hand (look at the page PNG) or `paper_map.py crop`; whole page as last resort |

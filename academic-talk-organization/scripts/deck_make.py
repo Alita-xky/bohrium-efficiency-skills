@@ -14,9 +14,55 @@ deck_template.py audit (compliance.json); with --case also deck_fill.py (version
 and make_result.py (result.json). The deck is always built - even when the check fails - so an honest
 partial deliverable exists early. Prints every FAIL in one list; fix them in the spec and run again.
 """
-import argparse, glob, json, os, subprocess, sys
+import argparse, glob, json, os, signal, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+BUDGET_S = 900
+
+
+def budget_line(work):
+    """Seconds since deck_prepare started (the run's clock) and what to do with the rest of the budget."""
+    try:
+        used = time.time() - float(open(os.path.join(work, ".t0")).read().strip())
+    except Exception:
+        return None
+    if used > 0.8 * BUDGET_S:
+        tip = "stop now: the deliverable above is final; at most one more run of this command if a FAIL blocks a file"
+    elif used > 0.6 * BUDGET_S:
+        tip = "finish: fix only FAILs, run this command once more, then stop (no new polishing)"
+    else:
+        tip = "time left for one fix round and one look at the previews"
+    return "[budget] ~%d s of %d s used since prepare; %s" % (used, BUDGET_S, tip)
+
+
+def stop_draft(work):
+    """The agent's own run takes over /app/output: stop a still-running safety draft (deck_draft.py)."""
+    open(os.path.join(work, ".final_started"), "w").write(str(time.time()))
+    pidf = os.path.join(work, "draft.pid")
+    if os.path.exists(pidf):
+        try:
+            os.killpg(int(open(pidf).read().strip()), signal.SIGTERM)
+        except Exception:
+            pass
+
+
+def drop_draft_leftovers(outdir, t_start):
+    """Remove files only the safety draft wrote (older than this run), so /app/output holds one coherent deliverable."""
+    mp = os.path.join(outdir, "draft_manifest.json")
+    if not os.path.exists(mp):
+        return 0
+    n = 0
+    try:
+        files = json.load(open(mp, encoding="utf-8")).get("files") or []
+    except Exception:
+        files = []
+    for rel in files:
+        p = os.path.join(outdir, rel)
+        if os.path.isfile(p) and os.path.getmtime(p) < t_start:
+            os.remove(p)
+            n += 1
+    os.remove(mp)
+    return n
 
 
 def run(args, timeout=600):
@@ -58,7 +104,12 @@ def main():
     ap.add_argument("--fill", default=None, help="your own answers keyed by contract field (win over the automatic ones)")
     ap.add_argument("--uncertainty", action="append", default=[])
     ap.add_argument("--set", action="append", default=[])
+    ap.add_argument("--status", default=None, choices=["complete", "partial", "failed"])
+    ap.add_argument("--draft", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
+    t_start = time.time()
+    if not a.draft and os.path.isdir(a.work):
+        stop_draft(a.work)
     os.makedirs(a.outdir, exist_ok=True)
     specs = sum([["--spec", s] for s in a.spec], [])
     facts = ["--facts", a.facts] if a.facts else []
@@ -128,6 +179,8 @@ def main():
         fl = [os.path.join(HERE, "deck_fill.py"), "--case", a.case, "--outdir", a.outdir, "--work", a.work, "--input", a.input,
               "--out", os.path.join(a.work, "fill.json"), "--deck", pptx, "--result"]
         fl += sum([["--uncertainty", u] for u in a.uncertainty], []) + sum([["--set", x] for x in a.set], [])
+        if a.status:
+            fl += ["--status", a.status]
         if a.fill:
             fl += ["--fill", a.fill]
         os.makedirs(a.work, exist_ok=True)
@@ -144,8 +197,15 @@ def main():
                 print(line)
         if "RESULT" not in out and '"result"' not in out:
             print("FAIL result: deck_fill/make_result did not run: " + out[-600:])
+    if not a.draft:
+        n = drop_draft_leftovers(a.outdir, t_start)
+        if n:
+            print("safety draft replaced (%d draft-only files removed)" % n)
     if fails:
         print("NEXT: fix each FAIL in the spec, then run this same command again")
+    b = budget_line(a.work)
+    if b and not a.draft:
+        print(b)
     return 0
 
 

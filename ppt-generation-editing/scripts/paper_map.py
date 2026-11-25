@@ -717,7 +717,7 @@ def main_map(a):
         cut = sorted(keys, key=lambda k: -k["score"])[a.max_key - 1]["score"]
         strong = [k for k in keys if k["score"] > cut]
         keys = [k for k in keys if k["score"] > cut or (k["score"] == cut and len(strong) < a.max_key and not strong.append(k))]
-    title = paras[0][1].split("\n")[0].strip()
+    title = guess_title(a.pdf, paras)
     out = dict(pdf=a.pdf, text_source=src, n_pages=n_pages, title_guess=title, sections=sections,
                figures_tables=items, equations=equations, overview_png=overview, key_sentences=keys,
                notes=["bbox = fractions of the page (x0,y0,x1,y1); crops are candidates - check fig_candidates.png",
@@ -760,6 +760,43 @@ def main_find(a):
         if not n:
             print("   (no match)")
     return 0
+
+
+TITLE_BAD = re.compile(r"permission|licen[cs]e|copyright|arxiv|preprint|attribution|proceedings|conference on|journal of|"
+                       r"vol\.|doi|https?:|©|under review|workshop|accepted|published", re.I)
+
+
+def guess_title(pdf, paras):
+    """Paper title: the largest-font lines of page 1 (license/arXiv stamps skipped), else PDF metadata, else the
+    first short paragraph that is not boilerplate."""
+    try:
+        import fitz
+        doc = fitz.open(pdf)
+        spans = []
+        for b in doc[0].get_text("dict").get("blocks", []):
+            for l in b.get("lines", []):
+                if l.get("dir") and abs(l["dir"][1]) > 0.5:      # rotated side stamps
+                    continue
+                for sp in l.get("spans", []):
+                    t = sp["text"].strip()
+                    if t and not TITLE_BAD.search(t):
+                        spans.append((sp["size"], sp["bbox"][1], sp["bbox"][0], t))
+        if spans:
+            big = max(x[0] for x in spans)
+            cand = " ".join(x[3] for x in sorted((x for x in spans if x[0] >= big - 0.6), key=lambda x: (round(x[1]), x[2])))
+            cand = re.sub(r"\s+", " ", cand).strip()
+            if 6 <= len(cand) <= 250 and len(cand.split()) <= 30:
+                return cand
+        md = ((doc.metadata or {}).get("title") or "").strip()
+        if 6 <= len(md) <= 250 and not TITLE_BAD.search(md) and not re.search(r"\.(pdf|docx?|tex)$|^untitled|microsoft", md, re.I):
+            return md
+    except Exception:
+        pass
+    for _, p in paras[:10]:
+        t = p.split("\n")[0].strip()
+        if t and not TITLE_BAD.search(t) and len(t.split()) <= 25:
+            return t
+    return paras[0][1].split("\n")[0].strip()
 
 
 def main():

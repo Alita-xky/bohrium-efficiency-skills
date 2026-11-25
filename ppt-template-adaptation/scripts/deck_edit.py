@@ -928,6 +928,14 @@ def cmd_round(a):
     if comp.get("n_intended") or comp.get("n_pre_existing"):
         print("  template: %d issue(s) requested by the instructions, %d already in v0 (kept as warn, not regressions)"
               % (comp.get("n_intended", 0), comp.get("n_pre_existing", 0)))
+    try:   # the run's clock starts at deck_prepare (/app/work/.t0); budget 900 s
+        used = time.time() - float(open(os.path.join(getattr(a, "work", None) or "/app/work", ".t0")).read().strip())
+        tip = ("stop now: the deliverable above is final" if used > 720 else
+               "finish: fix only ops_errors/FAILs, at most one more round" if used > 540 else
+               "time left for one fix round and one look at the previews")
+        print("[budget] ~%d s of 900 s used since prepare; %s" % (used, tip))
+    except Exception:
+        pass
     return 0
 
 

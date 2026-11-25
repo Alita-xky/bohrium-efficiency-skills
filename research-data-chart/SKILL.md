@@ -18,6 +18,8 @@ mkdir -p /app/work /app/output
 # 1 task, contract field names, materials with locators                         [1 call]
 cat /input/case.json /input/task.md 2>/dev/null; python3 $SKILL/scripts/make_result.py --case /input/case.json --list-fields
 python3 $SKILL/scripts/extract_materials.py --input /input --work /app/work
+#   extract also starts a SAFETY DRAFT: within ~1 min /app/output holds result.json (status partial, plus a chart bound to the CSV data);
+#   your step-4 run replaces it. fig_make prints [budget] (s used of 900): past 60 % fix FAILs only, past 80 % stop.
 # 2 verbatim quotes + locators for everything you will draw                    [1-2 calls]
 python3 $SKILL/scripts/extract_materials.py --work /app/work --find "keyword" "41 ng" "Table 2"
 # 3 write /app/work/facts.json + /app/work/spec.json from $SKILL/templates/spec_template_chart.json  [1-2 calls]
@@ -197,6 +199,7 @@ under uncertainty. Without fig_make: `make_result.py --case /input/case.json --o
 ## Exception handling (decide, then state it in result.json)
 | Situation | Action |
 |---|---|
+| running out of requests / time | a deliverable is already on disk (safety draft or your last run); run step 4 once with what you have, never start new polishing |
 | value/unit/n missing in materials | "n.r."/"not reported" placeholder, `status: partial` only if the task required it, list under uncertainty |
 | names ambiguous / sources disagree | main-text wording, record both locators |
 | text overflow, font missing, CJK boxes | automatic shrink ≥ 6.5 pt + wrap; a CJK font missing from matplotlib's cache is found on disk (fc-list) and registered; else shorten / English labels; `font_notes` |

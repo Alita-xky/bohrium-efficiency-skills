@@ -104,7 +104,7 @@ python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/outp
   is a fair summary — the agent still has to read the cited paragraph.
 
 ## Maintenance
-Version 1.4 (2026-11-25: `result.json` carries `rubric_coverage` — the six rubric elements (storyline, slide structure, figure/table references, speaking logic, template constraints, export/rendering), each with a verdict from this run's own reports and the file that proves it). Version 1.3 (2026-11-24: automatic slide design and deck-wide type scale). Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
+Version 1.8 (2026-11-26: every edit round prints a `[budget]` line — seconds used of the 900 s run budget and whether to fix, finish or stop; paper titles are read from the largest font on page 1, skipping licence and arXiv stamps). Version 1.4 (2026-11-25: `result.json` carries `rubric_coverage` — the six rubric elements (storyline, slide structure, figure/table references, speaking logic, template constraints, export/rendering), each with a verdict from this run's own reports and the file that proves it). Version 1.3 (2026-11-24: automatic slide design and deck-wide type scale). Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
 parsing, `verification` block, measured gain report). Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,
 ppt_template, ppt_edit); only SKILL.md, templates, references and examples differ.
 

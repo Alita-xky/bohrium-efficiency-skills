@@ -24,7 +24,7 @@ Steps (every report lands in --outdir):
 Output: one JSON summary line, then FAIL / ISSUE / FIX lines. The deliverable is written even when a
 check fails (status becomes partial): fix the FAILs in the spec and run the same command again.
 """
-import argparse, glob, hashlib, json, os, platform, re, shutil, subprocess, sys, time
+import argparse, glob, hashlib, json, os, platform, re, shutil, signal, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -261,6 +261,53 @@ def rubric_coverage(mode, lm, spec, cr, rr, data_map, glyph, exports, edit):
             "图例标注 legend and labels": legend, "可编辑源文件 editable source": editable, "导出格式 export": export}
 
 
+BUDGET_S = 900
+
+
+def budget_line(work):
+    """Seconds since extract_materials started (the run's clock) and what to do with the rest of the budget."""
+    try:
+        used = time.time() - float(open(os.path.join(work, ".t0")).read().strip())
+    except Exception:
+        return None
+    if used > 0.8 * BUDGET_S:
+        tip = "stop now: the deliverable above is final; at most one more run of this command if a FAIL blocks a file"
+    elif used > 0.6 * BUDGET_S:
+        tip = "finish: fix only FAILs, run this command once more, then stop (no new polishing)"
+    else:
+        tip = "time left for one fix round and one look at the PNG"
+    return "[budget] ~%d s of %d s used since extract; %s" % (used, BUDGET_S, tip)
+
+
+def stop_draft(work):
+    """The agent's own run takes over /app/output: stop a still-running safety draft (fig_draft.py)."""
+    try:
+        open(os.path.join(work, ".final_started"), "w").write(str(time.time()))
+        pid = int(open(os.path.join(work, "draft.pid")).read().strip())
+        os.killpg(pid, signal.SIGTERM)
+    except Exception:
+        pass
+
+
+def drop_draft_leftovers(outdir, t_start):
+    """Remove files only the safety draft wrote (older than this run), so the output holds one coherent deliverable."""
+    mp = os.path.join(outdir, "draft_manifest.json")
+    if not os.path.exists(mp):
+        return 0
+    n = 0
+    try:
+        files = json.load(open(mp, encoding="utf-8")).get("files") or []
+    except Exception:
+        files = []
+    for rel in files:
+        p = os.path.join(outdir, rel)
+        if os.path.isfile(p) and os.path.getmtime(p) < t_start:
+            os.remove(p)
+            n += 1
+    os.remove(mp)
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--spec", default=None)
@@ -280,6 +327,7 @@ def main():
     ap.add_argument("--uncertainty", action="append", default=[])
     ap.add_argument("--status", default=None, choices=["complete", "partial", "failed"])
     ap.add_argument("--no-rerun", action="store_true")
+    ap.add_argument("--draft", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     edit = bool(a.edit_svg)
     if not edit and not a.spec:
@@ -290,6 +338,8 @@ def main():
     os.makedirs(od, exist_ok=True)
     os.makedirs(wd, exist_ok=True)
     t0 = time.time()
+    if not a.draft:
+        stop_draft(wd)
     fails, warns, issues, cmds, steps = [], [], [], [], {}
 
     # materials: extract them if step 1 was skipped
@@ -597,8 +647,15 @@ def main():
     if summary["unmapped"]:
         print("FIX: contract fields with no automatic evidence: %s -> put your answer for each in %s and rerun"
               % (summary["unmapped"], a.fill or "/app/work/fill.json (--fill)"))
+    if not a.draft:
+        n = drop_draft_leftovers(od, t0)
+        if n:
+            print("safety draft replaced (%d draft-only files removed)" % n)
     if fails:
         print("NEXT: fix each FAIL in the spec (see SKILL.md table), then run this same command again")
+    b = budget_line(wd)
+    if b and not a.draft:
+        print(b)
     return 0
 
 

@@ -112,7 +112,7 @@ python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/outp
   agent's judgement following references/talk_patterns.md and are shown for review, not machine-verified.
 
 ## Maintenance
-Version 1.4 (2026-11-25: `rubric_coverage` in result.json (six rubric elements -> evidence), script-length vs slot check, audience-doubt coverage, selection ledger, Q&A crib in
+Version 1.8 (2026-11-26: safety draft — `deck_prepare.py` starts `deck_draft.py` in the background, so within the first minute `/app/output` holds a complete, honest partial talk deliverable (deck from the paper map with slide times, key messages and transitions, a minimal talk plan whose Q&A answers are verbatim paper sentences, result.json with status partial); the agent's `deck_make.py` run stops the draft and replaces it; `[budget]` lines report the seconds used of the 900 s run budget; slide labels follow the task language). Version 1.4 (2026-11-25: `rubric_coverage` in result.json (six rubric elements -> evidence), script-length vs slot check, audience-doubt coverage, selection ledger, Q&A crib in
 the notes; example notes rewritten as a spoken script). Version 1.3 (2026-11-24: automatic slide design and
 deck-wide type scale). Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
 parsing, `verification` block, measured gain report). Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,

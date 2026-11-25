@@ -12,7 +12,7 @@ Writes /app/work/prepare.json and prints a compact summary:
   tools (python-pptx, soffice, pdftoppm, ...) and fonts. Office documents (.ppt/.doc/.docx/.odt) are converted
   with LibreOffice so they can be read. Nothing is summarised or invented.
 """
-import argparse, json, os, re, shutil, subprocess, sys
+import argparse, json, os, re, shutil, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -67,8 +67,13 @@ def main():
     ap.add_argument("--work", default="/app/work")
     ap.add_argument("--task", default=None)
     ap.add_argument("--gallery", action="store_true", help="render one slide per template layout (about 10 s)")
+    ap.add_argument("--outdir", default="/app/output")
+    ap.add_argument("--no-draft", action="store_true", help="do not start the background safety draft")
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
+    t0p = os.path.join(a.work, ".t0")
+    if not os.path.exists(t0p):
+        open(t0p, "w").write(str(time.time()))
     task = a.task
     for cand in ([a.task] if a.task else []) + [os.path.join(a.input, "task.md"), "task.md", "/app/task.md",
                                                   os.path.join(os.path.dirname(a.input), "task.md")]:
@@ -201,6 +206,21 @@ def main():
         print("---- starting deck render: " + res["start_render"])
     if not paper and not decks:
         print("WARN no paper PDF and no deck found: read materials/materials_index.json")
+    try:
+        editor = "source-preserving-editor" in open(os.path.join(HERE, "..", "SKILL.md"), encoding="utf-8").read(400)
+    except Exception:
+        editor = False
+    editor = editor or bool(decks and not paper and not templates)
+    if res.get("paper_map") and not editor and not a.no_draft and not os.path.exists(os.path.join(a.work, ".final_started")):
+        try:
+            p = subprocess.Popen([sys.executable, os.path.join(HERE, "deck_draft.py"), "--work", a.work, "--input", a.input,
+                                  "--outdir", a.outdir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            open(os.path.join(a.work, "draft.pid"), "w").write(str(p.pid))
+            print("SAFETY DRAFT: building in the background -> %s in about a minute (deck, PDF, previews, result.json, "
+                  "status partial; log %s/draft.log). It is only a fallback: your deck_make run replaces it." % (a.outdir, a.work))
+        except Exception as e:
+            print("WARN safety draft not started: %r" % e)
     return 0
 
 

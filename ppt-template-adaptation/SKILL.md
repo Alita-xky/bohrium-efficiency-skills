@@ -17,6 +17,9 @@ mkdir -p /app/work /app/output
 # 1 task + contract + template anatomy + starting deck (+ paper map)                              [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work --gallery
+#   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
+#   partial) built from the given draft deck moved into the template (or the paper map); your step-4 run replaces it. Every make run prints [budget] (s used of 900):
+#   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
 # 2 "before" record of the starting deck                                                          [1 call]
 python3 $SKILL/scripts/deck_template.py audit --pptx /input/<deck>.pptx --template /input/<template> --out /app/output/compliance_before.json
 # 3 starting deck -> spec (content kept)                                                          [1 call]
@@ -98,6 +101,7 @@ version records (template sha256, fonts requested vs embedded, tools). Add unmap
 ## Exception handling
 | Situation | Action |
 |---|---|
+| running out of requests / time | a complete deliverable is already on disk (safety draft or your last run); run step 4 once with what you have, never start new polishing |
 | template lacks a layout kind | builder falls back (recorded); or pick another with `layout_name`; never edit the master |
 | layout placeholder with zero size (template defect, flagged "ZERO-SIZE" by prepare) | builder gives that slide placeholder the master's box (inheritance kept, defect listed in uncertainty) |
 | native chart in the draft | bar/line: rebuilt as an editable chart from its data CSV; other types: image of the original render + data CSV, state "chart no longer editable, data in …csv" |

@@ -110,6 +110,7 @@ paths cannot be re-typed. Number provenance is string-level; derived values must
 `derived:{formula,inputs}`. CJK output needs an installed CJK font (reported if absent).
 
 ## Maintenance
+v1.8 (2026-11-26: safety draft — `extract_materials.py` starts `fig_draft.py` in the background, so `/app/output` holds an honest partial deliverable within the first minute (chart: a chart bound to the CSV cells; otherwise result.json with every contract field marked not provided); `fig_make.py` stops the draft and replaces it; `[budget]` lines report the seconds used of the 900 s run budget).
 v1.7 (2026-11-25: `"layout":"auto"` layered placement from the arrows, entity types gene/complex/family
 drawn by convention, arrow kinds modifies/catalyzes/transports, journal size presets, parameter cards
 (v1.6)). v1.5 (2026-11-25: visual quality after a side-by-side test against a figure drawn without the Skill —

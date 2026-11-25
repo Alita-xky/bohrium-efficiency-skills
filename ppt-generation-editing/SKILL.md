@@ -17,6 +17,7 @@ mkdir -p /app/work /app/output
 # 1 task (the numbered instructions) + contract + deck inventory + paper map                      [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+#   step 4 prints [budget] (s used of 900): past 60 % fix only ops_errors/FAILs and finish, past 80 % stop.
 # 2 values the instructions need, with locators: python3 $SKILL/scripts/paper_map.py find "..."   [1-3 calls]
 # 3 write /app/work/ops.json: one op per instruction, addressed by slide + shape, with reason/src [1 call]
 # 4 ONE command: snapshot v0 -> apply -> render -> diff -> evidence check -> audit -> result.json [1 call]
@@ -92,6 +93,7 @@ instruction you could not do and why. Add unmapped contract fields with `--set f
 ## Exception handling
 | Situation | Action |
 |---|---|
+| running out of requests / time | a complete deliverable is already on disk (safety draft or your last run); run step 4 once with what you have, never start new polishing |
 | shape/slide not found (`ops_errors`) | re-read the inventory (`deck_edit.py inventory --pptx …`), fix the address, re-run the round |
 | instruction conflicts with the paper (e.g. "change 27.9 to 28") | keep the paper's value, report the conflict in uncertainty |
 | number in instruction not in materials | do not insert it unless the task explicitly provides it; flag in uncertainty |

@@ -18,6 +18,9 @@ mkdir -p /app/work /app/output
 # 1 task (audience, minutes, goal) + contract + paper map                                         [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
+#   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
+#   partial) built from the paper map, with a minimal talk plan; your step-4 run replaces it. Every make run prints [budget] (s used of 900):
+#   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
 # 2 verbatim quotes with locators: python3 $SKILL/scripts/paper_map.py find "..." "..."             [1-3 calls]
 # 3 write facts.json, talk_plan.json, spec.json in /app/work (templates/)                         [2-3 calls]
 # 4 ONE command: check (incl. time budget, Q&A) -> build -> render -> records -> result.json     [1 call]
@@ -107,6 +110,7 @@ plan, Q&A, timeline, deck, evidence map, render/version records, uncertainty, st
 ## Exception handling
 | Situation | Action |
 |---|---|
+| running out of requests / time | a complete deliverable is already on disk (safety draft or your last run); run step 4 once with what you have, never start new polishing |
 | duration or audience not given | assume and say so: state the assumption in `talk_plan.goal`/uncertainty (e.g. 15 min, peers) |
 | too much content for the slot | cut by the goal: move to backup / notes, record in `cuts`; never shrink text below 12 pt |
 | slot too long for the material | add a worked example or the method figure detail from the paper — not invented content |
