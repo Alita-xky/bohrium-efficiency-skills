@@ -45,9 +45,16 @@ contract field and an honest status), so a run that stops early still delivers. 
   fill/edge colour + legend, one distinct colour per category. Use the source's names and casing
   (TNFα, IL-10, Ca^{2+} → Ca²⁺); properties the source states (e.g. "autocrine, short range") can go
   into the entity label instead of loose text under it.
+- Entity type must match the source (`"etype"`): `gene` (label in italics, as convention), `protein`,
+  `complex` (double border), `family` (stacked boxes, e.g. "TNFR1/2"), `small_molecule`, `cell`,
+  `process`, `phenotype` — never draw a gene where the source means its protein, or a family as one member.
 - Every mechanistic arrow needs `source.quote` stating direction AND sign: activates/promotes (→),
   inhibits (⊣), produces/converts (dashed →, label enzyme or condition), binds (dotted, no
-  direction). `fig_check.py --mode mechanism` fails arrows without a quote. "Modulates/regulates" with
+  direction), `modifies` (dash-dot →, e.g. phosphorylation), `catalyzes` (dotted →), `transports`
+  (block arrow, translocation between compartments) — each kind used gets a legend sample.
+- No compartments: give the panel (or the figure) `"layout":"auto"` and leave out entity x/y/w/h —
+  nodes are layered by the arrows (upstream on top, feedback arrows kept) and ordered to avoid crossings;
+  `"pin": true` keeps one hand-placed node. `fig_check.py --mode mechanism` fails arrows without a quote. "Modulates/regulates" with
   a stated decrease = inhibits; without a sign = associates + label "modulates".
 - Do not chain inferences the paper does not state; mark hypothesised links as `associates` with the
   label "proposed" when the source calls them proposed. Say "functional, not necessarily direct" if
@@ -124,6 +131,9 @@ that group and `add_text` at its bbox, and say so. Non-SVG sources (PPTX/DOCX/PN
 Edit mode needs no spec: inventory → ops.json → the command above.
 
 ## 4c. Visual quality — the figure is judged next to one drawn without this Skill
+- Relationship diagrams without fixed geometry (pathways, study designs, flow charts): set
+  `"layout":"auto"` on the panel (or the spec) and omit entity x/y/w/h — layered, crossing-minimised
+  placement from the arrows; hand-place only what the source fixes (compartments, apparatus geometry).
 - Nodes: short labels are drawn **filled** in their category colour with white bold text (default); add
   `"sub"` for a second, smaller line (role, compartment, unit or condition from the source). Long text
   blocks stay light automatically (or `"style":"outline"`).
@@ -140,6 +150,10 @@ Edit mode needs no spec: inventory → ops.json → the command above.
   number from the source; a panel with one vague sentence looks empty next to a hand-drawn figure.
 - Legend entries about arrow kinds (`"kind":"inhibits"`, or a label with activates/inhibits/…) are drawn
   as real arrow samples; colour entries as swatches.
+- Journal format: `"canvas":{"preset":"nature-double"}` (also nature-single, science-single/double/triple,
+  cell-single/1.5/double, pnas-single/double, ieee-single/double, a4-report, slide-16x9) sets the
+  column width, 7–8 pt text and 600 dpi, keeping the canvas aspect; use it when the task names a journal
+  or a column width.
 - Charts: charts side by side with the same categories share one category axis and one legend
   (automatic); `highlight` draws a light band; `value_labels:true` prints the exact source strings; log
   axes start one decade below the smallest bar so every bar is visible.

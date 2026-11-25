@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `setup`)
 
-Generated 2026-11-25 11:26 by `python3 scripts/gain_check.py --mode setup --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-25 11:37 by `python3 scripts/gain_check.py --mode setup --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 

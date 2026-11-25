@@ -25,9 +25,16 @@ addressed ids of the original SVG and log before/after values.
   fill/edge colour + legend, one distinct colour per category. Use the source's names and casing
   (TNFα, IL-10, Ca^{2+} → Ca²⁺); properties the source states (e.g. "autocrine, short range") can go
   into the entity label instead of loose text under it.
+- Entity type must match the source (`"etype"`): `gene` (label in italics, as convention), `protein`,
+  `complex` (double border), `family` (stacked boxes, e.g. "TNFR1/2"), `small_molecule`, `cell`,
+  `process`, `phenotype` — never draw a gene where the source means its protein, or a family as one member.
 - Every mechanistic arrow needs `source.quote` stating direction AND sign: activates/promotes (→),
   inhibits (⊣), produces/converts (dashed →, label enzyme or condition), binds (dotted, no
-  direction). `fig_check.py --mode mechanism` fails arrows without a quote. "Modulates/regulates" with
+  direction), `modifies` (dash-dot →, e.g. phosphorylation), `catalyzes` (dotted →), `transports`
+  (block arrow, translocation between compartments) — each kind used gets a legend sample.
+- No compartments: give the panel (or the figure) `"layout":"auto"` and leave out entity x/y/w/h —
+  nodes are layered by the arrows (upstream on top, feedback arrows kept) and ordered to avoid crossings;
+  `"pin": true` keeps one hand-placed node. `fig_check.py --mode mechanism` fails arrows without a quote. "Modulates/regulates" with
   a stated decrease = inhibits; without a sign = associates + label "modulates".
 - Do not chain inferences the paper does not state; mark hypothesised links as `associates` with the
   label "proposed" when the source calls them proposed. Say "functional, not necessarily direct" if
@@ -121,7 +128,9 @@ paths cannot be re-typed. Number provenance is string-level; derived values must
 `derived:{formula,inputs}`. CJK output needs an installed CJK font (reported if absent).
 
 ## Maintenance
-v1.5 (2026-11-25: visual quality after a side-by-side test against a figure drawn without the Skill —
+v1.7 (2026-11-25: `"layout":"auto"` layered placement from the arrows, entity types gene/complex/family
+drawn by convention, arrow kinds modifies/catalyzes/transports, journal size presets, parameter cards
+(v1.6)). v1.5 (2026-11-25: visual quality after a side-by-side test against a figure drawn without the Skill —
 filled category nodes with an optional `sub` line, numbered colour headers for problem/method/result/
 conclusion panels, real arrow samples in legends, orthogonal elbow routing, opposite pairs as parallel
 lines, charts with one shared category axis and legend, highlight bands, visible log-scale bars, value-label

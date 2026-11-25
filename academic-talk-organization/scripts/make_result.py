@@ -214,6 +214,14 @@ def main():
                                                    by_rule=comp.get("issues_by_rule"))
     if pres:
         verification["content_preservation"] = dict(status=pres.get("status"), text_preserved_rate=pres.get("text_preserved_rate"))
+    if os.path.exists(os.path.join(a.outdir, "evidence_map.md")):
+        em = jl("evidence_map.json") or {}
+        verification["page_gold_standard"] = dict(
+            file=os.path.join(a.outdir, "evidence_map.md"), json=os.path.join(a.outdir, "evidence_map.json"),
+            slides=len(em.get("slides") or []), facts=len(em.get("facts") or {}),
+            what="页级金标准 / page-level gold standard: for every slide its claim, each statement's verbatim source quote "
+                 "with [page:paragraph] locator, every number with where it was found and the paper's Fig./Table numbers; "
+                 "re-check any deck against it with deck_check.py --pptx")
     ts = jl("type_scale.json")
     if ts:
         verification["type_scale"] = dict(file=os.path.join(a.outdir, "type_scale.json"), title_pt=(ts.get("title") or {}).get("size_pt"),

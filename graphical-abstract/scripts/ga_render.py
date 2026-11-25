@@ -54,7 +54,10 @@ PALETTE = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#F
 CARD_ROLES = ("problem", "question", "background", "method", "approach", "result", "results", "finding", "conclusion",
               "takeaway", "implication")
 CARD_COLORS = ["#2B4C7E", "#1F7A6D", "#B5562B", "#6A3D8F", "#3F6E2F", "#8C2F39"]
-ARROW_WORDS = [("inhibit", "inhibits"), ("抑制", "inhibits"), ("⊣", "inhibits"), ("-|", "inhibits"), ("promot", "promotes"),
+ARROW_WORDS = [("inhibit", "inhibits"), ("抑制", "inhibits"), ("⊣", "inhibits"), ("-|", "inhibits"),
+               ("modif", "modifies"), ("phosphoryl", "modifies"), ("修饰", "modifies"), ("磷酸化", "modifies"),
+               ("transport", "transports"), ("transloc", "transports"), ("转运", "transports"), ("转位", "transports"),
+               ("cataly", "catalyzes"), ("催化", "catalyzes"), ("promot", "promotes"),
                ("促进", "promotes"), ("activat", "activates"), ("激活", "activates"), ("produc", "produces"),
                ("生成", "produces"), ("convert", "converts"), ("转化", "converts"), ("bind", "binds"), ("结合", "binds"),
                ("associat", "associates"), ("相关", "associates"), ("flow", "flow"), ("流程", "flow"), ("next", "next"),
@@ -88,7 +91,11 @@ ARROW_KINDS = {
     "binds": dict(arrowstyle="-", linestyle=":"),
     "associates": dict(arrowstyle="-", linestyle=":"),
     "next": dict(arrowstyle="-|>", linestyle="-"),
+    "modifies": dict(arrowstyle="->, head_width=0.45, head_length=0.7", linestyle="-."),   # e.g. phosphorylation
+    "catalyzes": dict(arrowstyle="->, head_width=0.45, head_length=0.7", linestyle=(0, (1, 1.5))),
+    "transports": dict(arrowstyle="simple, head_width=0.9, head_length=0.9, tail_width=0.35", linestyle="-"),
 }
+ENTITY_TYPES = ("gene", "protein", "complex", "family", "small_molecule", "cell", "compartment", "process", "phenotype")
 ENT_KINDS = ("entity", "icon")   # boxes arrows clip to, route around and are checked against
 SVG_NS = "http://www.w3.org/2000/svg"
 INK_NS = "http://www.inkscape.org/namespaces/inkscape"
@@ -1246,6 +1253,110 @@ def norm_label(t):
 
 
 # ---------------------------------------------------------------- drawing
+JOURNAL_PRESETS = {   # column width (inches), body text (pt), raster dpi; height keeps the canvas aspect
+    "nature-single": (3.50, 7, 600), "nature-double": (7.20, 7, 600),
+    "science-single": (2.24, 7, 600), "science-double": (4.76, 7, 600), "science-triple": (7.24, 7, 600),
+    "cell-single": (3.35, 7, 600), "cell-1.5": (4.49, 7, 600), "cell-double": (6.85, 7, 600),
+    "pnas-single": (3.42, 7, 600), "pnas-double": (7.00, 7, 600),
+    "ieee-single": (3.50, 8, 600), "ieee-double": (7.16, 8, 600),
+    "a4-report": (6.30, 9, 300), "slide-16x9": (13.33, 14, 200)}
+
+
+def apply_preset(spec):
+    """canvas.preset -> width, height (same aspect), base font and dpi of that journal format; returns a note"""
+    cv = spec.setdefault("canvas", {})
+    name = str(cv.get("preset") or "").lower()
+    if name not in JOURNAL_PRESETS:
+        return None
+    w, pt, dpi = JOURNAL_PRESETS[name]
+    W0, H0 = float(cv.get("width_in", 13.33)), float(cv.get("height_in", 7.5))
+    cv.update(width_in=w, height_in=round(w * H0 / W0, 3), base_font_pt=pt, dpi=int(cv.get("dpi_override") or dpi))
+    return "%s: %.2f in (%d mm) wide, %d pt text, %d dpi PNG, height %.2f in" % (name, w, round(w * 25.4), pt, cv["dpi"],
+                                                                                 cv["height_in"])
+
+
+def auto_layout(elements, arrows, direction="TB", top=0.14, bottom=0.06, left=0.04, right=0.04):
+    """Layered layout for entity/icon elements without positions: upstream on top (or left), layers from the
+    arrows (cycles broken, feedback arrows kept), order inside a layer by the barycenter of the neighbours
+    (4 sweeps) to cut crossings. Writes x, y, w, h (fractions of the container). Returns a short report."""
+    nodes = [e for e in elements if e.get("type", "entity") in ("entity", "icon") and not e.get("pin")]
+    ids = [e["id"] for e in nodes]
+    if not ids:
+        return None
+    idx = {k: i for i, k in enumerate(ids)}
+    edges = [(a["from"], a["to"]) for a in arrows if a.get("from") in idx and a.get("to") in idx and a["from"] != a["to"]]
+    seen_pair, dag = set(), []
+    for u, v in edges:   # a mutual pair counts once, in the direction it first appears
+        if (v, u) in seen_pair or (u, v) in seen_pair:
+            continue
+        seen_pair.add((u, v))
+        dag.append((u, v))
+    succ = {k: [] for k in ids}
+    for u, v in dag:
+        succ[u].append(v)
+    state, back = {}, set()
+
+    def dfs(u):
+        state[u] = 1
+        for v in succ[u]:
+            if state.get(v) == 1:
+                back.add((u, v))
+            elif not state.get(v):
+                dfs(v)
+        state[u] = 2
+    for k in ids:
+        if not state.get(k):
+            dfs(k)
+    dag = [(v, u) if (u, v) in back else (u, v) for u, v in dag]
+    preds = {k: [] for k in ids}
+    for u, v in dag:
+        preds[v].append(u)
+    layer = {}
+
+    def lay(k, stack=()):
+        if k in layer:
+            return layer[k]
+        if k in stack:
+            return 0
+        layer[k] = 0 if not preds[k] else 1 + max(lay(u, stack + (k,)) for u in preds[k])
+        return layer[k]
+    for k in ids:
+        lay(k)
+    nl = max(layer.values()) + 1
+    rows = [[k for k in ids if layer[k] == i] for i in range(nl)]
+    nbr = {k: set() for k in ids}
+    for u, v in edges:
+        nbr[u].add(v)
+        nbr[v].add(u)
+    for sweep in range(4):
+        rng = range(1, nl) if sweep % 2 == 0 else range(nl - 2, -1, -1)
+        for i in rng:
+            ref = rows[i - 1] if sweep % 2 == 0 else rows[i + 1]
+            pos = {k: j / max(1, len(ref) - 1) for j, k in enumerate(ref)}
+            cur = list(rows[i])
+
+            def key(k, cur=cur, pos=pos):
+                ns = [pos[n] for n in nbr[k] if n in pos]
+                return sum(ns) / len(ns) if ns else cur.index(k) / max(1, len(cur) - 1)
+            rows[i].sort(key=key)
+    widest = max(len(r) for r in rows)
+    tb = direction == "TB"
+    span_main = 1 - top - bottom if tb else 1 - left - right
+    span_cross = 1 - left - right if tb else 1 - top - bottom
+    cell_main, cell_cross = span_main / nl, span_cross / widest
+    for i, r in enumerate(rows):
+        for j, k in enumerate(r):
+            e = nodes[idx[k]]
+            w = e.get("w") or min(0.30, (cell_cross if tb else cell_main) * 0.72)
+            h = e.get("h") or min(0.16, (cell_main if tb else cell_cross) * 0.50)
+            c_main = (top if tb else left) + (i + 0.5) * cell_main
+            off = (span_cross - len(r) * cell_cross) / 2   # centre short layers
+            c_cross = (left if tb else top) + off + (j + 0.5) * cell_cross
+            cx, cy = (c_cross, c_main) if tb else (c_main, c_cross)
+            e["x"], e["y"], e["w"], e["h"] = round(cx - w / 2, 4), round(cy - h / 2, 4), round(w, 4), round(h, 4)
+    return dict(layers=[list(r) for r in rows], feedback_edges=sorted("%s->%s" % (v, u) for u, v in back), direction=direction)
+
+
 def draw(spec, spec_dir, adj):
     """adj: per-id adjustments {id: {"fscale": f, "rotation": deg}} found by the fix loop."""
     cv = spec.get("canvas", {})
@@ -1260,6 +1371,17 @@ def draw(spec, spec_dir, adj):
     _all_els = list(spec.get("elements", [])) + [e for p_ in spec.get("panels", []) for e in p_.get("elements", [])]
     _all_els += [e for g in list(_all_els) if g.get("type") == "group" for e in g.get("elements", [])]
     any_icon = any(e.get("icon") or e.get("type") == "icon" for e in _all_els)
+    auto_rep = {}
+    all_ar = list(spec.get("arrows", [])) + [a_ for p_ in spec.get("panels", []) for a_ in p_.get("arrows", [])]
+    if spec.get("layout") == "auto":
+        auto_rep["figure"] = auto_layout(spec.get("elements", []), all_ar, spec.get("layout_direction", "TB"),
+                                         top=max(0.12, float((spec.get("title") or {}).get("y", 0.04)) + 0.08), bottom=0.08)
+    for p_ in spec.get("panels", []):
+        if p_.get("layout") == "auto":
+            auto_rep[p_["id"]] = auto_layout(p_.get("elements", []), all_ar, p_.get("layout_direction", "TB"),
+                                             top=0.16 if p_.get("title") else 0.06)
+    if auto_rep:
+        registry["__auto_layout__"] = dict(kind="meta", layout=auto_rep)
     texts = []      # (id, text artist, container Box or None)
     sizes = {}      # id -> requested font size (before shrink)
     notes = []
@@ -1451,8 +1573,23 @@ def draw(spec, spec_dir, adj):
                     p = FancyBboxPatch((x, y), b.w, b.h, boxstyle=style, facecolor=fill, edgecolor=edge,
                                        lw=1.4, zorder=3)
                     inner = 0.9
+                etype = str(el.get("etype") or el.get("entity_type") or "").lower()
+                if etype == "family" and shape != "ellipse":   # gene/protein family: two offset boxes behind
+                    for k_, off_ in enumerate((0.05, 0.025)):
+                        bk = FancyBboxPatch((x + off_ / W, y + off_ / H), b.w, b.h, boxstyle=style, facecolor=fill,
+                                            edgecolor=edge, lw=1.0, zorder=2.9 - k_ * 0.01, alpha=0.85)
+                        ax.add_patch(bk)
+                        bk.set_gid("%s:family%d" % (eid, k_))
                 ax.add_patch(p)
                 p.set_gid(eid + ":shape")
+                if etype == "complex":   # complex: double border
+                    ins = 0.035
+                    inner_p = (Ellipse(b.center(), b.w - 2 * ins / W, b.h - 2 * ins / H, facecolor="none", edgecolor=
+                                       "#FFFFFF" if filled else edge, lw=1.0, zorder=3.01) if shape == "ellipse" else
+                               FancyBboxPatch((x + ins / W, y + ins / H), b.w - 2 * ins / W, b.h - 2 * ins / H, boxstyle=style,
+                                              facecolor="none", edgecolor="#FFFFFF" if filled else edge, lw=1.0, zorder=3.01))
+                    ax.add_patch(inner_p)
+                    inner_p.set_gid(eid + ":complex_border")
                 cont = b if shape != "ellipse" else Box(b.x0 + b.w * 0.08, b.y0 + b.h * 0.1, b.w * 0.84, b.h * 0.8)
                 tx, ty, wrap = b.center()[0], b.center()[1], b.w * inner
                 icon = icon_canonical(el.get("icon")) if el.get("icon") else None
@@ -1492,7 +1629,7 @@ def draw(spec, spec_dir, adj):
                     l2, _, h2 = est_lines(sub, wrap, fsz * 0.74)
                     gap = (h1 + h2) / 2 / H
                     t = put_text(eid, lw_, tx, ty + gap - h1 / 2 / H, fsz, weight=el.get("weight", "bold" if filled else "normal"),
-                                 color=txt_col, wrap_w=wrap)
+                                 color=txt_col, wrap_w=wrap, style="italic" if etype == "gene" else "normal")
                     ts_ = put_text(eid + ":sub", sub, tx, ty - gap + h2 / 2 / H, fsz * 0.74, color=txt_col, wrap_w=wrap)
                     if filled:
                         ts_.set_alpha(0.92)
@@ -1500,7 +1637,7 @@ def draw(spec, spec_dir, adj):
                     texts.append((eid, t, Box(cont.x0, cont.y0, cont.w, cont.h / 2)))
                 else:
                     t = put_text(eid, el.get("label", ""), tx, ty, fsz, weight=el.get("weight", "bold" if filled else "normal"),
-                                 color=txt_col, wrap_w=wrap)
+                                 color=txt_col, wrap_w=wrap, style="italic" if etype == "gene" else "normal")
                     texts.append((eid, t, cont))
                 registry[eid] = dict(kind="entity", artist=p, text=t, box=b, icon=icon)
             elif typ == "icon":
@@ -1840,8 +1977,8 @@ def draw(spec, spec_dir, adj):
 
     footnote = spec.get("footnote")
     if footnote:
-        t = put_text("footnote", footnote, 0.01, 0.012, max(base * 0.7, 0.5 * W), ha="left", va="bottom",
-                     color="#555555", wrap_w=0.98)
+        t = put_text("footnote", footnote, 0.01, 0.012, max(base * 0.7, 0.5 * W, 5.5), ha="left", va="bottom",
+                     color="#555555", wrap_w=0.96)
         texts.append(("footnote", t, None))
     try:
         registry["__shared_axes__"] = dict(kind="meta", shared=share_chart_axes(registry))
@@ -1911,6 +2048,7 @@ def check_layout(fig, registry, texts, sizes, min_pt):
                                hint="move the entities, or set connection 'arc3,rad=0.3' / '-0.3' on this arrow"))
         own = k + ":label"
         thit = [e for e, rr in tb.items() if e != own and base_of(e) not in (v["frm"], v["to"]) and
+                e.split(":")[0] not in (v["frm"], v["to"]) and
                 not e.startswith("panel:") and e not in ents and any(point_in(p, rr, 0.0) for p in inner)]
         if thit:
             issues.append(dict(level="warn", check="arrow_through_text", id=k, texts=thit[:5]))
@@ -2123,6 +2261,7 @@ def main():
     args = ap.parse_args()
     spec = load_json_lenient(args.spec)
     spec_dir = os.path.dirname(os.path.abspath(args.spec))
+    preset_note = apply_preset(spec)
     os.makedirs(args.outdir, exist_ok=True)
     missing_data = [dict(level="fail", check="chart_csv_missing", id=el.get("id"), path=el["data"]["csv"],
                          hint="give the CSV path as written in /input (absolute), or copy the table to /app/work/<name>.csv")
@@ -2149,7 +2288,7 @@ def main():
             m = re.search(r"Glyph (\d+) .*missing", str(w.message))
             if m:
                 missing_glyphs.add(chr(int(m.group(1))))
-        over = sorted({i["id"] for i in issues if i["check"] in ("text_overflow", "out_of_canvas")})
+        over = sorted({i["id"] for i in issues if i["check"] in ("text_overflow", "out_of_canvas", "chart_out_of_canvas")})
         crowd = sorted({i["id"] for i in issues if i["check"] == "tick_labels_overlap"})
         attempts.append(dict(attempt=attempt, overflow=over[:12], crowded_ticks=crowd))
         changed = False
@@ -2283,7 +2422,8 @@ def main():
                   font_notes=font_notes, fix_attempts=attempts, shrunk_labels=shrunk,
                   rotated_ticks={k: v["rotation"] for k, v in adj.items() if "rotation" in v},
                   auto_routing=auto, issues=issues, n_elements=len(layer_map), canvas=spec.get("canvas", {}),
-                  glyph_audit=dict(charts=g_summary, map=os.path.join(args.outdir, "glyph_map.json")) if g_rows else None)
+                  glyph_audit=dict(charts=g_summary, map=os.path.join(args.outdir, "glyph_map.json")) if g_rows else None,
+                  journal_preset=preset_note)
     with open(os.path.join(args.outdir, "render_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     print(json.dumps(dict(status=report["status"], fails=len(fails), warns=len(warns),

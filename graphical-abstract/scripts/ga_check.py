@@ -21,7 +21,8 @@ SUPER = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻", "0123456789+-")
 MANT = r"[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?"
 POW = r"\s?[×x·*]\s?10\s?\^?\{?[-+]?\d{1,3}\}?"
 NUM_RE = re.compile(r"(?<![A-Za-z0-9_.\-])(?:10\^\{?[-+]?\d{1,3}\}?|" + MANT + "(?:" + POW + ")?)")
-ARROW_KINDS = {"activates", "promotes", "inhibits", "flow", "produces", "converts", "binds", "associates", "next"}
+ARROW_KINDS = {"activates", "promotes", "inhibits", "flow", "produces", "converts", "binds", "associates", "next",
+               "modifies", "transports", "catalyzes"}
 ROLES_GA = ["problem", "method", "result", "conclusion"]
 SCI_TYPES = {"entity", "arrow", "chart", "image", "scalebar"}
 # keep in sync with ICON_GROUPS / ICON_ALIASES in ga_render.py
@@ -232,6 +233,8 @@ def main():
         res.append(dict(level=level, check=check, **kw))
 
     ids = {}
+    auto_ct = {p_.get("id") for p_ in spec.get("panels", []) if p_.get("layout") == "auto"} | (
+        {None} if spec.get("layout") == "auto" else set())
     for pid, el in iter_elements(spec):
         if "id" not in el:
             add("fail", "schema_id_missing", element=el.get("label") or el.get("text"))
@@ -243,6 +246,8 @@ def main():
         need = {"entity": ["x", "y", "w", "h"], "chart": ["x", "y", "w", "h"], "image": ["x", "y", "w", "h", "path"],
                 "text": ["x", "y", "text"], "legend": ["x", "y", "entries"], "scalebar": ["x", "y", "label"],
                 "group": ["x", "y", "w", "h"], "icon": ["x", "y", "w", "h", "name"]}.get(t, [])
+        if pid in auto_ct and t in ("entity", "icon"):   # positions come from the automatic layered layout
+            need = [k for k in need if k not in ("x", "y", "w", "h")]
         for k in need:
             if k not in el:
                 add("fail", "schema_field_missing", id=el["id"], field=k)

@@ -118,6 +118,9 @@ that group and `add_text` at its bbox, and say so. Non-SVG sources (PPTX/DOCX/PN
 Edit mode needs no spec: inventory → ops.json → the command above.
 
 ## 4c. Visual quality — the figure is judged next to one drawn without this Skill
+- Relationship diagrams without fixed geometry (pathways, study designs, flow charts): set
+  `"layout":"auto"` on the panel (or the spec) and omit entity x/y/w/h — layered, crossing-minimised
+  placement from the arrows; hand-place only what the source fixes (compartments, apparatus geometry).
 - Nodes: short labels are drawn **filled** in their category colour with white bold text (default); add
   `"sub"` for a second, smaller line (role, compartment, unit or condition from the source). Long text
   blocks stay light automatically (or `"style":"outline"`).
@@ -134,6 +137,10 @@ Edit mode needs no spec: inventory → ops.json → the command above.
   number from the source; a panel with one vague sentence looks empty next to a hand-drawn figure.
 - Legend entries about arrow kinds (`"kind":"inhibits"`, or a label with activates/inhibits/…) are drawn
   as real arrow samples; colour entries as swatches.
+- Journal format: `"canvas":{"preset":"nature-double"}` (also nature-single, science-single/double/triple,
+  cell-single/1.5/double, pnas-single/double, ieee-single/double, a4-report, slide-16x9) sets the
+  column width, 7–8 pt text and 600 dpi, keeping the canvas aspect; use it when the task names a journal
+  or a column width.
 - Charts: charts side by side with the same categories share one category axis and one legend
   (automatic); `highlight` draws a light band; `value_labels:true` prints the exact source strings; log
   axes start one decade below the smallest bar so every bar is visible.

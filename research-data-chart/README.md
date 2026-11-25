@@ -123,7 +123,9 @@ paths cannot be re-typed. Number provenance is string-level; derived values must
 `derived:{formula,inputs}`. CJK output needs an installed CJK font (reported if absent).
 
 ## Maintenance
-v1.5 (2026-11-25: visual quality after a side-by-side test against a figure drawn without the Skill —
+v1.7 (2026-11-25: `"layout":"auto"` layered placement from the arrows, entity types gene/complex/family
+drawn by convention, arrow kinds modifies/catalyzes/transports, journal size presets, parameter cards
+(v1.6)). v1.5 (2026-11-25: visual quality after a side-by-side test against a figure drawn without the Skill —
 filled category nodes with an optional `sub` line, numbered colour headers for problem/method/result/
 conclusion panels, real arrow samples in legends, orthogonal elbow routing, opposite pairs as parallel
 lines, charts with one shared category axis and legend, highlight bands, visible log-scale bars, value-label
