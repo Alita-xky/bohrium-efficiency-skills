@@ -70,7 +70,11 @@ Start from `$SKILL/templates/spec_template.json`; full field list in `references
   (or `"pdf"`+`"page"`+`"bbox"`). Keep the paper's numbering. Tables: start from `table_rows` (check against the
   crop; keep the rows/columns the claim needs) into `"table":{"rows":…}`, or show the table crop. Equations: the
   crop `figs/eqA_B_pP.png` as a figure with `"ref":"Eq. N"` — never retype math from the text layer. Charts only
-  from input CSV/XLSX (`"chart"`), labelled "redrawn from data".
+  from input CSV/XLSX (`"chart"`), labelled "redrawn from data"; bar/line charts become **editable PowerPoint
+  charts** (data in the embedded workbook), charts with error bars or log axes are drawn as images.
+- Depth: every content slide carries the paper's concrete evidence — ≥ 3 points with numbers and units,
+  conditions or Sec./Table locators, or a figure/table with 1–3 callouts. `deck_check` warns `thin_slide` on a
+  content slide with fewer than 3 short points and no visual: add evidence or merge it.
 - Symbols: `ε_HOMO`, `x^2`, `2.3 · 10^19` render as real sub/superscripts (`\_` = literal underscore).
 - Numbers exactly as in the paper (precision, unit). Computed values → `derived` with formula.
 - Chinese task → Chinese slide text, `meta.lang:"zh"`, technical terms/numbers unchanged.
@@ -127,6 +131,8 @@ add them with `--set`, otherwise make_result marks them `not_provided` (never fa
 | python-pptx missing / fails | stdlib OOXML writer is used automatically (same XML, same render); contact sheets and crop overviews are drawn without PIL/matplotlib |
 | soffice missing / export fails | deliver the .pptx, status `partial`, report the missing renderer; no fake previews |
 | running out of time | run deck_make + deck_fill + make_result with what exists (`status: partial`) |
+
+**Status rule.** `complete` = every output_contract deliverable exists and no check is left at FAIL. Caveats you deliberately preserved or cannot fix here — an error in the given source deck/paper, issues that were already in the input and are outside the instructions, a font the preview renderer substitutes — go under `uncertainty`; they do not make the deliverable `partial`. `partial` = a required deliverable is missing or a FAIL remains.
 
 ## Final checklist
 1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/*.png`, `evidence_map.json/.md`, `check_report.json`,

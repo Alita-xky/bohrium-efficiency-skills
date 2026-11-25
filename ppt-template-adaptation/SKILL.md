@@ -57,16 +57,17 @@ stretched pictures, off-slide shapes. Rules and fixes: `references/template_rule
 | **C repair in place** | deck already on the template's master; only formatting drifted | `deck_template.py fix --pptx <deck> --template <t> --out /app/output/deck.pptx --log /app/output/fix_log.json` |
 to_spec copies text, levels, pictures (exported), tables, notes and footer text exactly; "Figure N: …" text
 boxes become the visual's caption, "来源/Source: …" boxes its source note; shape names (Picture 2, Table 5) are
-never used as paper references. Charts/SmartArt are carried as cropped images from the renders, a native chart's
-data are also written to `deck_media/sNN_<chart>_data.csv` and listed in `not_carried_over` (editability lost:
-say so in uncertainty). Text stays literal (`meta.math_markup: false`: "d_k" is not turned into a subscript).
+never used as paper references. A native **bar/line chart** is re-created by the builder as an **editable
+PowerPoint chart** from its data (`deck_media/sNN_<chart>_data.csv`, 0-based axis, value labels, theme colours);
+other charts and SmartArt are carried as cropped images from the renders and listed in `not_carried_over`
+(editability lost: say so in uncertainty). Text stays literal (`meta.math_markup: false`: "d_k" is not turned into a subscript).
 After to_spec: set `role` per slide. Do not split for length: 7–12 short bullets flow into the template's own
 two-content layout; split (copy the text, add "（续）"/"(cont.)" to the second title, note it in uncertainty)
 only if the build still reports a text-overflow FAIL.
 The builder never restyles the template: master, layouts, fonts and colours are kept, body text stays in body
 placeholders, one deck-wide title size and a 3-step body ladder (`type_scale.json`, inherited where they match),
-figures with white margins cropped and as large as the area allows, a native bar chart redrawn from its data
-with a 0-based axis and value labels (said in build_report).
+figures with white margins cropped and as large as the area allows, a native bar/line chart rebuilt as an
+editable chart from its data with a 0-based axis and value labels (said in build_report).
 
 ## 4. Build + check + render + audit + preservation (1 call; routes A/B)
 ```bash
@@ -99,7 +100,7 @@ version records (template sha256, fonts requested vs embedded, tools). Add unmap
 |---|---|
 | template lacks a layout kind | builder falls back (recorded); or pick another with `layout_name`; never edit the master |
 | layout placeholder with zero size (template defect, flagged "ZERO-SIZE" by prepare) | builder gives that slide placeholder the master's box (inheritance kept, defect listed in uncertainty) |
-| native chart in the draft | image of the original render + data CSV; state "chart no longer editable, data in …csv" |
+| native chart in the draft | bar/line: rebuilt as an editable chart from its data CSV; other types: image of the original render + data CSV, state "chart no longer editable, data in …csv" |
 | placeholder missing (no body / no title) | content placed in the template's text area as text boxes + warning; title box flagged |
 | text overflows the placeholder | ladder shrink to ≥ 12 pt; if still FAIL split the slide (content preserved across slides) |
 | template font not installed / CJK font missing | keep theme font names; render_report shows substitute; for Chinese set an installed `ea` font via `deck_edit.py` `apply_theme` and record it |
@@ -107,6 +108,8 @@ version records (template sha256, fonts requested vs embedded, tools). Add unmap
 | chart / SmartArt / group in the draft | carried as image crop from the render (`--previews`); note "no longer editable as chart" |
 | picture file broken / missing | placeholder box "Figure not available" + FAIL listed in uncertainty |
 | export fails | deliver pptx, status partial, report renderer error |
+
+**Status rule.** `complete` = every output_contract deliverable exists and no check is left at FAIL. Caveats you deliberately preserved or cannot fix here — an error in the given source deck/paper, issues that were already in the input and are outside the instructions, a font the preview renderer substitutes — go under `uncertainty`; they do not make the deliverable `partial`. `partial` = a required deliverable is missing or a FAIL remains.
 
 ## Final checklist
 1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/`, `compliance_before.json` (if a deck was given),

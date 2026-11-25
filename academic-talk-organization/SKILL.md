@@ -68,6 +68,8 @@ Spec (template `$SKILL/templates/spec_template.json`, fields `references/formats
 - titles are claims; ≤ 5 short bullets; figures/tables are the paper's own (`ref` = its numbering, `kind`
   data|schematic); backup slides have `role:"backup"` and are referenced from `qa`;
 - wording follows evidence strength ("reduces … (Table 1)" vs "the authors suggest …").
+- depth: a content slide without a figure/table needs ≥ 3 points with the paper's numbers, conditions or
+  locators (`thin_slide` warning otherwise); CSV charts become editable PowerPoint charts automatically.
 - make the structure visible (design is automatic, `references/slide_rules.md` §8): slide 2 `role: outline` with
   the section names as bullets (numbered agenda); if the slide limit allows, a `role: section` divider (title =
   section name, `time_s` 5–10) before each section of a ≥ 12-minute talk. `key_message` on results, analysis and
@@ -114,6 +116,8 @@ plan, Q&A, timeline, deck, evidence map, render/version records, uncertainty, st
 | paper contradicts itself (e.g. abstract 41.8 vs text 41.0) | use the table value on the slide, show both on a backup slide / Q&A, list in uncertainty |
 | template conflicts with content (no two-column layout etc.) | builder falls back and records it; keep template fonts/colours |
 | font missing / export fails / timeout | see render_report; deliver pptx + partial status; never fake previews |
+
+**Status rule.** `complete` = every output_contract deliverable exists and no check is left at FAIL. Caveats you deliberately preserved or cannot fix here — an error in the given source deck/paper, issues that were already in the input and are outside the instructions, a font the preview renderer substitutes — go under `uncertainty`; they do not make the deliverable `partial`. `partial` = a required deliverable is missing or a FAIL remains.
 
 ## Final checklist
 1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/`, `talk_plan.json`, `talk_plan.md`, `evidence_map.json/.md`,

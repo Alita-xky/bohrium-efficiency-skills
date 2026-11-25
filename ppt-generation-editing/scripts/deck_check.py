@@ -573,6 +573,13 @@ def main():
             if title.lower().strip(" :.") in GENERIC or words < 4:
                 add("warn", "claim_title", "title '%s' is a topic label; write the slide's claim as the title" % title[:40], i)
         bl = sl.get("bullets") or []
+        if a.mode in ("paper", "talk") and role in ("motivation", "problem", "background", "method", "approach", "results",
+                                                     "result", "analysis", "evaluation", "discussion", "limitations",
+                                                     "conclusion") and not K.spec_visuals(sl):
+            chars = sum(len(re.sub(r"\s", "", t)) * (2 if K.has_cjk(t) else 1) for w_, t, _ in items if w_.startswith(("bullet", "left", "right")))
+            if len(bl) < 3 or chars < 90:
+                add("warn", "thin_slide", "only %d short point(s) and no figure/table: add the paper's concrete evidence "
+                    "(numbers with units, conditions, Sec./Table locators) or merge this slide" % len(bl), i)
         if len(bl) > 9:
             add("fail", "density", "%d bullets (max 9; aim <= 6): split the slide" % len(bl), i)
         elif len(bl) > 6:

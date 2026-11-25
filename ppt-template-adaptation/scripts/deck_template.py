@@ -459,11 +459,21 @@ def cmd_to_spec(a):
                             csvp = os.path.join(media, "s%02d_%s_data.csv" % (s["index"], re.sub(r"\W", "_", sh["name"])))
                             with open(csvp, "w", newline="", encoding="utf-8") as f:
                                 csv.writer(f).writerows(rows)
-                            fg.update(data_csv=csvp, chart_type=ckind,
-                                      note="native %s shown as an image of the original render; its data are in data_csv "
-                                           "(re-create it as an editable chart in PowerPoint if needed)" % ckind)
-                            dropped.append(dict(slide=s["index"], shape=sh["name"], kind="chart (editability)",
-                                                reason="carried as image; data exported to %s" % os.path.basename(csvp)))
+                            try:
+                                import pptx  # noqa: F401  (deck_build re-creates bar/line charts as editable charts)
+                                rebuild = ckind in ("barChart", "bar3DChart", "lineChart", "line3DChart")
+                            except ImportError:
+                                rebuild = False
+                            if rebuild:
+                                fg.update(data_csv=csvp, chart_type=ckind,
+                                          note="native %s re-created by deck_build as an editable PowerPoint chart from its "
+                                               "data (data_csv); the original render is the fallback image" % ckind)
+                            else:
+                                fg.update(data_csv=csvp, chart_type=ckind,
+                                          note="native %s shown as an image of the original render; its data are in data_csv "
+                                               "(re-create it as an editable chart in PowerPoint if needed)" % ckind)
+                                dropped.append(dict(slide=s["index"], shape=sh["name"], kind="chart (editability)",
+                                                    reason="carried as image; data exported to %s" % os.path.basename(csvp)))
                         except Exception as e:
                             fg["note"] = "chart data not readable: %r" % (e,)
                     figs.append(fg)

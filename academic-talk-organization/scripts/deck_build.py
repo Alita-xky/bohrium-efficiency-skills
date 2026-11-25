@@ -330,6 +330,69 @@ class PptxBackend:
     def table(self, s, box, rows, col_w, row_h, size, header=True, highlight=()):
         self._append(s, K.table_xml(2, s.get("table_name", "Table"), box, rows, col_w, row_h, size, header, highlight))
 
+    def native_chart(self, s, box, nc, name, descr=""):
+        """an editable PowerPoint chart (data stored in the embedded workbook): bars from 0, value labels, theme fonts"""
+        from pptx.chart.data import CategoryChartData
+        from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+        from pptx.util import Emu, Pt
+        from pptx.dml.color import RGBColor
+        cd = CategoryChartData()
+        cd.categories = nc["cats"]
+        for nm, vals in nc["series"]:
+            cd.add_series(nm, vals)
+        ct = {"bar": XL_CHART_TYPE.COLUMN_CLUSTERED, "barh": XL_CHART_TYPE.BAR_CLUSTERED,
+              "line": XL_CHART_TYPE.LINE_MARKERS}[nc["kind"]]
+        gf = s["slide"].shapes.add_chart(ct, Emu(int(box[0])), Emu(int(box[1])), Emu(int(box[2])), Emu(int(box[3])), cd)
+        gf.name = name
+        if descr:
+            gf._element.nvGraphicFramePr.cNvPr.set("descr", descr)
+        ch = gf.chart
+        ch.font.size = Pt(nc["size"])
+        ch.has_legend = len(nc["series"]) > 1
+        if ch.has_legend:
+            ch.legend.position = XL_LEGEND_POSITION.TOP
+            ch.legend.include_in_layout = False
+            ch.legend.font.size = Pt(nc["size"])
+        plot = ch.plots[0]
+        if nc["kind"] != "line":
+            plot.gap_width = 60
+            plot.overlap = -10 if len(nc["series"]) > 1 else 0
+        if nc.get("labels", True):
+            plot.has_data_labels = True
+            plot.data_labels.font.size = Pt(max(10, nc["size"] - 2))
+            plot.data_labels.number_format = nc.get("number_format", "General")
+            plot.data_labels.number_format_is_linked = False
+        va = ch.value_axis
+        if nc["kind"] != "line" or min(v for _, vals in nc["series"] for v in vals if v is not None) >= 0:
+            va.minimum_scale = 0
+        va.has_major_gridlines = True
+        va.major_gridlines.format.line.color.rgb = RGBColor(0xDD, 0xDD, 0xDD)
+        va.tick_labels.font.size = Pt(nc["size"])
+        va.format.line.fill.background()
+        if nc.get("ylabel"):
+            va.has_title = True
+            va.axis_title.text_frame.text = nc["ylabel"]
+            va.axis_title.text_frame.paragraphs[0].runs[0].font.size = Pt(nc["size"])
+        ca = ch.category_axis
+        ca.tick_labels.font.size = Pt(nc["size"])
+        if nc["kind"] == "barh":
+            ca.reverse_order = True   # first row on top, as in the table
+        for j, ser in enumerate(plot.series):
+            col = nc["colors"][j]
+            if nc["kind"] == "line":
+                ser.format.line.color.rgb = RGBColor.from_string(col)
+                ser.format.line.width = Pt(2.25)
+                ser.smooth = False
+            else:
+                ser.format.fill.solid()
+                ser.format.fill.fore_color.rgb = RGBColor.from_string(col)
+                for i in nc.get("highlight_points", {}).get(j, []):
+                    pt = ser.points[i]
+                    pt.format.fill.solid()
+                    pt.format.fill.fore_color.rgb = RGBColor.from_string(nc["highlight_color"])
+        s["used"].add(self._sid(gf._element))
+        return gf
+
     def notes(self, s, text):
         if text:
             s["slide"].notes_slide.notes_text_frame.text = text
@@ -709,6 +772,63 @@ def place_figure(be, s, fig, box, ctx, rep, tag, num, side=None):
     rep["visuals"].append(entry)
 
 
+def native_chart_spec(ch, ctx, box):
+    """data and colours for an editable PowerPoint chart, or None when the chart needs matplotlib (error bars, log
+    axis, non-numeric cells, too many points)"""
+    if ch.get("native") is False or ch.get("err") or ch.get("logy") or ch.get("logx") or ch.get("filter_regex"):
+        return None
+    kind = ch.get("kind", "bar")
+    if kind not in ("bar", "barh", "line") or not ch.get("csv") or not os.path.exists(ch["csv"]):
+        return None
+    with open(ch["csv"], newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+    if ch.get("filter"):
+        for k, v in ch["filter"].items():
+            rows = [r for r in rows if str(r.get(k)) in ([str(x) for x in v] if isinstance(v, list) else [str(v)])]
+    ycols = ch["y"] if isinstance(ch["y"], list) else [ch["y"]]
+    if not rows or len(rows) > 30 or len(ycols) > 6:
+        return None
+    series = []
+    for yc in ycols:
+        vals = []
+        for r in rows:
+            t = str(r.get(yc, "")).replace(",", "").replace("−", "-").strip().rstrip("%")
+            if t == "":
+                vals.append(None)
+                continue
+            try:
+                vals.append(float(t))
+            except ValueError:
+                return None
+        series.append(((ch.get("series_labels") or {}).get(yc, yc), vals))
+    cats = [str(r.get(ch["x"], "")) for r in rows]
+    acc1 = ctx.colors.get("accent1", K.DEFAULT_COLORS["accent1"]).lstrip("#")
+    acc2 = ctx.colors.get("accent2", K.DEFAULT_COLORS["accent2"]).lstrip("#")
+    neutrals = ["9AA5B1", "6B7785", "C3CAD3", "DDE2E8"]
+    n = len(series)
+    hl = set(str(x) for x in (ch.get("highlight") or []))
+    mname = (getattr(ctx, "method_name", "") or "").lower()
+    if not hl and n == 1 and ch.get("highlight") is None:
+        hl = {c for c in cats if re.search(r"(?i)\bours\b|\(ours\)|proposed|本文", c) or (mname and mname in c.lower())}
+    ks = key_series(ch, ycols, ctx)
+    if n == 1:
+        colors = [neutrals[0] if hl else acc1]
+    elif ks is not None:
+        colors, k = [], 0
+        for j in range(n):
+            if j == ks:
+                colors.append(acc2)
+            else:
+                colors.append(neutrals[k % len(neutrals)])
+                k += 1
+    else:
+        colors = [acc1] + neutrals[:n - 1]
+    size = max(12, min(16, int(ctx.scale["body"][-1]) - 4)) if getattr(ctx, "scale", None) else 14
+    return dict(kind=kind, cats=cats, series=series, colors=colors, size=size, labels=ch.get("labels", kind != "line"),
+                highlight_points={0: [i for i, c in enumerate(cats) if c in hl]} if n == 1 and hl else {},
+                highlight_color=acc2, ylabel=ch.get("ylabel"))
+
+
 def place_chart(be, s, ch, box, ctx, rep, tag, num):
     entry = dict(type="chart", csv=ch.get("csv"), ref=ch.get("ref"))
     cap = ch.get("caption") or ""
@@ -718,6 +838,24 @@ def place_chart(be, s, ch, box, ctx, rep, tag, num):
     cap_h = int((12 * 1.25 * min(2, K.wrap_count(cap, box[2] / EMU_PT, 12)) + 8) * EMU_PT) if cap else 0
     area = [box[0], box[1], box[2], box[3] - cap_h]
     out = os.path.join(ctx.chart_dir, "%s_chart%d.png" % (tag, num))
+    nc = None
+    if getattr(be, "native_chart", None):
+        try:
+            nc = native_chart_spec(ch, ctx, area)
+        except Exception:
+            nc = None
+    if nc:
+        try:   # editable chart: the numbers live in the embedded workbook, the viewer can restyle or re-plot it
+            be.native_chart(s, area, nc, "Chart %d" % num, "editable chart from %s (%s vs %s)" % (
+                os.path.basename(ch["csv"]), ch.get("y"), ch.get("x")))
+            entry.update(native=True, box_in=[K.to_in(v) for v in area], n_points=sum(len(v) for _, v in nc["series"]))
+            if cap:
+                be.textbox(s, [box[0], area[1] + area[3], box[2], cap_h], [dict(text=cap, size=12, color="404040", bullet=False,
+                                                                                 align="center")], "Caption %d" % num)
+            rep["visuals"].append(entry)
+            return
+        except Exception as e:
+            rep["warnings"].append("chart %s: editable chart failed (%r); drawn as an image" % (tag, e))
     try:
         _, cnote = render_chart(ch, area, out, ctx)
         if cnote:

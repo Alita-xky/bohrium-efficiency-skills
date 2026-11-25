@@ -194,6 +194,10 @@ under uncertainty. Without fig_make: `make_result.py --case /input/case.json --o
 | PDF without text layer | OCR runs automatically if tesseract exists; cite OCR text as lower confidence |
 | request outside figure work | do only the figure part; say what was out of scope |
 
+**Status rule.** `complete` = every contract deliverable exists and no check is left at FAIL. Layout WARNs you
+tried to fix, caveats of the source (e.g. a value the paper states twice) and font substitutions go under
+`uncertainty`; they do not make the figure `partial`. `partial` = a deliverable is missing or a FAIL remains.
+
 ## Final checklist
 1. `/app/output` (written by fig_make): editable SVG (one Inkscape layer per panel), PDF, PNG, the spec
    copy, `layer_map.json`, `check_report.json`, `render_report.json` (+ `edit_log.json`),

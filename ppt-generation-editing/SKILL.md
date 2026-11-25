@@ -103,6 +103,8 @@ instruction you could not do and why. Add unmapped contract fields with `--set f
 | python-pptx missing | ops run on the stdlib XML engine automatically |
 | .ppt / .odp input | deck_prepare converts with LibreOffice to .pptx first; edit the converted copy and say so |
 
+**Status rule.** `complete` = every output_contract deliverable exists and no check is left at FAIL. Caveats you deliberately preserved or cannot fix here — an error in the given source deck/paper, issues that were already in the input and are outside the instructions, a font the preview renderer substitutes — go under `uncertainty`; they do not make the deliverable `partial`. `partial` = a required deliverable is missing or a FAIL remains.
+
 ## Final checklist
 1. `/app/output`: `deck.pptx`, `deck.pdf`, `previews/`, `edit_log.json`, `slide_diff.json/.md`, `versions/`
    (v0 … vN + versions.json), `evidence_map.*`, `check_report.json`, `compliance.json`, `version_record.json`, `result.json`.
