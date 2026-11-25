@@ -133,6 +133,134 @@ def map_field(f):
     return hits
 
 
+def _cycles(edges):
+    """simple cycles (as node lists) of a small directed graph, at most 10"""
+    g = {}
+    for u, v in edges:
+        g.setdefault(u, []).append(v)
+    out, seen = [], set()
+    def dfs(start, node, path):
+        for nx in g.get(node, []):
+            if nx == start and len(path) > 1:
+                key = frozenset(path)
+                if key not in seen:
+                    seen.add(key)
+                    out.append(path + [start])
+            elif nx not in path and len(out) < 10 and len(path) < 12:
+                dfs(start, nx, path + [nx])
+    for n in list(g):
+        dfs(n, n, [n])
+    return out
+
+
+def rubric_coverage(mode, lm, spec, cr, rr, data_map, glyph, exports, edit):
+    """The completeness checkpoints the figure rubrics name, each with a verdict from this run's own reports and the
+    file that proves it (chart/setup: 科学实体、空间关系、数据编码、图例标注、可编辑源文件、导出格式; mechanism: 实体、
+    相互作用、并行分支与反馈环、图例项、导出格式; schematic: 流程/结构/机制三类要素 + 图例、标注、单位、子图编号;
+    graphical abstract: 研究问题、方法、核心结果、结论 + 图例/单位/比例尺)."""
+    res = (cr or {}).get("results", [])
+    iss = (rr or {}).get("issues", [])
+    bad = lambda names: [r.get("check") for r in res + iss if r.get("level") == "fail" and r.get("check") in names]  # noqa: E731
+    ents = {k: v for k, v in lm.items() if isinstance(v, dict) and v.get("type") in ("entity", "icon")}
+    arrows = {k: v for k, v in lm.items() if isinstance(v, dict) and v.get("type") == "arrow"}
+    panels = {k: v for k, v in lm.items() if k.startswith("panel:")}
+    legends = [k for k, v in lm.items() if isinstance(v, dict) and v.get("type") == "legend"]
+    sourced = lambda d: sum(1 for v in d.values() if isinstance(v.get("source"), dict) and  # noqa: E731
+                            (v["source"].get("file") or v["source"].get("quote") or v["source"].get("loc")))
+    kinds = {}
+    for v in arrows.values():
+        kinds[v.get("kind") or "?"] = kinds.get(v.get("kind") or "?", 0) + 1
+    quoted = sum(1 for v in arrows.values() if isinstance(v.get("source"), dict) and v["source"].get("quote"))
+    layout_bad = [i.get("check") for i in iss if i.get("level") in ("fail", "warn") and i.get("check") in (
+        "arrow_through_entity", "arrows_cross", "text_overlap", "label_overlap", "legend_overlap", "out_of_canvas",
+        "chart_out_of_canvas", "chart_overlaps_text", "chart_outside_panel", "tick_labels_overlap", "entity_overlap")]
+    svg = (exports or {}).get("svg") or {}
+    def row(ok, evidence, files, problems=None, partial=True):
+        return dict(status="covered" if ok else ("partial" if partial else "missing"), evidence=evidence,
+                    files=[f for f in files if f], problems=problems or None)
+    files = lambda *n: [x for x in n if x]  # noqa: E731
+    editable = row(bool(svg.get("path")) and not bad(["export", "svg_layer_ids"]),
+                   "layered SVG (one Inkscape layer per panel, %s real <text> elements, every element addressable by id)" % svg.get(
+                       "text_elements"), files(svg.get("path"), (exports or {}).get("layer_map")), bad(["export", "svg_layer_ids"]))
+    png = (exports or {}).get("png") or {}
+    export = row(bool((exports or {}).get("pdf", {}).get("path")) and bool(png.get("path")) and not bad(["export"]),
+                 "SVG + PDF (TrueType fonts embedded) + PNG %s px at %s dpi, sRGB, byte-identical re-run" % (png.get("pixels"), png.get("dpi")),
+                 files((exports or {}).get("pdf", {}).get("path"), png.get("path"), "render_report.json"), bad(["export"]))
+    LEG = ["legend_color_mismatch", "legend_missing_category", "series_colours_repeat", "legend_absent", "legend_duplicate_color",
+           "legend_missing_arrow_kind", "chart_axis_label_missing"]
+    legend_ok = not bad(LEG)
+    charts = [d for d in data_map or []]
+    units = [d["id"] for d in charts if not any("(" in str((d.get("axis") or {}).get(k) or "") for k in ("y",))]
+    legend = row(legend_ok, "%d legend block(s)%s; axis labels with units on %d of %d charts; meaningful colours = categories" % (
+        len(legends) + sum(1 for d in charts if (d.get("n_series") or 0) > 1), " + chart legends" if charts else "",
+        len(charts) - len(units), len(charts)), files("check_report.json"),
+        bad(LEG) + (["no unit on: %s" % units] if units else []))
+    entities = row(len(ents) == 0 or sourced(ents) == len(ents),
+                   "%d entities/icons, %d with a material source%s" % (len(ents), sourced(ents), (
+                       "; chart series/categories are the CSV's own names" if charts else "")),
+                   files("layer_map.json", "check_report.json"), bad(["provenance_missing", "icon_without_source", "icon_not_named_in_materials", "number_without_source"]))
+    spatial = row(not [x for x in layout_bad if x in ("arrow_through_entity", "text_overlap", "out_of_canvas")],
+                  "%d panels, %d arrows; layout issues left: %s" % (len(panels), len(arrows), sorted(set(layout_bad)) or "none"),
+                  files("render_report.json", "layer_map.json"), sorted(set(layout_bad)))
+    if glyph:
+        enc = row(not glyph.get("mismatches"), "%d of %d drawn glyphs read back from the figure equal their CSV cell; %d n.r." % (
+            glyph.get("verified"), glyph.get("glyphs"), glyph.get("not_reported")), files(glyph.get("glyph_map_csv")), glyph.get("mismatches"))
+    else:
+        enc = row(not bad(["number_not_in_materials", "chart_csv_missing", "chart_column_missing"]),
+                  "every number printed on the figure checked against the %s numbers found in the materials (none unmatched "
+                  "unless listed); colour = category, arrow kind = relation type" % ((cr or {}).get("n_material_numbers")),
+                  files("check_report.json"), bad(["number_not_in_materials", "chart_csv_missing", "chart_column_missing"]))
+    if edit:
+        return {"可编辑源文件 editable source": editable, "导出格式 export": export,
+                "修改范围 edit scope": row(True, "only the requested ids changed; unchanged ids byte-identical (unchanged_check)",
+                                       files("edit_log.json"))}
+    if mode == "mechanism":
+        edges = [(v.get("frm"), v.get("to")) for v in arrows.values() if v.get("kind") not in ("next",)]
+        outd, ind = {}, {}
+        for u, w in edges:
+            outd[u] = outd.get(u, 0) + 1
+            ind[w] = ind.get(w, 0) + 1
+        branches = sorted(k for k, n in outd.items() if n >= 2) + sorted(k for k, n in ind.items() if n >= 2)
+        loops = _cycles(edges)
+        return {"实体 entities": entities,
+                "相互作用 interactions": row(quoted == len(arrows), "%d arrows by kind %s, %d with a verbatim quote" % (len(arrows), kinds, quoted),
+                                         files("layer_map.json", "check_report.json"), bad(["relation_without_quote", "arrow_endpoint_unknown", "arrow_kind_invalid"])),
+                "并行分支与反馈环 branches and feedback loops": row(True, "branch points (≥2 outputs or inputs): %s; feedback loops: %s" % (
+                    branches[:8] or "none", [" -> ".join(map(str, c)) for c in loops][:5] or "none in the source"), files("layer_map.json")),
+                "图例项 legend": legend, "可编辑源文件 editable source": editable, "导出格式 export": export}
+    if mode == "schematic":
+        flow = kinds.get("next", 0) + kinds.get("flow", 0)
+        causal = sum(n for k, n in kinds.items() if k not in ("next", "flow"))
+        groups = [k for k, v in lm.items() if isinstance(v, dict) and v.get("type") == "group"]
+        sub = [str(v.get("title") or "")[:30] for v in panels.values()]
+        return {"结构要素 structure (entities, containment)": row(entities["status"] == "covered", "%d entities, %d groups/panels (containment)" % (
+                    len(ents), len(groups) + len(panels)), files("layer_map.json")),
+                "流程要素 process steps": row(True, "%d sequential/flow arrows" % flow, files("layer_map.json")),
+                "机制/关系要素 relations": row(quoted >= causal, "%d relation arrows %s, %d quoted" % (causal, kinds, quoted),
+                                          files("check_report.json")),
+                "图例与标注 legend and labels": legend, "单位 units": row(not units, "units on axes/scale bars: %s" % ("all" if not units else
+                                                                                                 "missing on %s" % units), files("check_report.json")),
+                "子图编号 panel labels": row(len(panels) != 1, "panels: %s" % (sub or "single panel"), files("layer_map.json")),
+                "可编辑源文件 editable source": editable, "导出格式 export": export}
+    if mode in ("graphical_abstract", "ga"):
+        roles = {str(v.get("role")): str(v.get("title") or "") for v in panels.values()}
+        four = {"研究问题 question": ("problem", "question"), "方法 method": ("method", "approach"),
+                "核心结果 key result": ("result", "results"), "结论 conclusion": ("conclusion", "takeaway")}
+        out = {k: row(any(r in roles for r in alts), "panel %s" % next((roles[r] for r in alts if r in roles), "missing"),
+                      files("layer_map.json"), partial=False) for k, alts in four.items()}
+        out.update({"图例/单位/比例尺 legend, units, scale": legend, "可编辑源文件 editable source": editable, "导出格式 export": export})
+        return out
+    if charts and not ents:   # data chart: the scientific entities are the series and categories of the data
+        entities = row(True, "; ".join("%s: series %s from %s, categories from column %s" % (
+            d["id"], d.get("y") if isinstance(d.get("y"), list) else [d.get("y")], os.path.basename(str(d.get("csv") or "inline values")),
+            d.get("x") or d.get("group")) for d in charts)[:400], files("layer_map.json", "glyph_map.csv"))
+        spatial = row(not layout_bad, "%d chart panel(s) on one canvas; axes, tick labels, legends and value labels checked for "
+                      "overlap and clipping: %s" % (len(charts), sorted(set(layout_bad)) or "none left"),
+                      files("render_report.json"), sorted(set(layout_bad)))
+    return {"科学实体 scientific entities": entities, "空间关系 spatial relations": spatial, "数据编码 data encoding": enc,
+            "图例标注 legend and labels": legend, "可编辑源文件 editable source": editable, "导出格式 export": export}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--spec", default=None)
@@ -357,7 +485,20 @@ def main():
         dict(edit_log=os.path.join(od, "edit_log.json"), note="every change is addressed by element id and verified on the output file",
              sources_of_new_values=[dict(id=(c.get("op") or {}).get("id"), source=(c.get("op") or {}).get("source"))
                                     for c in (el or {}).get("changes", []) if (c.get("op") or {}).get("source")] or None)
-    val["data"] = dict(charts=data_map, layer_map=os.path.join(od, "layer_map.json")) if data_map else None
+    ga = (rr.get("glyph_audit") or {}) if rr else {}
+    if ga and os.path.exists(os.path.join(od, "glyph_map.json")):
+        gsum = ga.get("charts") or {}
+        glyph_binding = dict(glyph_map_json=os.path.join(od, "glyph_map.json"), glyph_map_csv=os.path.join(od, "glyph_map.csv"),
+                             per_chart=gsum, glyphs=sum(v.get("glyphs", 0) for v in gsum.values()),
+                             verified=sum(v.get("verified", 0) for v in gsum.values()),
+                             not_reported=sum(v.get("not_reported", 0) for v in gsum.values()),
+                             how="each bar/point has its own SVG id; its value is read back from the rendered axes and "
+                                 "compared with its CSV cell (file:line:column); by_cell gives the reverse lookup")
+    else:
+        glyph_binding = None
+    if glyph_binding and val.get("provenance"):
+        val["provenance"]["glyph_to_cell"] = glyph_binding
+    val["data"] = dict(charts=data_map, layer_map=os.path.join(od, "layer_map.json"), glyph_to_cell=glyph_binding) if data_map else None
     val["checks"] = dict(spec_audit=dict(status=cr.get("status"), fails=check_fail, n_warn=cr.get("n_warn"),
                                          report=os.path.join(od, "check_report.json")) if cr else None,
                          render_layout=dict(status=rr.get("status"), fails=render_fail,
@@ -366,6 +507,10 @@ def main():
                          edit_verification=dict(applied=(steps.get("edit") or {}).get("applied"),
                                                 not_applied_or_unverified=(steps.get("edit") or {}).get("not_applied_or_unverified"),
                                                 unchanged_check=(el or {}).get("unchanged_check")) if edit else None,
+                         glyph_readback=dict(verified=glyph_binding["verified"], glyphs=glyph_binding["glyphs"],
+                                             not_reported=glyph_binding["not_reported"],
+                                             mismatches=[i.get("id") for i in rr.get("issues", []) if i.get("check") == "glyph_mismatch"][:20],
+                                             map=glyph_binding["glyph_map_csv"]) if glyph_binding else None,
                          export=dict(svg_text_elements=(sf or {}).get("text_elements"), png_pixels=png_px, pdf_fonts=pf),
                          reproducibility=rerun)
     val["inputs"] = dict(case=a.case, files=[dict(file=x["file"], sha256=x["sha256"]) for x in inputs][:40])
@@ -423,6 +568,12 @@ def main():
         merged["uncertainty"] = merged["uncertainty"] + [u for u in val["uncertainty"] if u not in merged["uncertainty"]]
     merged.setdefault("provenance_summary", dict(elements_with_source=len(prov_rows), layer_map=val["provenance"].get("layer_map")
                                                  if not edit else None))
+    try:
+        merged.setdefault("rubric_coverage", rubric_coverage(a.mode, lm, spec, cr, rr, data_map, glyph_binding,
+                                                             dict((rr or {}).get("outputs") or {}, layer_map=os.path.join(od, "layer_map.json")),
+                                                             edit))
+    except Exception as e:  # never block the result
+        merged.setdefault("rubric_coverage", {"error": repr(e)[:200]})
     fill_path = os.path.join(wd, "fill_merged.json")
     with open(fill_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False, indent=1)

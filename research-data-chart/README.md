@@ -64,7 +64,7 @@ addressed ids of the original SVG and log before/after values.
 | element→source map, result.json | no, no | yes, yes (6/6 contract fields) |
 | re-run byte-identical | False | True |
 | injected defects flagged before delivery | 0/6 (2 crashed) | 6/6 |
-| edit: untouched elements byte-identical | – | 46/46 (2/2 ops verified) |
+| edit: untouched elements byte-identical | – | 52/52 (2/2 ops verified) |
 | contract shapes fully filled (6 tested) | – | 6/6 |
 
 Full table and limits: `references/measured_gain.md`. This is **not** the platform's baseline-agent
@@ -123,7 +123,12 @@ paths cannot be re-typed. Number provenance is string-level; derived values must
 `derived:{formula,inputs}`. CJK output needs an installed CJK font (reported if absent).
 
 ## Maintenance
-v1.4 (2026-11-25: chart glyph audit — per-bar/point SVG ids, `glyph_map.json/.csv` with source
+v1.5 (2026-11-25: visual quality after a side-by-side test against a figure drawn without the Skill —
+filled category nodes with an optional `sub` line, numbered colour headers for problem/method/result/
+conclusion panels, real arrow samples in legends, orthogonal elbow routing, opposite pairs as parallel
+lines, charts with one shared category axis and legend, highlight bands, visible log-scale bars, value-label
+head-room, title and legend kept inside the chart box; `rubric_coverage` in result.json maps each rubric
+checkpoint to its evidence file). v1.4 (2026-11-25: chart glyph audit — per-bar/point SVG ids, `glyph_map.json/.csv` with source
 line/column, read-back value, tick, legend colour and error bar; clipping and repeated series colours
 fail). v1.3 (2026-11-24: built-in vector icon library — standalone `icon` elements and icons inside entities,
 membrane/nucleus/cell compartments with receptor snapping, icon checks). v1.2 (2026-11-23: one-command fig_make.py, byte-identical re-runs, contract auto-mapping, measured

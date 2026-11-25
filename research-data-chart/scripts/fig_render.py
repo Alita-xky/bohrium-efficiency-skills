@@ -51,6 +51,22 @@ matplotlib.rcParams["pdf.fonttype"] = 42           # embed TrueType (editable in
 matplotlib.rcParams["ps.fonttype"] = 42
 
 PALETTE = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#F0E442", "#000000"]
+CARD_ROLES = ("problem", "question", "background", "method", "approach", "result", "results", "finding", "conclusion",
+              "takeaway", "implication")
+CARD_COLORS = ["#2B4C7E", "#1F7A6D", "#B5562B", "#6A3D8F", "#3F6E2F", "#8C2F39"]
+ARROW_WORDS = [("inhibit", "inhibits"), ("抑制", "inhibits"), ("⊣", "inhibits"), ("-|", "inhibits"), ("promot", "promotes"),
+               ("促进", "promotes"), ("activat", "activates"), ("激活", "activates"), ("produc", "produces"),
+               ("生成", "produces"), ("convert", "converts"), ("转化", "converts"), ("bind", "binds"), ("结合", "binds"),
+               ("associat", "associates"), ("相关", "associates"), ("flow", "flow"), ("流程", "flow"), ("next", "next"),
+               ("→", "activates"), ("->", "activates")]
+
+
+def luminance(c):
+    try:
+        r, g, b_ = matplotlib.colors.to_rgb(c)
+    except Exception:
+        return 1.0
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b_
 CJK_CLASS = "\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef"
 CJK_RE = re.compile("[" + CJK_CLASS + "]")
 ARROW_KINDS = {
@@ -320,6 +336,23 @@ def curve_points(pA, pB, rad, W, H, n=40):
         y = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * cy + t ** 2 * y2
         pts.append((x / W, y / H))
     return pts
+
+
+def elbow_points(pA, pB, corner, n=40):
+    """points along the two-segment orthogonal path pA -> corner -> pB (bottom-left fractions)"""
+    d1 = math.hypot(corner[0] - pA[0], corner[1] - pA[1])
+    d2 = math.hypot(pB[0] - corner[0], pB[1] - corner[1])
+    tot = (d1 + d2) or 1.0
+    out = []
+    for i in range(n + 1):
+        t = tot * i / n
+        if t <= d1 and d1:
+            f = t / d1
+            out.append((pA[0] + (corner[0] - pA[0]) * f, pA[1] + (corner[1] - pA[1]) * f))
+        else:
+            f = (t - d1) / (d2 or 1.0)
+            out.append((corner[0] + (pB[0] - corner[0]) * f, corner[1] + (pB[1] - corner[1]) * f))
+    return out
 
 
 def to_tl(pts):
@@ -860,12 +893,24 @@ def load_series(el, spec_dir):
 
 
 def draw_chart(fig, el, b, base, adj):
+    import textwrap
     x, y = b.mpl_xy()
-    cax = fig.add_axes([x, y, b.w, b.h])
-    cax.set_gid(el["id"])
     s = load_series(el, el["_spec_dir"])
     kind = el.get("kind", "bar")
-    fs = el.get("size", base * 0.8) * adj.get("fscale", 1.0)
+    # chart text scales with the canvas: an 18-inch canvas with 9-pt labels reads like 4.5 pt in a journal column
+    fs = el.get("size", max(base * 0.8, 0.72 * float(el.get("_canvas_w", 0) or 0))) * adj.get("fscale", 1.0)
+    # the chart's box holds its title and legend too: reserve their height inside the box, never above it
+    fig_w, fig_h = fig.get_figwidth(), fig.get_figheight()
+    title_lines = []
+    if el.get("title"):
+        per_line = max(12, int(b.w * fig_w * 72 / (fs * 1.12 * 0.56)))
+        title_lines = textwrap.wrap(str(el["title"]), per_line)[:3]
+    legend_above = len(s["series"]) > 1 and el.get("legend_loc", "above") == "above"
+    leg_rows = ((2 if el.get("legend_title") else 1) if legend_above else 0)
+    reserve_pt = len(title_lines) * fs * 1.12 * 1.3 + leg_rows * fs * 0.85 * 1.55 + (fs * 0.6 if title_lines or leg_rows else 0)
+    reserve = min(0.45 * b.h, reserve_pt / 72 / fig_h)
+    cax = fig.add_axes([x, y, b.w, b.h - reserve])
+    cax.set_gid(el["id"])
     colors = el.get("colors") or PALETTE
     series, cats = s["series"], s["cats"]
     multi = len(series) > 1
@@ -892,8 +937,8 @@ def draw_chart(fig, el, b, base, adj):
                 col = [colors[i % len(colors)] for i in range(len(cats))]
             else:
                 col = el.get("color") or "#6B7785"
-            edge = ["#000000" if c in highlight else "#333333" for c in cats]
-            lw = [1.6 if c in highlight else 0.5 for c in cats]
+            edge = ["#222222" if c in highlight else "white" for c in cats]
+            lw = [0.9 if c in highlight else 0.6 for c in cats]
             kw = dict(color=col, edgecolor=edge, linewidth=lw, label=sr["label"] if multi else None)
             err = es if sr.get("err") else None
             if horiz:
@@ -921,10 +966,15 @@ def draw_chart(fig, el, b, base, adj):
                     lab = r.strip() or f"{v:g}"
                     if horiz:
                         cax.annotate(pretty(lab), (v, p), xytext=(2, 0), textcoords="offset points", va="center",
-                                     ha="left", fontsize=fs * 0.75)
+                                     ha="left", fontsize=fs * 0.82)
                     else:
                         cax.annotate(pretty(lab), (p, v), xytext=(0, 2), textcoords="offset points", ha="center",
-                                     va="bottom", fontsize=fs * 0.75, rotation=90 if multi and len(cats) > 6 else 0)
+                                     va="bottom", fontsize=fs * 0.82, rotation=90 if multi and len(cats) > 6 else 0)
+        for ci, c in enumerate(cats):   # emphasis = a light band behind the category + bold label (no heavy borders)
+            if c in highlight:
+                band = (cax.axhspan if horiz else cax.axvspan)(ci - 0.5, ci + 0.5, color=el.get("highlight_color", "#E6EDF7"),
+                                                                zorder=0, lw=0)
+                band.set_gid("%s:highlight:%d" % (el["id"], ci))
         ticks = list(range(len(cats)))
         rot = adj.get("rotation", el.get("xtick_rotation", 0))
         if horiz:
@@ -972,6 +1022,23 @@ def draw_chart(fig, el, b, base, adj):
         cax.set_ylim(*el["ylim"])
     if el.get("xlim"):
         cax.set_xlim(*el["xlim"])
+    if kind in ("bar", "barh"):   # log value axis: start one decade below the smallest bar so every bar is visible
+        vscale, has_lim = (el.get("xscale"), el.get("xlim")) if kind == "barh" else (el.get("yscale"), el.get("ylim"))
+        pos_vals = [v for sr in series for v in sr["y"] if isinstance(v, (int, float)) and not math.isnan(v) and v > 0]
+        if vscale == "log" and pos_vals and not has_lim:
+            lo_ = 10 ** math.floor(math.log10(min(pos_vals)))
+            if lo_ == min(pos_vals):
+                lo_ /= 10
+            (cax.set_xlim if kind == "barh" else cax.set_ylim)(lo_, None)
+    if kind in ("bar", "barh") and el.get("value_labels") and not (el.get("xlim") if kind == "barh" else el.get("ylim")):
+        # head-room so value labels stay inside the plot (and inside the canvas)
+        lo_, hi_ = cax.get_xlim() if kind == "barh" else cax.get_ylim()
+        vs_ = el.get("xscale") if kind == "barh" else el.get("yscale")
+        hi_new = hi_ * (10 ** 0.45 if vs_ == "log" else 1.0) + (0 if vs_ == "log" else 0.12 * (hi_ - lo_))
+        (cax.set_xlim if kind == "barh" else cax.set_ylim)(lo_, hi_new)
+    if kind in ("bar", "barh", "line"):
+        cax.grid(True, axis="x" if kind == "barh" else "y", color="#DDDDDD", lw=0.6, zorder=0)
+        cax.set_axisbelow(True)
     # mark values that are not reported instead of leaving an ambiguous gap
     if kind in ("bar", "barh") and n_missing and el.get("missing_label", "n.r.") is not None:
         lab = el.get("missing_label", "n.r.")
@@ -994,14 +1061,61 @@ def draw_chart(fig, el, b, base, adj):
             cax.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncol=min(len(series), 4), borderaxespad=0.2, **lkw)
         else:
             cax.legend(loc=loc, **lkw)
-    if el.get("title"):
-        cax.set_title(pretty(el["title"]), fontsize=fs * 1.05, loc="left" if multi else "center")
+    if title_lines:
+        pad = leg_rows * fs * 0.85 * 1.55 + fs * 0.4
+        cax.set_title(pretty("\n".join(title_lines)), fontsize=fs * 1.12, loc="left", fontweight="bold", pad=pad)
     cax.tick_params(labelsize=fs * 0.9)
     for sp in ("top", "right"):
         cax.spines[sp].set_visible(False)
     return cax, dict(data_origin=s["origin"], n_points=sum(len(sr["y"]) for sr in series), n_series=len(series),
                      n_missing=n_missing, missing=missing_where[:30], horiz=(kind == "barh"), glyphs=glyphs,
-                     numeric_x=s["numeric_x"])
+                     numeric_x=s["numeric_x"], cats=list(cats), chart_kind=kind,
+                     series_key=[(sr["label"], str(colors[gi % len(colors)])) for gi, sr in enumerate(series)] if multi else None)
+
+
+def share_chart_axes(registry):
+    """Charts side by side (or stacked) with the same categories show them once; charts with the same series and
+    colours show one legend. The hidden labels stay recorded (ticks_override) for the glyph audit."""
+    ch = [(k, v) for k, v in registry.items() if isinstance(v, dict) and v.get("kind") == "chart" and v.get("cats")]
+    done = []
+    for i, (ka, a) in enumerate(ch):
+        for kb, b in ch[i + 1:]:
+            if a["cats"] != b["cats"] or a.get("chart_kind") != b.get("chart_kind") or a.get("numeric_x"):
+                continue
+            A, B = a["box"], b["box"]
+            if a["chart_kind"] == "barh" and abs(A.y0 - B.y0) < 0.04 and abs(A.h - B.h) < 0.04:
+                left, right = (a, b) if A.x0 <= B.x0 else (b, a)
+                pl, pr = left["artist"].get_position(), right["artist"].get_position()
+                y0_, h_ = max(pl.y0, pr.y0), min(pl.y1, pr.y1) - max(pl.y0, pr.y0)   # same rows at the same height
+                left["artist"].set_position([pl.x0, y0_, pl.width, h_])
+                right["artist"].set_position([pr.x0, y0_, pr.width, h_])
+                right["artist"].tick_params(labelleft=False)
+                right["artist"].set_ylabel("")
+                right["ticks_override"] = [t.get_text() for t in left["artist"].get_yticklabels()]
+                done.append((ka, kb, "categories"))
+            elif a["chart_kind"] in ("bar", "line") and abs(A.x0 - B.x0) < 0.04 and abs(A.w - B.w) < 0.04:
+                top, bottom = (a, b) if A.y0 <= B.y0 else (b, a)
+                pt_, pb_ = top["artist"].get_position(), bottom["artist"].get_position()
+                x0_, w_ = max(pt_.x0, pb_.x0), min(pt_.x1, pb_.x1) - max(pt_.x0, pb_.x0)   # same columns
+                top["artist"].set_position([x0_, pt_.y0, w_, pt_.height])
+                bottom["artist"].set_position([x0_, pb_.y0, w_, pb_.height])
+                top["artist"].tick_params(labelbottom=False)
+                top["artist"].set_xlabel("")
+                top["ticks_override"] = [t.get_text() for t in bottom["artist"].get_xticklabels()]
+                done.append((ka, kb, "categories"))
+    groups = {}
+    for k, v in ch:
+        if v.get("series_key") and v["artist"].get_legend() is not None:
+            groups.setdefault(tuple(v["series_key"]), []).append((k, v))
+    for key, members in groups.items():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda kv: (kv[1]["box"].y0, kv[1]["box"].x0))
+        for k, v in members[1:]:
+            v["artist"].get_legend().remove()
+            v["legend_shared_with"] = members[0][0]
+            done.append((members[0][0], k, "legend"))
+    return done
 
 
 def _rgb(c):
@@ -1026,8 +1140,9 @@ def glyph_audit(registry):
         lo, hi = sorted(cax.get_xlim() if horiz else cax.get_ylim())
         span = (hi - lo) or 1.0
         tol = 0.005 * span
-        ticks = [t.get_text() for t in (cax.get_yticklabels() if horiz else cax.get_xticklabels())]
-        leg = cax.get_legend()
+        ticks = v.get("ticks_override") or [t.get_text() for t in (cax.get_yticklabels() if horiz else cax.get_xticklabels())]
+        leg = cax.get_legend() or (registry.get(v.get("legend_shared_with"), {}).get("artist").get_legend()
+                                   if v.get("legend_shared_with") else None)
         leg_col = {}
         if leg is not None:
             hs = getattr(leg, "legend_handles", None) or getattr(leg, "legendHandles", [])
@@ -1133,6 +1248,9 @@ def draw(spec, spec_dir, adj):
     ax.set_gid("layer:canvas")
     registry = {}   # id -> dict(kind, artist(s), box)
     svg_groups = []  # icon parts to gather into one <g id=...> after saving
+    _all_els = list(spec.get("elements", [])) + [e for p_ in spec.get("panels", []) for e in p_.get("elements", [])]
+    _all_els += [e for g in list(_all_els) if g.get("type") == "group" for e in g.get("elements", [])]
+    any_icon = any(e.get("icon") or e.get("type") == "icon" for e in _all_els)
     texts = []      # (id, text artist, container Box or None)
     sizes = {}      # id -> requested font size (before shrink)
     notes = []
@@ -1268,6 +1386,18 @@ def draw(spec, spec_dir, adj):
                 shape = el.get("shape", "round")
                 fill = el.get("fill", "#EAF2FB")
                 edge = el.get("edge", "#2B4C7E")
+                # "filled" (default): the category colour fills the node, label in white bold; "outline": tinted fill
+                lab0 = str(el.get("label", ""))
+                short = (len(CJK_RE.findall(lab0)) * 2 + len(CJK_RE.sub("", lab0))) <= 32
+                # one look per figure: icons sit on light boxes, so a figure with icons keeps every box light
+                filled = el.get("style", spec.get("canvas", {}).get("entity_style", "filled" if short and not any_icon
+                                                                                    else "outline")) == "filled"
+                if filled:
+                    if luminance(fill) > 0.55:      # a pale tint was given: fill with the category (edge) colour
+                        fill = edge
+                    txt_col = el.get("text_color") or ("#FFFFFF" if luminance(fill) < 0.55 else "#111111")
+                else:
+                    txt_col = el.get("text_color", "#111111")
                 if shape == "ellipse":
                     p = Ellipse(b.center(), b.w, b.h, facecolor=fill, edgecolor=edge, lw=1.4, zorder=3)
                     inner = 0.72
@@ -1307,11 +1437,25 @@ def draw(spec, spec_dir, adj):
                                membrane=el.get("membrane", True))
                     svg_groups.append(dict(id=eid + ":icon", rx=re.compile(re.escape(eid) + r":icon:p\d+$"), extra=[],
                                            label=f"icon: {icon}"))
-                t = put_text(eid, el.get("label", ""), tx, ty, el.get("size", base),
-                             weight=el.get("weight", "normal"), color=el.get("text_color", "#111111"),
-                             wrap_w=wrap)
+                fsz = el.get("size", base)
+                sub = el.get("sub") or el.get("subtitle")
+                if sub:   # second, smaller line under the label (role, unit, condition from the source)
+                    lw_ = el.get("label", "")
+                    l1, _, h1 = est_lines(lw_, wrap, fsz)
+                    l2, _, h2 = est_lines(sub, wrap, fsz * 0.74)
+                    gap = (h1 + h2) / 2 / H
+                    t = put_text(eid, lw_, tx, ty + gap - h1 / 2 / H, fsz, weight=el.get("weight", "bold" if filled else "normal"),
+                                 color=txt_col, wrap_w=wrap)
+                    ts_ = put_text(eid + ":sub", sub, tx, ty - gap + h2 / 2 / H, fsz * 0.74, color=txt_col, wrap_w=wrap)
+                    if filled:
+                        ts_.set_alpha(0.92)
+                    texts.append((eid + ":sub", ts_, Box(cont.x0, cont.y0 + cont.h / 2, cont.w, cont.h / 2)))
+                    texts.append((eid, t, Box(cont.x0, cont.y0, cont.w, cont.h / 2)))
+                else:
+                    t = put_text(eid, el.get("label", ""), tx, ty, fsz, weight=el.get("weight", "bold" if filled else "normal"),
+                                 color=txt_col, wrap_w=wrap)
+                    texts.append((eid, t, cont))
                 registry[eid] = dict(kind="entity", artist=p, text=t, box=b, icon=icon)
-                texts.append((eid, t, cont))
             elif typ == "icon":
                 draw_icon_element(el, parent, ctx)
             elif typ == "text":
@@ -1326,6 +1470,7 @@ def draw(spec, spec_dir, adj):
             elif typ == "chart":
                 b = parent.sub(el["x"], el["y"], el["w"], el["h"])
                 el["_spec_dir"] = spec_dir
+                el["_canvas_w"] = W
                 cax, info = draw_chart(fig, el, b, base, adj.get(eid, {}))
                 registry[eid] = dict(kind="chart", artist=cax, box=b, parent_box=parent, **info)
             elif typ == "legend":
@@ -1337,13 +1482,19 @@ def draw(spec, spec_dir, adj):
                 for i, e in enumerate(entries):
                     cy = 1 - (b.y0 + b.h * (i + 0.5) / n)
                     hx = b.x0 + 0.012
-                    m = e.get("marker", "square")
+                    m = e.get("marker")
                     col = e.get("color", "#333333")
+                    if not m:   # an entry about an arrow kind gets a real arrow sample, not a colour square
+                        k_ = e.get("kind") or e.get("arrow")
+                        if not k_ and not e.get("fill"):
+                            low = str(e.get("label", "")).lower()
+                            k_ = next((kk for w_, kk in ARROW_WORDS if w_ in low), None)
+                        m = ("arrow_" + k_) if k_ in ARROW_KINDS else "square"
                     if m.startswith("arrow"):
                         kind = m.split("_", 1)[1] if "_" in m else "activates"
                         st = ARROW_KINDS.get(kind, ARROW_KINDS["activates"])
-                        a = FancyArrowPatch((hx - 0.01, cy), (hx + 0.012, cy), arrowstyle=st["arrowstyle"],
-                                            linestyle=st["linestyle"], mutation_scale=10, color=col, lw=1.3,
+                        a = FancyArrowPatch((hx - 0.012, cy), (hx + 0.016, cy), arrowstyle=st["arrowstyle"],
+                                            linestyle=st["linestyle"], mutation_scale=11, color=col, lw=1.5,
                                             transform=ax.transAxes, zorder=6)
                         ax.add_patch(a)
                     elif m == "line":
@@ -1356,7 +1507,8 @@ def draw(spec, spec_dir, adj):
                     a.set_gid(f"{eid}:handle:{i}")
                     lid = f"{eid}:label:{i}"
                     sizes[lid] = fs
-                    t = ax.text(hx + 0.02, cy, pretty(e["label"]), fontsize=fs * adj.get(lid, {}).get("fscale", 1.0),
+                    lab_ = re.sub(r"^\s*(→|⊣|->|-\||—|–)\s*", "", str(e["label"])) if m.startswith("arrow") else e["label"]
+                    t = ax.text(hx + 0.024, cy, pretty(lab_), fontsize=fs * adj.get(lid, {}).get("fscale", 1.0),
                                 va="center", ha="left", transform=ax.transAxes, zorder=6)
                     t.set_gid(lid)
                     arts.append(t)
@@ -1435,6 +1587,31 @@ def draw(spec, spec_dir, adj):
             frame = FancyBboxPatch((x, y), b.w, b.h, boxstyle="round,pad=0.003,rounding_size=0.012",
                                    facecolor=pnl.get("fill", "#FAFAFA"), edgecolor=pnl.get("edge", "#9AA5B1"),
                                    lw=1.0, zorder=1)
+        card = pshape == "box" and pnl.get("title") and (pnl.get("style") == "card" or (
+            str(pnl.get("role", "")).lower() in CARD_ROLES and pnl.get("style") != "plain"))
+        if card:   # numbered colour header band: the reading order is visible at a glance
+            card_no = sum(1 for q in spec.get("panels", [])[:spec.get("panels", []).index(pnl) + 1]
+                          if q.get("title") and (q.get("style") == "card" or (str(q.get("role", "")).lower() in CARD_ROLES
+                                                                               and q.get("style") != "plain")))
+            accent = pnl.get("accent") or CARD_COLORS[(card_no - 1) % len(CARD_COLORS)]
+            tsz = pnl.get("title_size", base * 1.1)
+            hh = min(b.h * 0.22, tsz * 2.0 / 72 / H)
+            band = FancyBboxPatch((x, y + b.h - hh), b.w, hh, boxstyle="round,pad=0.003,rounding_size=0.012",
+                                  facecolor=accent, edgecolor=accent, lw=1.0, zorder=1.05)
+            ax.add_patch(band)
+            band.set_gid(f"panel:{pid}:header")
+            if pnl.get("edge") is None:
+                frame.set_edgecolor(accent)
+            from matplotlib.patches import Circle
+            r_in = tsz * 0.62 / 72
+            cx_, cy_ = b.x0 + (r_in * 1.6) / W, 1 - (b.y0 + hh / 2)
+            badge = Ellipse((cx_, cy_), 2 * r_in / W, 2 * r_in / H, facecolor="white", edgecolor="none", zorder=1.1)
+            ax.add_patch(badge)
+            badge.set_gid(f"panel:{pid}:badge")
+            nt = ax.text(cx_, cy_, str(pnl.get("number", card_no)), ha="center", va="center", fontsize=tsz * 0.8,
+                         fontweight="bold", color=accent, transform=ax.transAxes, zorder=6)
+            nt.set_gid(f"panel:{pid}:number")
+            ctx["card"] = dict(hh=hh, title_x=b.x0 + (r_in * 3.0) / W, size=tsz)
         ax.add_patch(frame)
         frame.set_gid(f"panel:{pid}")
         registry[f"panel:{pid}"] = dict(kind="panel", artist=frame, box=b, role=pnl.get("role"), shape=pshape)
@@ -1449,6 +1626,11 @@ def draw(spec, spec_dir, adj):
                 t = put_text(tid, pnl["title"], b.x0 + b.w / 2, 1 - (b.y0 + b.h * 0.90), pnl.get("title_size", base),
                              va="bottom", weight="bold", wrap_w=b.w * 0.55)
                 texts.append((tid, t, Box(b.x0 + b.w * 0.2, b.y0 + b.h * 0.72, b.w * 0.6, b.h * 0.22)))
+            elif ctx.get("card"):
+                cd = ctx["card"]
+                t = put_text(tid, pnl["title"], cd["title_x"], 1 - (b.y0 + cd["hh"] / 2), cd["size"], ha="left",
+                             weight="bold", color="#FFFFFF", wrap_w=b.x0 + b.w - cd["title_x"] - 0.006)
+                texts.append((tid, t, Box(cd["title_x"], b.y0, b.x0 + b.w - cd["title_x"], cd["hh"])))
             else:
                 t = put_text(tid, pnl["title"], b.x0 + b.w / 2, 1 - (b.y0 + 0.012), pnl.get("title_size", base * 1.1),
                              va="top", weight="bold", wrap_w=b.w * 0.95)
@@ -1510,28 +1692,53 @@ def draw(spec, spec_dir, adj):
             if bb["kind"] == "panel":
                 pB = edge(bb["box"], a["box"].center())
         auto = None
+        pair_out = None
+        corner = None   # set when the arrow is an orthogonal elbow
         if ar.get("connection"):
             conn = ar["connection"]
             m = re.search(r"rad\s*=\s*([-\d.]+)", conn)
-            rad = float(m.group(1)) if m else 0.0
+            rad = float(m.group(1)) if m and conn.startswith("arc3") else 0.0
+            ma = re.search(r"angleA\s*=\s*([-\d.]+)", conn)
+            if conn.startswith("angle,") and ma:
+                corner = (pB[0], pA[1]) if abs(float(ma.group(1))) % 180 == 0 else (pA[0], pB[1])
         elif (ar["to"], ar["from"]) in pairs and a["kind"] in ENT_KINDS and bb["kind"] in ENT_KINDS:
-            rad = 0.25
-            conn = f"arc3,rad={rad}"
-            auto = "opposite pair -> two arcs"
+            # opposite pair (A->B and B->A): two parallel straight lines, each shifted to its own side
+            dxp, dyp = (pB[0] - pA[0]) * W, (pB[1] - pA[1]) * H
+            L = math.hypot(dxp, dyp) or 1.0
+            half = min(a["box"].w * W, a["box"].h * H, bb["box"].w * W, bb["box"].h * H) / 2
+            off = min(0.11, 0.35 * half)   # inches
+            nx, ny = -dyp / L * off / W, dxp / L * off / H
+            pA, pB = (pA[0] + nx, pA[1] + ny), (pB[0] + nx, pB[1] + ny)
+            rad, conn = 0.0, "arc3,rad=0.0"
+            auto = "opposite pair -> two parallel lines"
+            pair_out = (nx, ny)   # labels go on the outer side of each line
         elif a["kind"] in ENT_KINDS and bb["kind"] in ENT_KINDS:
             best = None
             for r in (0.0, 0.22, -0.22, 0.4, -0.4):
                 c = cost(to_tl(curve_points(pA, pB, r, W, H, n=16)), ar["from"], ar["to"]) + abs(r) * 0.2
                 if best is None or c < best[0] - 1e-9:
-                    best = (c, r)
-            rad = best[1]
-            conn = f"arc3,rad={rad}"
-            if rad:
-                auto = f"routed around other boxes (rad={rad})"
+                    best = (c, r, None)
+            # orthogonal elbows (leave horizontally / vertically): tidy, and often clear of other boxes and arrows
+            dxi, dyi = abs(pB[0] - pA[0]) * W, abs(pB[1] - pA[1]) * H
+            if best[0] > 1e-9 and min(dxi, dyi) > 0.35 and spec.get("canvas", {}).get("elbows", True):
+                for cn in ((pB[0], pA[1]), (pA[0], pB[1])):
+                    c = cost(to_tl(elbow_points(pA, pB, cn, n=16)), ar["from"], ar["to"]) + 0.03
+                    if c < best[0] - 1e-9:
+                        best = (c, 0.0, cn)
+            rad, corner = best[1], best[2]
+            if corner:
+                horiz_first = abs(corner[1] - pA[1]) < 1e-9
+                conn = "angle,angleA=%d,angleB=%d,rad=6" % ((0, 90) if horiz_first else (90, 0))
+                auto = "orthogonal elbow around other boxes and arrows"
+            else:
+                conn = f"arc3,rad={rad}"
+                if rad:
+                    auto = f"routed around other boxes (rad={rad})"
         else:
             rad, conn = 0.0, "arc3,rad=0.0"
-        poly = to_tl(curve_points(pA, pB, rad, W, H, n=24))
-        placed.append(to_tl(curve_points(pA, pB, rad, W, H, n=16)))
+        path_pts = (lambda n_: elbow_points(pA, pB, corner, n=n_)) if corner else (lambda n_: curve_points(pA, pB, rad, W, H, n=n_))
+        poly = to_tl(path_pts(24))
+        placed.append(to_tl(path_pts(16)))
         fa = FancyArrowPatch(pA, pB, arrowstyle=st["arrowstyle"],
                              linestyle=st["linestyle"], mutation_scale=ar.get("scale", 14), color=col,
                              lw=ar.get("lw", 2.4 if ar.get("kind") == "flow" else 1.6), shrinkA=2, shrinkB=2,
@@ -1547,11 +1754,16 @@ def draw(spec, spec_dir, adj):
             lsize = ar.get("size", base * 0.75) * adj.get(ar["id"] + ":label", {}).get("fscale", 1.0)
             sizes[ar["id"] + ":label"] = ar.get("size", base * 0.75)
             lw_, lh_ = text_em(lab) * lsize / 72 / W, 1.3 * lsize / 72 / H
-            pts = curve_points(pA, pB, rad, W, H, n=20)
-            cands = [ar["label_pos"]] if "label_pos" in ar else [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75]
+            pts = path_pts(20)
+            cands = [ar["label_pos"]] if "label_pos" in ar else ([0.5] if pair_out else [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75])
             chosen = None
             for tpos in cands:
                 px, py = pts[int(round(tpos * 20))]
+                if pair_out:   # beside its own line, away from the partner line
+                    k_ = (lw_ * W / 2 + 0.06) / max(1e-6, math.hypot(pair_out[0] * W, pair_out[1] * H))
+                    k_ = max(k_, (lh_ * H / 2 + 0.06) / max(1e-6, math.hypot(pair_out[0] * W, pair_out[1] * H)))
+                    k_ = min(k_, 6.0)
+                    px, py = px + pair_out[0] * k_, py + pair_out[1] * k_
                 r = (px - lw_ / 2, 1 - py - lh_ / 2, px + lw_ / 2, 1 - py + lh_ / 2)
                 bad = [k for k, o in obstacles.items() if rects_overlap(r, o)] + \
                       [k for k, o in soft.items() if rects_overlap(r, o)] + \
@@ -1575,9 +1787,13 @@ def draw(spec, spec_dir, adj):
 
     footnote = spec.get("footnote")
     if footnote:
-        t = put_text("footnote", footnote, 0.01, 0.012, base * 0.7, ha="left", va="bottom",
+        t = put_text("footnote", footnote, 0.01, 0.012, max(base * 0.7, 0.5 * W), ha="left", va="bottom",
                      color="#555555", wrap_w=0.98)
         texts.append(("footnote", t, None))
+    try:
+        registry["__shared_axes__"] = dict(kind="meta", shared=share_chart_axes(registry))
+    except Exception as e:   # cosmetic only
+        registry["__shared_axes__"] = dict(kind="meta", error=repr(e)[:120])
     registry["__svg_groups__"] = dict(kind="meta", groups=svg_groups)
     return fig, ax, registry, texts, sizes
 
@@ -1662,9 +1878,13 @@ def check_layout(fig, registry, texts, sizes, min_pt):
                 if hit:
                     break
             if hit and not (shared and len(shared) == 2):
+                ea, eb = (A["frm"], A["to"]), (B["frm"], B["to"])
                 issues.append(dict(level="warn", check="arrows_cross", ids=[ak[i], ak[j]],
                                    at=[round(hit[0], 3), round(hit[1], 3)],
-                                   hint="reorder entities so arrows do not cross, or curve one arrow"))
+                                   hint="%s->%s crosses %s->%s. Usual fix: put the main chain in one column and stack the "
+                                        "other pair vertically in a side column (e.g. move %s and %s to the left, one above "
+                                        "the other); or set connection 'angle,angleA=0,angleB=90,rad=6' (elbow) on one "
+                                        "of them" % (ea[0], ea[1], eb[0], eb[1], eb[0], eb[1])))
     for k, v in arrows.items():
         lb = tb.get(k + ":label")
         if lb:

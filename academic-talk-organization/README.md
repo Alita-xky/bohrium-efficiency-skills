@@ -112,7 +112,7 @@ python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/outp
   agent's judgement following references/talk_patterns.md and are shown for review, not machine-verified.
 
 ## Maintenance
-Version 1.4 (2026-11-25: script-length vs slot check, audience-doubt coverage, selection ledger, Q&A crib in
+Version 1.4 (2026-11-25: `rubric_coverage` in result.json (six rubric elements -> evidence), script-length vs slot check, audience-doubt coverage, selection ledger, Q&A crib in
 the notes; example notes rewritten as a spoken script). Version 1.3 (2026-11-24: automatic slide design and
 deck-wide type scale). Version 1.2 (2026-11-23: one-command `--case` builds/rounds that also write result.json, robust contract
 parsing, `verification` block, measured gain report). Version 1.0 (2026-11). Shared toolkit identical across the four PPT Skills (paper2ppt, talk_organize,

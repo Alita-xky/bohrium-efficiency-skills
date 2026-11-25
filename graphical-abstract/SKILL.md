@@ -34,7 +34,10 @@ contract field and an honest status), so a run that stops early still delivers. 
 
 ## Focus: graphical abstract (one page, four parts)
 - Four panels left → right with `role` problem | method | result | conclusion (`ga_check.py --mode
-  graphical_abstract` fails if a role is missing). Short boxes (≤ ~20 words) in the paper's wording.
+  graphical_abstract` fails if a role is missing); each gets a numbered colour header automatically.
+  Each panel holds 2–4 short items in the paper's wording, each with a concrete number, name or
+  condition (dose, time, n, cell type) — e.g. method = numbered steps with conditions; conclusion =
+  the model as a small diagram plus one "limits" item. A GA is dense but readable, not four sentences.
 - Result panel: at least the key quantitative result(s) **with units**, copied from the source. A data
   file or a table → `chart` bound to it; numbers only in the text → chart with `data.values` and a
   `source.quote` that contains them, or a text box. Never estimate values from a plotted figure.
@@ -116,6 +119,25 @@ that group and `add_text` at its bbox, and say so. Non-SVG sources (PPTX/DOCX/PN
 `soffice --headless --convert-to pdf`, redraw only what is asked as a new layered SVG, state the limitation.
 Edit mode needs no spec: inventory → ops.json → the command above.
 
+## 4c. Visual quality — the figure is judged next to one drawn without this Skill
+- Nodes: short labels are drawn **filled** in their category colour with white bold text (default); add
+  `"sub"` for a second, smaller line (role, compartment, unit or condition from the source). Long text
+  blocks stay light automatically (or `"style":"outline"`).
+- Layout: the main chain in one column (top→bottom or left→right); side branches and mutual pairs
+  (A ⇄ B) stacked in a parallel column. Never make a chain arrow pass between two side-by-side boxes.
+  Opposite pairs become two parallel lines; blocked arrows get orthogonal elbows automatically
+  (or set `"connection":"angle,angleA=0,angleB=90,rad=6"`).
+- Panels with `role` problem/method/result/conclusion (or `"style":"card"`) get a numbered colour header
+  (`"accent"` to choose the colour). Fill each panel with 2–4 elements that carry a concrete name or
+  number from the source; a panel with one vague sentence looks empty next to a hand-drawn figure.
+- Legend entries about arrow kinds (`"kind":"inhibits"`, or a label with activates/inhibits/…) are drawn
+  as real arrow samples; colour entries as swatches.
+- Charts: charts side by side with the same categories share one category axis and one legend
+  (automatic); `highlight` draws a light band; `value_labels:true` prints the exact source strings; log
+  axes start one decade below the smallest bar so every bar is visible.
+- After the first render, fix every layout ISSUE (crossings, overlaps, legend on a box) before
+  finishing: crossing arrows or overlapping labels cost more than any record gains.
+
 ## 5. Make, check, fix [1 call, repeat at most twice]
 ```bash
 python3 $SKILL/scripts/ga_make.py --spec /app/work/spec.json --mode graphical_abstract --name graphical_abstract [--fill /app/work/fill.json]
@@ -140,6 +162,8 @@ model that cannot view images can still fix the layout:
 | text_overflow (FAIL) | shorten with source wording or enlarge the box |
 | glyph_missing / cjk_font_missing | replace the character (`->`, `alpha`), or use English labels and report it |
 | quote_not_found (warn) | re-copy the quote from `--find` output |
+| glyph_mismatch (FAIL, charts) | `clipped`: widen or drop `ylim`/`xlim` (or log axis); `tick`: fix the x column; `legend`: one colour per series |
+| series_colours_repeat (FAIL) | give the chart a `colors` list with one distinct colour per series |
 
 If you can view images, open the PNG once. Stop after two fix rounds; list what remains under uncertainty.
 
@@ -169,7 +193,8 @@ under uncertainty. Without ga_make: `make_result.py --case /input/case.json --ou
 ## Final checklist
 1. `/app/output` (written by ga_make): editable SVG (one Inkscape layer per panel), PDF, PNG, the spec
    copy, `layer_map.json`, `check_report.json`, `render_report.json` (+ `edit_log.json`),
-   `version_record.json`, `reproduce.sh`, `result.json`.
+   `glyph_map.json/.csv` (charts: every bar/point ↔ its source cell, read back), `version_record.json`,
+   `reproduce.sh`, `result.json`.
 2. No value on the figure is absent from the materials (or it is marked derived with formula).
 3. Meaningful colours/arrow kinds are in the legend; units on axes and scale bars; "n.r." explained.
 4. `result.json` has `case_id` and every contract field; status honest; limits listed.

@@ -123,6 +123,25 @@ that group and `add_text` at its bbox, and say so. Non-SVG sources (PPTX/DOCX/PN
 `soffice --headless --convert-to pdf`, redraw only what is asked as a new layered SVG, state the limitation.
 Edit mode needs no spec: inventory → ops.json → the command above.
 
+## 4c. Visual quality — the figure is judged next to one drawn without this Skill
+- Nodes: short labels are drawn **filled** in their category colour with white bold text (default); add
+  `"sub"` for a second, smaller line (role, compartment, unit or condition from the source). Long text
+  blocks stay light automatically (or `"style":"outline"`).
+- Layout: the main chain in one column (top→bottom or left→right); side branches and mutual pairs
+  (A ⇄ B) stacked in a parallel column. Never make a chain arrow pass between two side-by-side boxes.
+  Opposite pairs become two parallel lines; blocked arrows get orthogonal elbows automatically
+  (or set `"connection":"angle,angleA=0,angleB=90,rad=6"`).
+- Panels with `role` problem/method/result/conclusion (or `"style":"card"`) get a numbered colour header
+  (`"accent"` to choose the colour). Fill each panel with 2–4 elements that carry a concrete name or
+  number from the source; a panel with one vague sentence looks empty next to a hand-drawn figure.
+- Legend entries about arrow kinds (`"kind":"inhibits"`, or a label with activates/inhibits/…) are drawn
+  as real arrow samples; colour entries as swatches.
+- Charts: charts side by side with the same categories share one category axis and one legend
+  (automatic); `highlight` draws a light band; `value_labels:true` prints the exact source strings; log
+  axes start one decade below the smallest bar so every bar is visible.
+- After the first render, fix every layout ISSUE (crossings, overlaps, legend on a box) before
+  finishing: crossing arrows or overlapping labels cost more than any record gains.
+
 ## 5. Make, check, fix [1 call, repeat at most twice]
 ```bash
 python3 $SKILL/scripts/fig_make.py --spec /app/work/spec.json --mode mechanism --name mechanism [--fill /app/work/fill.json]

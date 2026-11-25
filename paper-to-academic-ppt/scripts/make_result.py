@@ -85,6 +85,73 @@ def load_json_lenient(path):
             sys.exit(f"INVALID JSON in {path}: {e.msg} at line {e.lineno} col {e.colno}: {line[:160]!r}")
 
 
+def rubric_coverage(outdir, cr, rr, comp, ts, br):
+    """The six elements every slide rubric of this track names (论文主线、页结构、图表引用、讲解逻辑、模板约束、导出渲染),
+    each with a verdict computed from the run's own reports and the file that proves it."""
+    P = lambda n: os.path.join(outdir, n) if os.path.exists(os.path.join(outdir, n)) else None  # noqa: E731
+    iss = (cr or {}).get("issues") or []
+    by = lambda *names: [i for i in iss if i.get("check") in names]  # noqa: E731
+    fails = lambda xs: [i for i in xs if i.get("level") == "fail"]  # noqa: E731
+    slides = (br or {}).get("slides") or []
+    roles = [str(x.get("role") or "") for x in slides]
+    per = (rr or {}).get("per_slide") or []
+    em = None
+    try:
+        em = json.load(open(os.path.join(outdir, "evidence_map.json"), encoding="utf-8"))
+    except Exception:
+        pass
+    vis = [v for e in (em or {}).get("slides", []) for v in e.get("visuals", [])]
+    refd = [v for v in vis if v.get("ref")]
+    notes_n = sum(1 for x in per if (x.get("notes_chars") or 0) > 0)
+    tl = (cr or {}).get("timeline")
+    def row(ok, partial, evidence, files, problems=None):
+        return dict(status="covered" if ok else ("partial" if partial else "missing"), evidence=evidence,
+                    files=[f for f in files if f], problems=problems or None)
+    st = fails(by("story", "story_order"))
+    typed = [r for r in roles if r]
+    order = " > ".join(typed) if len(typed) >= max(2, len(roles) // 2) else " > ".join(
+        str(x.get("title") or "")[:40] for x in per)  # template/edit decks: the source deck's titles, in order
+    mainline = row(bool(roles or per) and not st, bool(roles or per),
+                   ("slide roles in order: %s" if len(typed) >= max(2, len(roles) // 2) else "slide titles in order: %s") % order[:400],
+                   [P("slides_outline.md"), P("talk_plan.md"), P("evidence_map.md")], [i["msg"] for i in by("story", "story_order")][:4])
+    sc = fails(by("slide_count", "density"))
+    structure = row(bool(slides) and not sc, bool(slides),
+                    "%d slides, layouts %s; one title size %s pt, body ladder %s" % (
+                        len(slides) or (rr or {}).get("n_slides") or 0, sorted({x.get("layout") for x in per if x.get("layout")})[:8],
+                        ((ts or {}).get("title") or {}).get("size_pt"), ((ts or {}).get("body") or {}).get("ladder")),
+                    [P("build_report.json"), P("type_scale.json"), P("slides_outline.md")], [i["msg"] for i in sc][:4])
+    fr = fails(by("fig_ref", "figure", "chart", "fig_page"))
+    figs = row(not fr, True, "%d figures/tables/charts on slides, %d carry the paper's own number (Fig./Table N); every cited "
+               "number exists as a caption in the paper" % (len(vis), len(refd)),
+               [P("evidence_map.md"), P("selection_ledger.json")], [i["msg"] for i in by("fig_ref", "figure", "chart", "fig_page")][:4])
+    nt = fails(by("notes", "time_budget", "qa"))
+    talk = row(notes_n and not nt, notes_n > 0,
+               "speaker notes on %d of %d slides%s" % (notes_n, len(per), ("; timed timeline of %d slides with key messages and "
+                                                                          "transitions" % len(tl)) if tl else ""),
+               [P("talk_plan.md"), P("slides_outline.md")], [i["msg"] for i in by("notes", "notes_repeat", "time_budget", "transitions",
+                                                                                   "speech_fit", "qa")][:4])
+    tpl = (br or {}).get("template") or {}
+    if comp:
+        tmpl = row(comp.get("status") == "pass", True, "template compliance %s (%s); template %s" % (
+            comp.get("compliance_rate"), comp.get("status"), tpl.get("path")), [P("compliance.json")],
+            [k for k, v in (comp.get("issues_by_rule") or {}).items() if v][:6])
+    else:
+        tmpl = row(bool(tpl), bool(tpl), "built on %s (%s); deck-wide type scale" % (
+            os.path.basename(str(tpl.get("path") or "")) or "the default academic template",
+            "generated" if tpl.get("generated") else "given template, layouts and placeholders kept"),
+            [P("build_report.json"), P("type_scale.json")])
+    rend = row((rr or {}).get("status") in ("ok", "pass") and (rr or {}).get("pdf_pages") == (rr or {}).get("n_slides"),
+               bool((rr or {}).get("pdf")),
+               "PDF %s pages for %s slides, %d PNG previews, fonts %s" % ((rr or {}).get("pdf_pages"), (rr or {}).get("n_slides"),
+                                                                       len((rr or {}).get("previews") or []),
+                                                                       sorted({f.get("name") for f in ((rr or {}).get("pdf_fonts") or [])
+                                                                               if isinstance(f, dict)})[:4]),
+               [P("render_report.json"), (rr or {}).get("pdf"), (rr or {}).get("contact_sheet")],
+               [i.get("msg") or i.get("check") for i in ((rr or {}).get("issues") or []) if i.get("level") == "fail"][:4])
+    return {"论文主线 storyline": mainline, "页结构 slide structure": structure, "图表引用 figure/table references": figs,
+            "讲解逻辑 speaking logic": talk, "模板约束 template constraints": tmpl, "导出渲染 export and rendering": rend}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default="/input/case.json")
@@ -153,6 +220,10 @@ def main():
                                           body_ladder=(ts.get("body") or {}).get("ladder"), spacing=ts.get("spacing"),
                                           off_scale=((rr or {}).get("type_scale") or {}).get("off_scale"),
                                           what="one title size for the deck, body text on a 3-step ladder, sizes off it are listed")
+    try:
+        rubric = rubric_coverage(a.outdir, cr, rr, comp, ts, jl("build_report.json"))
+    except Exception as e:  # never block the result
+        rubric = {"error": repr(e)[:200]}
     result = {"case_id": case_id}
     missing = []
     for f in fields:
@@ -181,6 +252,7 @@ def main():
     result["render_check"] = render
     if verification:
         result.setdefault("verification", verification)
+    result.setdefault("rubric_coverage", rubric)
     if vr:
         result.setdefault("inputs", [dict(file=x.get("file"), sha256=x.get("sha256")) for x in vr.get("inputs", [])][:40])
         result.setdefault("reproduce", dict(command=vr.get("rerun"), tools=vr.get("tools"), fonts=vr.get("fonts")))

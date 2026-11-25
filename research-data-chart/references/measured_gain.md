@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `chart`)
 
-Generated 2026-11-25 10:21 by `python3 scripts/gain_check.py --mode chart --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-25 10:57 by `python3 scripts/gain_check.py --mode chart --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
@@ -16,7 +16,7 @@ Generated 2026-11-25 10:21 by `python3 scripts/gain_check.py --mode chart --out 
 | contract fields filled | 0/6 | 6/6 |
 | re-run byte-identical (SVG, PDF, PNG) | False | True |
 | automatic checks | none | spec vs materials (fig_check.py), layout/export (fig_render.py), re-run hash, contract |
-| wall time (s) | 0.4 | 1.2 |
+| wall time (s) | 0.4 | 1.4 |
 
 ## 2. One injected defect per run (same spec otherwise)
 
@@ -37,7 +37,7 @@ Flagged before delivery by B: **6/6**; A: 0 flagged (2 runs crashed without a de
 
 ## 3. Source-preserving edit (svg_edit.py on B's SVG)
 
-2 ops, 2 verified on the written file; untouched elements byte-identical: 46/46; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
+2 ops, 2 verified on the written file; untouched elements byte-identical: 52/52; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
 
 ## 4. output_contract shapes (fields filled automatically by fig_make.py)
 
