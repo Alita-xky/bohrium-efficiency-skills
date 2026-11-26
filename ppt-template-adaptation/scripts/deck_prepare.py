@@ -85,16 +85,19 @@ def talk_budget(cons):
         return None
     nums = [int(x) for x in re.findall(r"\d+", str((cons.get("slides") or {}).get("value") or ""))][:2]
     lo, hi = (min(nums), max(nums)) if nums else (max(4, int(m * 0.7)), max(5, int(m * 1.1) + 1))
-    main = max(lo, min(hi, round(m * 0.9)))
+    main = max(lo, min(hi - 1 if hi > lo else hi, round(m * 0.9)))      # leave room for a backup slide inside the limit
+    backup = max(0, min(2, hi - main))
     parts = [("Problem + why it matters (incl. title)", 0.2), ("Idea + method", 0.3), ("Results with numbers", 0.35),
              ("Limits + take-home", 0.15)]
     n = [max(1, round(main * w)) for _, w in parts]
     n[2] += main - sum(n)
     rows = ["%s %.1f min (%d slide%s)" % (name, m * w, k, "s" if k > 1 else "") for (name, w), k in zip(parts, n)]
     sec = 60.0 * m / main
-    return ("%g min, %s slides -> %d main slides, ~%d s each, + 2-3 backup slides for Q&A (not timed)\n  %s\n"
+    return ("%g min, %s slides -> %d main slides, ~%d s each, + %d backup slide%s for Q&A = %d slides in all (backup "
+            "slides count toward the slide limit; more Q&A goes into the notes of the last slide)\n  %s\n"
             "  notes per slide ≈ %d English words or %d Chinese characters (140 wpm / 240 字/min); the checker compares "
-            "script length with the slot" % (m, "%d-%d" % (lo, hi) if lo != hi else lo, main, sec, " | ".join(rows),
+            "script length with the slot" % (m, "%d-%d" % (lo, hi) if lo != hi else lo, main, sec, backup,
+                                            "" if backup == 1 else "s", main + backup, " | ".join(rows),
                                             sec / 60 * 140, sec / 60 * 240))
 
 
