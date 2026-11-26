@@ -294,6 +294,91 @@ def covers(doubt, text):
     return len(d & topic_tokens(text)) / len(d) if d else 0.0
 
 
+TERM_RE = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9\-]*(?:\([0-9n]\))?)(?![A-Za-z])")
+TERM_COMMON = {"PDF", "PPT", "PPTX", "PNG", "OK", "AI", "CPU", "GPU", "USA", "UK", "EU", "PhD", "MSc", "TODO", "FAQ", "QA",
+               "Q&A", "URL", "ID", "IDs", "PI", "NA", "VS"}
+EXPLAIN_RE = re.compile(r"即|也就是|是指|指的是|表示|就是|全称|简称|叫做|称为|意思是|用来|\(|（|stands for|means|i\.e\.|is a |is the |"
+                        r"refers to|short for|measures|called", re.I)
+
+
+def term_fit(slides, audience):
+    """audience fit: technical terms (acronyms, model/metric names) a listener meets on a main slide should be said
+    and explained in the spoken script the first time they appear, unless the audience already knows them."""
+    knows = json.dumps(audience, ensure_ascii=False) if audience else ""
+    knows_txt = str((audience or {}).get("knows", "")) if isinstance(audience, dict) else ""
+    rows, seen, notes_so_far = [], {}, []
+    for i, s in enumerate(slides, 1):
+        role = str(s.get("role", "")).lower()
+        if role in ("backup", "appendix"):
+            continue
+        notes_so_far.append(str(s.get("notes") or ""))
+        if role in ("title", "thanks"):
+            continue
+        texts = [str(s.get("title", "")), str(s.get("key_message") or "")]
+        for b in s.get("bullets", []) or []:
+            texts.append(str(b.get("text", "") if isinstance(b, dict) else b))
+        for t in texts:
+            for m in TERM_RE.finditer(t):
+                term = m.group(1)
+                if term in TERM_COMMON or len(term) > 14 or term in seen:
+                    continue
+                pre, post = t[max(0, m.start() - 1):m.start()], t[m.end():m.end() + 1]
+                if (pre and pre in "/=√ᵀ^_·*") or (post and post in "/=√ᵀ^_·*"):   # a formula fragment, not a term
+                    continue
+                seen[term] = i
+                said = [k for k, n in enumerate(notes_so_far, 1) if term in n]
+                sent = ""
+                if said:
+                    n = notes_so_far[said[0] - 1]
+                    j = n.find(term)
+                    a_ = max(n.rfind("。", 0, j), n.rfind(". ", 0, j), n.rfind("\n", 0, j)) + 1
+                    b_ = min([x for x in (n.find("。", j), n.find(". ", j), n.find("\n", j)) if x >= 0] or [len(n)])
+                    sent = n[a_:b_ + 1].strip()
+                status = ("known" if term in knows_txt else "explained" if said and EXPLAIN_RE.search(sent)
+                          else "said" if said else "not_said")
+                rows.append(dict(term=term, first_slide=i, status=status, script_sentence=sent[:160] or None))
+    return rows
+
+
+def qa_rehearsal(qa, facts, slides, doubts, lab_zh):
+    """one card per likely question: the spoken answer (timed), the slide to jump to, the verbatim evidence"""
+    idx = {s.get("id"): (k, s) for k, s in enumerate(slides, 1)}
+    L = ["# Q&A rehearsal" if not lab_zh else "# 问答预演", "",
+         ("Read each answer aloud once: about 20–45 s each. Jump-to slides are in the deck (backup slides after the "
+          "conclusion); evidence lines are verbatim quotes with locators from facts.json.") if not lab_zh else
+         "每题照读一遍，约 20–45 秒；“跳转”是 deck 里的页（备用页在结论之后）；证据是 facts.json 中带定位的原文摘录。", ""]
+    rows = []
+    for n, q in enumerate(qa, 1):
+        ans = q.get("answer_points", [])
+        ans = ans if isinstance(ans, list) else [str(ans)]
+        spoken = ("；" if lab_zh else "; ").join(str(x).rstrip("。.;；") for x in ans if str(x).strip())
+        secs = round(speak_seconds(spoken))
+        b = q.get("backup_slide")
+        jump = idx.get(b)
+        d = q.get("doubt")
+        doubt = doubts[d] if isinstance(d, int) and doubts and 0 <= d < len(doubts) else (d if isinstance(d, str) else None)
+        L.append("## Q%d. %s" % (n, q.get("question", "")))
+        if doubt:
+            L.append("- " + ("audience doubt: " if not lab_zh else "对应听众疑问：") + str(doubt))
+        L.append("- " + ("answer (~%ds): " if not lab_zh else "回答（约 %d 秒）：") % secs + spoken)
+        if jump:
+            L.append("- " + ("jump to: slide %d — %s" if not lab_zh else "跳转：第 %d 页 — %s") % (jump[0], jump[1].get("title", "")))
+        ev = []
+        for f in q.get("evidence", []) or []:
+            r = facts.get(f) or {}
+            src = r.get("source") or {}
+            if r:
+                ev.append("%s %s: “%s”" % (f, src.get("loc") or src.get("ref") or "", str(src.get("quote") or r.get("text", ""))[:200]))
+        for e in ev:
+            L.append("  - " + ("evidence " if not lab_zh else "证据 ") + e)
+        if q.get("if_pressed") or q.get("follow_up"):
+            L.append("- " + ("if pressed: " if not lab_zh else "若追问：") + str(q.get("if_pressed") or q.get("follow_up")))
+        L.append("")
+        rows.append(dict(q=n, question=q.get("question"), answer_s=secs, jump_slide=jump[0] if jump else None,
+                         evidence=len(ev), doubt=doubt))
+    return "\n".join(L), rows
+
+
 def doubt_coverage(plan, slides):
     """audience.likely_doubts -> the Q&A items / slides that answer them (explicit qa[].doubt index or text, else word overlap)"""
     aud = plan.get("audience") or {}
@@ -648,6 +733,7 @@ def main():
     plan = json.load(open(a.plan, encoding="utf-8")) if a.plan and os.path.exists(a.plan) else (spec.get("plan") or {})
     timeline = []
     speech_fit, speech_total, doubt_rows, ledger = [], None, [], []
+    terms, reh_md, reh_rows = [], None, []
     dur = a.duration_min or plan.get("duration_min") or meta.get("duration_min")
     if a.mode == "talk":
         for k in ("goal", "audience"):
@@ -721,6 +807,18 @@ def main():
         if missing:
             add("warn", "ledger", "paper %s not presented and not in plan.cuts: show it, move it to backup, or record why "
                 "it is cut" % ", ".join(missing[:8]))
+        aud_ = plan.get("audience") or meta.get("audience") or {}
+        terms = term_fit(slides, aud_)
+        for r in terms:
+            if r["status"] == "not_said":
+                add("warn", "term_unexplained", "'%s' appears on the slide but the script never says or explains it "
+                    "(audience: %s): add one short explanation to this slide's notes"
+                    % (r["term"], str(aud_.get("who", "") if isinstance(aud_, dict) else "")[:40]), r["first_slide"])
+        lab_zh = len(CJK_RE.findall(json.dumps([s.get("title", "") for s in slides], ensure_ascii=False))) > 20
+        reh_md, reh_rows = qa_rehearsal(qa, facts, slides, aud_.get("likely_doubts") if isinstance(aud_, dict) else None, lab_zh)
+        for r in reh_rows:
+            if r["answer_s"] > 60:
+                add("warn", "qa_answer_long", "Q&A answer %d takes ~%ds to say: keep the first answer under ~45 s" % (r["q"], r["answer_s"]))
         t = 0.0
         for i, s in enumerate(slides, 1):
             ts = float(s.get("time_s", 0) or 0)
@@ -736,7 +834,15 @@ def main():
                issues=issues, timeline=timeline or None)
     if a.mode == "talk":
         rep.update(speech_fit=dict(total=speech_total, slides=speech_fit, rate="4 CJK chars/s, 2.3 English words/s"),
-                   doubt_coverage=doubt_rows, selection_ledger=ledger)
+                   doubt_coverage=doubt_rows, selection_ledger=ledger,
+                   audience_terms=dict(rule="a term on a main slide is said and explained in the script at its first "
+                                            "appearance unless audience.knows covers it", terms=terms,
+                                       counts={k: sum(1 for r in terms if r["status"] == k)
+                                               for k in ("explained", "said", "not_said", "known")}),
+                   qa_rehearsal=dict(path="qa_rehearsal.md", questions=reh_rows))
+        if reh_md:
+            with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), "qa_rehearsal.md"), "w", encoding="utf-8") as f:
+                f.write(reh_md + "\n")
         with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), "selection_ledger.json"), "w", encoding="utf-8") as f:
             json.dump(dict(figures_tables=ledger, cuts=plan.get("cuts") or meta.get("cuts") or [],
                            doubt_coverage=doubt_rows), f, ensure_ascii=False, indent=1)

@@ -90,7 +90,7 @@ Talk mode adds: goal/audience present, time budget ±10 %, key messages and tran
 fact ids and backup slides, cuts recorded, numbers in the plan's key messages and answers found in the
 materials, **script length vs slide time** (per slide and whole talk), **audience doubts → answering Q&A/slide**,
 and the **selection ledger** (`selection_ledger.json`: every Fig./Table of the paper → main slide, backup or
-recorded cut). The Q&A cue list (question → first answer point, evidence, backup slide) is written into the
+recorded cut), **audience terms** (an acronym or model/metric name on a main slide that the script never says → warn: explain it in that slide's notes unless `audience.knows` covers it) and **`qa_rehearsal.md`** (per question: the spoken answer with its time, the slide to jump to, the verbatim evidence). The Q&A cue list (question → first answer point, evidence, backup slide) is written into the
 speaker notes of the Q&A slide, or of the last main slide, so the presenter has it on stage. Outputs `talk_plan.md` (goal, audience, section budget, slide timeline with start times, Q&A, cuts)
 plus deck, PDF, PNGs, evidence map. Fix every FAIL, re-run (max twice), look at `previews/contact_sheet.png` once.
 
