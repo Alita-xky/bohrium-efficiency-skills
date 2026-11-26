@@ -3,6 +3,7 @@
 
 extract_materials.py starts this in the background after the first extraction.
 - chart skills with CSV data: a chart bound to the CSV columns (fig_make.py --mode chart, status partial);
+- mechanism skills with candidate arrows (edges.json): a figure from those arrows (status partial);
 - otherwise: result.json with case_id, every contract field marked not_provided, status partial.
 The agent's own fig_make.py run replaces it (it stops a running draft first and removes draft-only files).
 
@@ -79,6 +80,36 @@ def chart_spec(csvs):
                 elements=els, footnote="Source: %s; every glyph is bound to its CSV cell (glyph_map.json)." % ", ".join(srcs))
 
 
+def mech_spec(edges_path, facts_path):
+    """Mechanism skills: a figure from the machine-read candidate arrows (edges.json), conflicting pairs left out."""
+    try:
+        e = json.load(open(edges_path, encoding="utf-8"))
+        facts = json.load(open(facts_path, encoding="utf-8"))
+    except Exception:
+        return None
+    rows = facts.get("facts", facts) if isinstance(facts, dict) else facts
+    sign = {}
+    for a in e.get("arrows", []):
+        sign.setdefault((a["from"], a["to"]), set()).add(a["kind"])
+    arrows = [a for a in e.get("arrows", []) if len(sign[(a["from"], a["to"])]) == 1][:10]
+    if len(arrows) < 2:
+        return None
+    src = {}
+    for a in arrows:
+        src.setdefault(a["from"], a["source"])
+        src.setdefault(a["to"], a["source"])
+    ents = [dict(id=x["id"], type="entity", label=x["label"], source=src[x["id"]]) for x in e.get("entities", []) if x["id"] in src]
+    first = next((r for r in rows if r.get("id") == arrows[0]["source"]), {})
+    return {"canvas": {"width_in": 10, "height_in": 6.5, "dpi": 300, "background": "#FFFFFF", "font_family": "auto",
+                       "base_font_pt": 11},
+            "title": {"text": "Relations stated in the materials (automatic draft)", "y": 0.04},
+            "panels": [{"id": "draft_panel", "role": "compartment", "title": "", "layout": "auto", "x": 0.03, "y": 0.1,
+                        "w": 0.94, "h": 0.8, "elements": ents}],
+            "arrows": arrows,
+            "footnote": "Draft: arrows read automatically from %s; each cites its verbatim sentence." % (
+                (first.get("source") or {}).get("file") or "the materials")}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--work", default="/app/work")
@@ -120,6 +151,20 @@ def main():
                "--materials"] + glob.glob(os.path.join(a.work, "materials", "*.txt")) + csvs
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         say(r.stdout[-2500:], r.stderr[-1200:])
+    ep, fp = os.path.join(a.work, "edges.json"), os.path.join(a.work, "facts.json")
+    if not spec and "mechanism" in skill.lower() and os.path.exists(ep) and not svgs:
+        mspec = mech_spec(ep, fp)
+        if mspec:
+            shutil.copyfile(fp, os.path.join(dw, "facts.json"))
+            sp = os.path.join(dw, "spec.json")
+            json.dump(mspec, open(sp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            cmd = [sys.executable, os.path.join(HERE, "fig_make.py"), "--spec", sp, "--mode", "mechanism", "--name",
+                   "mechanism", "--outdir", out, "--work", dw, "--input", a.input, "--case", case, "--status", "partial",
+                   "--uncertainty", NOTE, "--uncertainty", "arrows are machine-read candidates (verb + entity names), "
+                   "not reviewed; pairs with conflicting signs were left out", "--no-rerun", "--draft",
+                   "--materials"] + glob.glob(os.path.join(a.work, "materials", "*.txt"))
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            say(r.stdout[-2500:], r.stderr[-1200:])
     if not os.path.exists(os.path.join(out, "result.json")) and os.path.exists(case):
         fill = os.path.join(dw, "fill.json")
         json.dump(dict(status="partial", uncertainty=[NOTE + " No figure was produced in this run."]),

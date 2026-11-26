@@ -131,6 +131,8 @@ paths cannot be re-typed. Number provenance is string-level; derived values must
 `derived:{formula,inputs}`. CJK output needs an installed CJK font (reported if absent).
 
 ## Maintenance
+v1.13 (2026-11-27: mechanism safety draft — when step 1 found candidate arrows, the background draft now draws a real mechanism figure from them (auto layout, pairs with conflicting signs left out, every arrow citing its verbatim sentence, relation table filled, status partial with the caveat that the arrows were not reviewed), so a run cut short still delivers a figure, not only result.json.)
+
 v1.12 (2026-11-27: mechanism figures — step 1 also reads candidate arrows from the materials: sentences naming two entities around a relation verb become `A → B (activates|inhibits|binds|converts|modifies)` rows in facts.json (verbatim quote + locator) and arrows in `edges.json`; passive voice is reversed, perturbation sentences ('blocking A decreased B') flip the sign, conflicting signs are flagged. A contract field named like a relation table is filled from the spec's arrows (from, to, kind, verbatim evidence). fig_make accepts a plain-string title.)
 
 v1.11 (2026-11-27: shorter runs — the DeepSeek harness allows 900 s, each model call costs 15–30 s, so the quick path targets 5–7 calls. `extract_materials.py` builds the evidence table itself (F1..F10: relations, values, steps, setup, results, claims; verbatim with locators, one row per sentence, number dumps ranked last); step 1 also prints the spec skeleton. `fig_make.py` finds `/app/work/spec.json` (and fill.json) by itself, takes `"fill"` and `"uncertainty"` from the spec, and ends with `NEXT` (round n of 3), `STOP` or `DONE`.)
