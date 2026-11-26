@@ -20,7 +20,7 @@ tick_labels_overlap, legend_overlap, glyph_missing.
 Text: `10^18`, `10^{-3}`, `Ca^{2+}`, `CO_{2}`, `EC_{50}` become Unicode super/subscripts
 (still plain editable <text>). Only matplotlib/numpy (+ stdlib) are required.
 """
-import argparse, csv, glob, hashlib, json, math, os, re, shutil, subprocess, sys, unicodedata
+import argparse, collections, csv, glob, hashlib, json, math, os, re, shutil, subprocess, sys, unicodedata
 import logging, warnings
 import xml.etree.ElementTree as ET
 
@@ -1385,6 +1385,7 @@ def draw(spec, spec_dir, adj):
     texts = []      # (id, text artist, container Box or None)
     sizes = {}      # id -> requested font size (before shrink)
     notes = []
+    tidy_log = []   # automatic layout repairs (reported in render_report.json "auto_tidy")
     root = Box(0, 0, 1, 1)
 
     def put_text(eid, s, x, y, size, ha="center", va="center", weight="normal", color="#111111", wrap_w=None,
@@ -1507,15 +1508,67 @@ def draw(spec, spec_dir, adj):
         svg_groups.append(dict(id=eid, rx=re.compile(re.escape(eid) + r":p\d+$"), extra=[eid + ":label"],
                                label=f"icon: {name}"))
 
+    def card_of(el):
+        sub_v = el.get("sub") or el.get("subtitle") or el.get("details")
+        sub_lines = sub_v if isinstance(sub_v, list) else ([sub_v] if sub_v else [])
+        is_card = el.get("type", "entity") == "entity" and el.get("shape", "round") != "ellipse" and not el.get("icon") and (
+            el.get("style") == "card" or (el.get("style") is None and (len(sub_lines) >= 2 or
+                                                                      sum(len(str(x)) for x in sub_lines) > 40)))
+        return sub_lines, is_card
+
+    def tidy_children(elements, parent, ctx):
+        """Two layout repairs a reader notices at once, done before drawing (spec untouched, copies only):
+        1. children that run into the panel title band are moved below it (all children compressed together,
+           so their arrangement is kept);
+        2. step cards much taller than their text shrink to fit (same-row cards keep one height, centre kept)."""
+        els = [dict(e) for e in elements]
+        tb = (ctx or {}).get("title_band")
+        if tb:
+            band, tx0, tx1 = tb
+            hit = [e["id"] for e in els if e.get("type", "entity") not in ("legend", "text", "scalebar") and "y" in e
+                   and e["y"] < band - 0.004 and e.get("x", 0) < tx1 and e.get("x", 0) + e.get("w", 0) > tx0]
+            if hit:
+                for e in els:
+                    if "y" in e:
+                        e["y"] = band + e["y"] * (1 - band)
+                        if "h" in e:
+                            e["h"] = e["h"] * (1 - band)
+                tidy_log.append(dict(fix="moved below panel title", panel=ctx.get("pid"), intruding=hit))
+        need = {}
+        for e in els:
+            sub_lines, is_card = card_of(e)
+            if not is_card or e.get("fit") is False or not all(k in e for k in ("x", "y", "w", "h")):
+                continue
+            b = parent.sub(e["x"], e["y"], e["w"], e["h"])
+            fsz = e.get("size", base)
+            _, _, h1 = est_lines(e.get("label", ""), b.w * 0.92, fsz)
+            dsz = e.get("detail_size", fsz * 0.78)
+            det = "\n".join("• " + str(x_) if len(sub_lines) > 1 else str(x_) for x_ in sub_lines)
+            nd = len(wrap_text(pretty(det), max(3.0, (b.w - 0.02) * W * 72 / dsz)).split("\n")) if det else 0
+            hh_in = h1 + 0.10
+            n_in = max(hh_in / 0.45, hh_in + 0.010 * H + nd * 1.22 * dsz / 72 + 0.14)
+            need[e["id"]] = n_in / H / parent.h      # in parent fraction
+        rows = []
+        for e in els:
+            if e["id"] in need:
+                r = next((r for r in rows if abs(r[0]["y"] - e["y"]) < 0.012 and abs(r[0]["h"] - e["h"]) < 0.012), None)
+                (r.append(e) if r else rows.append([e]))
+        for r in rows:
+            tgt = max(need[e["id"]] for e in r) * 1.06
+            if r[0]["h"] > tgt * 1.25:
+                for e in r:
+                    old = e["h"]
+                    e["y"], e["h"] = e["y"] + (old - tgt) / 2, tgt
+                tidy_log.append(dict(fix="card fitted to its text", ids=[e["id"] for e in r],
+                                     h_from=round(old, 3), h_to=round(tgt, 3)))
+        return els
+
     def draw_elements(elements, parent, ctx=None):
+        elements = tidy_children(elements, parent, ctx)
         for el in elements:
             eid = el["id"]
             typ = el.get("type", "entity")
-            sub_v = el.get("sub") or el.get("subtitle") or el.get("details")
-            sub_lines = sub_v if isinstance(sub_v, list) else ([sub_v] if sub_v else [])
-            is_card = typ == "entity" and el.get("shape", "round") != "ellipse" and not el.get("icon") and (
-                el.get("style") == "card" or (el.get("style") is None and (len(sub_lines) >= 2 or
-                                                                          sum(len(str(x)) for x in sub_lines) > 40)))
+            sub_lines, is_card = card_of(el)
             if is_card:   # step card: colour header with the name, light body with the source's parameters
                 b = parent.sub(el["x"], el["y"], el["w"], el["h"])
                 x, y = b.mpl_xy()
@@ -1545,7 +1598,8 @@ def draw(spec, spec_dir, adj):
                 td = put_text(eid + ":sub", det, b.x0 + 0.006 + 0.004, 1 - (b.y0 + hh + 0.010), dsz, ha="left", va="top",
                               color="#222222", wrap_w=b.w - 0.02)
                 texts.append((eid + ":sub", td, Box(b.x0, b.y0 + hh, b.w, b.h - hh)))
-                registry[eid] = dict(kind="entity", artist=body, text=t, box=b, icon=None)
+                registry[eid] = dict(kind="entity", artist=body, text=t, box=b, icon=None, swatch=(head_col, head_col),
+                                     spec_colors=(el.get("fill"), el.get("edge")))
                 continue
             if typ == "entity":
                 b = parent.sub(el["x"], el["y"], el["w"], el["h"])
@@ -1639,7 +1693,8 @@ def draw(spec, spec_dir, adj):
                     t = put_text(eid, el.get("label", ""), tx, ty, fsz, weight=el.get("weight", "bold" if filled else "normal"),
                                  color=txt_col, wrap_w=wrap, style="italic" if etype == "gene" else "normal")
                     texts.append((eid, t, cont))
-                registry[eid] = dict(kind="entity", artist=p, text=t, box=b, icon=icon)
+                registry[eid] = dict(kind="entity", artist=p, text=t, box=b, icon=icon, swatch=(fill, edge),
+                                     spec_colors=(el.get("fill"), el.get("edge")))
             elif typ == "icon":
                 draw_icon_element(el, parent, ctx)
             elif typ == "text":
@@ -1662,7 +1717,7 @@ def draw(spec, spec_dir, adj):
                 entries = el.get("entries", [])
                 n = max(1, len(entries))
                 fs = el.get("size", base * 0.8)
-                arts = []
+                arts, handles = [], []
                 # rows that fit at 1.7 line heights each; the rest flow into further columns
                 fit = max(1, int(b.h * H * 72 / (fs * 1.7)))
                 ncol = max(1, math.ceil(n / fit)) if el.get("columns") is None else int(el["columns"])
@@ -1695,6 +1750,7 @@ def draw(spec, spec_dir, adj):
                                       transform=ax.transAxes, zorder=6)
                         ax.add_patch(a)
                     a.set_gid(f"{eid}:handle:{i}")
+                    handles.append((a, m, e))
                     lid = f"{eid}:label:{i}"
                     sizes[lid] = fs
                     lab_ = re.sub(r"^\s*(→|⊣|->|-\||—|–)\s*", "", str(e["label"])) if m.startswith("arrow") else e["label"]
@@ -1704,7 +1760,7 @@ def draw(spec, spec_dir, adj):
                     arts.append(t)
                     row = Box(hx + 0.018, b.y0 + b.h * ri_ / nrow, max(0.01, b.x0 + (ci_ + 1) * colw - hx - 0.018), b.h / nrow)
                     texts.append((lid, t, row))
-                registry[eid] = dict(kind="legend", artist=arts, box=b, n_entries=len(entries))
+                registry[eid] = dict(kind="legend", artist=arts, box=b, n_entries=len(entries), handles=handles)
             elif typ == "scalebar":
                 b = parent.sub(el["x"], el["y"], el.get("length", 0.1), 0.02)
                 cy = 1 - b.y0
@@ -1723,7 +1779,7 @@ def draw(spec, spec_dir, adj):
                 registry[eid] = dict(kind="image", artist=iax, box=b)
             elif typ == "group":
                 b = parent.sub(el["x"], el["y"], el["w"], el["h"])
-                draw_elements(el.get("elements", []), b, ctx)
+                draw_elements(el.get("elements", []), b, dict(ctx or {}, title_band=None))
         return
 
     for pnl in spec.get("panels", []):
@@ -1825,8 +1881,57 @@ def draw(spec, spec_dir, adj):
                 t = put_text(tid, pnl["title"], b.x0 + b.w / 2, 1 - (b.y0 + 0.012), pnl.get("title_size", base * 1.1),
                              va="top", weight="bold", wrap_w=b.w * 0.95)
                 texts.append((tid, t, Box(b.x0, b.y0, b.w, b.h * 0.2)))
+            ctx["pid"] = pid
+            if ctx.get("card"):
+                ctx["title_band"] = ((ctx["card"]["hh"] + 0.008) / b.h, 0.0, 1.0)
+            elif pshape in ("box", "cell"):
+                _, tw_in, th_in = est_lines(pnl["title"], b.w * 0.95, pnl.get("title_size", base * 1.1))
+                half = min(0.5, tw_in / W / b.w / 2 + 0.03)
+                ctx["title_band"] = ((0.012 + th_in / H + 0.010) / b.h, 0.5 - half, 0.5 + half)
         draw_elements(pnl.get("elements", []), b, ctx)
     draw_elements(spec.get("elements", []), root)
+
+    def _c(c):
+        try:
+            return matplotlib.colors.to_hex(c).lower()
+        except Exception:
+            return None
+
+    def match_legend(arrow_pass=False):
+        """Legend samples must look like what they explain: a colour square takes the fill/edge the matching
+        boxes were actually drawn with (filled style turns pale fills into the category colour); an arrow sample
+        takes the colour its arrow kind was drawn in."""
+        ents = [v for v in registry.values() if v.get("kind") == "entity" and v.get("swatch")]
+        for lk, lv in [(k, v) for k, v in registry.items() if v.get("kind") == "legend"]:
+            for i, (art, m, e) in enumerate(lv.get("handles", [])):
+                if not arrow_pass and m == "square":
+                    want = {_c(e.get("fill")), _c(e.get("color")), _c(e.get("edge"))} - {None, "#333333", "#000000"}
+                    best, sc = [], 0
+                    for v in ents:
+                        have = {_c(x) for x in v["spec_colors"]} - {None}
+                        n = len(want & have)
+                        if n > sc:
+                            best, sc = [v], n
+                        elif n and n == sc:
+                            best.append(v)
+                    if not best:
+                        continue
+                    f_, e_ = collections.Counter(tuple(_c(x) for x in v["swatch"]) for v in best).most_common(1)[0][0]
+                    if (_c(art.get_facecolor()), _c(art.get_edgecolor())) != (f_, e_):
+                        art.set_facecolor(f_); art.set_edgecolor(e_); art.set_linewidth(1.0)
+                        tidy_log.append(dict(fix="legend swatch set to the drawn box colour", id=f"{lk}:handle:{i}", fill=f_))
+                elif arrow_pass and m.startswith("arrow"):
+                    kind = m.split("_", 1)[1] if "_" in m else "activates"
+                    cols = {_c(v.get("color")) for v in registry.values() if v.get("kind") == "arrow"
+                            and v.get("arrow_kind") == kind and v.get("color")}
+                    if len(cols) == 1:
+                        c1 = cols.pop()
+                        if _c(art.get_edgecolor()) != c1:
+                            art.set_color(c1)
+                            tidy_log.append(dict(fix="legend arrow sample set to the drawn arrow colour",
+                                                 id=f"{lk}:handle:{i}", color=c1))
+
+    match_legend()
 
     # ---- arrows last (need entity boxes for clipping and routing)
     all_arrows = list(spec.get("arrows", []))
@@ -1937,7 +2042,7 @@ def draw(spec, spec_dir, adj):
                              connectionstyle=conn, zorder=4)
         ax.add_patch(fa)
         fa.set_gid(ar["id"])
-        entry = dict(kind="arrow", artist=fa, frm=ar["from"], to=ar["to"], arrow_kind=ar.get("kind", "activates"),
+        entry = dict(kind="arrow", artist=fa, frm=ar["from"], to=ar["to"], arrow_kind=ar.get("kind", "activates"), color=col,
                      poly=poly, auto=auto, connection=conn)
         if ar.get("label"):
             lab = pretty(ar["label"])
@@ -1945,24 +2050,42 @@ def draw(spec, spec_dir, adj):
             sizes[ar["id"] + ":label"] = ar.get("size", base * 0.75)
             lw_, lh_ = text_em(lab) * lsize / 72 / W, 1.3 * lsize / 72 / H
             pts = path_pts(20)
-            cands = [ar["label_pos"]] if "label_pos" in ar else ([0.5] if pair_out else [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75])
+            tlist = [ar["label_pos"]] if "label_pos" in ar else [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75]
+            # on the line first; then beside it (pair arrows: always on their outer side, nearer first)
+            cands = ([(t_, 1.0) for t_ in tlist] if pair_out else
+                     [(t_, 0) for t_ in tlist] + [(t_, sg) for t_ in tlist[:5] for sg in (1, -1)])
             chosen = None
-            for tpos in cands:
-                px, py = pts[int(round(tpos * 20))]
+            for tpos, mult in cands:
+                i_ = int(round(tpos * 20))
+                px, py = pts[i_]
                 if pair_out:   # beside its own line, away from the partner line
                     k_ = (lw_ * W / 2 + 0.06) / max(1e-6, math.hypot(pair_out[0] * W, pair_out[1] * H))
                     k_ = max(k_, (lh_ * H / 2 + 0.06) / max(1e-6, math.hypot(pair_out[0] * W, pair_out[1] * H)))
-                    k_ = min(k_, 6.0)
+                    k_ = min(k_, 6.0) * mult
                     px, py = px + pair_out[0] * k_, py + pair_out[1] * k_
+                elif mult:     # perpendicular to the line at this point, just clear of it
+                    (ax_, ay_), (bx_, by_) = pts[max(0, i_ - 1)], pts[min(20, i_ + 1)]
+                    tx_, ty_ = (bx_ - ax_) * W, (by_ - ay_) * H
+                    L_ = math.hypot(tx_, ty_) or 1.0
+                    nx_, ny_ = -ty_ / L_, tx_ / L_
+                    d_ = 0.5 * (abs(nx_) * lw_ * W + abs(ny_) * lh_ * H) + 0.05
+                    px, py = px + mult * nx_ * d_ / W, py + mult * ny_ * d_ / H
                 r = (px - lw_ / 2, 1 - py - lh_ / 2, px + lw_ / 2, 1 - py + lh_ / 2)
-                bad = [k for k, o in obstacles.items() if rects_overlap(r, o)] + \
-                      [k for k, o in soft.items() if rects_overlap(r, o)] + \
-                      [1 for lb in label_boxes if rects_overlap(r, lb)]
-                if chosen is None or not bad:
-                    chosen = (px, py, r)
+                # a label on a box or another label is worst; over another arrow's line it is still readable
+                # (white backing), so that only counts a little
+                bad = [3 for k, o in obstacles.items() if rects_overlap(r, o)] + \
+                      [2 for k, o in soft.items() if rects_overlap(r, o)] + \
+                      [2 for lb in label_boxes if rects_overlap(r, lb)]
+                if r[0] < 0.004 or r[2] > 0.996 or r[1] < 0.004 or r[3] > 0.996:
+                    bad.append(3)
+                if mult:   # off the line: better not on another arrow either
+                    bad += [1 for other in placed[:-1] if any(point_in(q, r) for q in other)]
+                score_ = sum(bad) + (0.01 * abs(mult) if mult else 0)
+                if chosen is None or score_ < chosen[3]:
+                    chosen = (px, py, r, score_)
                 if not bad:
                     break
-            px, py, r = chosen
+            px, py, r, _ = chosen
             label_boxes.append(r)
             t = ax.text(px, py, lab, fontsize=lsize, ha="center", va="center", color=col, transform=ax.transAxes,
                         zorder=7, bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
@@ -1975,6 +2098,7 @@ def draw(spec, spec_dir, adj):
             texts.append((ar["id"] + ":label", t, None))
         registry[ar["id"]] = entry
 
+    match_legend(arrow_pass=True)
     footnote = spec.get("footnote")
     if footnote:
         t = put_text("footnote", footnote, 0.01, 0.012, max(base * 0.7, 0.5 * W, 5.5), ha="left", va="bottom",
@@ -1985,6 +2109,7 @@ def draw(spec, spec_dir, adj):
     except Exception as e:   # cosmetic only
         registry["__shared_axes__"] = dict(kind="meta", error=repr(e)[:120])
     registry["__svg_groups__"] = dict(kind="meta", groups=svg_groups)
+    registry["__tidy__"] = dict(kind="meta", fixes=tidy_log)
     return fig, ax, registry, texts, sizes
 
 
@@ -2423,13 +2548,14 @@ def main():
                   rotated_ticks={k: v["rotation"] for k, v in adj.items() if "rotation" in v},
                   auto_routing=auto, issues=issues, n_elements=len(layer_map), canvas=spec.get("canvas", {}),
                   glyph_audit=dict(charts=g_summary, map=os.path.join(args.outdir, "glyph_map.json")) if g_rows else None,
-                  journal_preset=preset_note)
+                  journal_preset=preset_note, auto_tidy=registry.get("__tidy__", {}).get("fixes") or None)
     with open(os.path.join(args.outdir, "render_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     print(json.dumps(dict(status=report["status"], fails=len(fails), warns=len(warns),
                           outputs={k: v.get("path") for k, v in out.items()},
                           png_pixels=out.get("png", {}).get("pixels"), font_notes=font_notes,
-                          shrunk_labels=shrunk, auto_routing=auto), ensure_ascii=False))
+                          shrunk_labels=shrunk, auto_routing=auto,
+                          auto_tidy=registry.get("__tidy__", {}).get("fixes") or None), ensure_ascii=False))
     for i in [i for i in issues if i["level"] != "info"][:15] + [i for i in issues if i["level"] == "info"][:3]:
         print("ISSUE", json.dumps(i, ensure_ascii=False))
     return 0 if not fails else 2
