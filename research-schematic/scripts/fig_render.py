@@ -250,6 +250,19 @@ def pretty(s):
     return s
 
 
+SCI_RE = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?)\s*[eE]\s*([-+]?)0*(\d+)\s*$")
+
+
+def sci_label(raw):
+    """value label text: '2.3e19' -> '2.3×10¹⁹' (the source's digits kept; only the notation changes)"""
+    m = SCI_RE.match(str(raw))
+    if not m:
+        return raw
+    mant, sign, exp = m.groups()
+    sup = (("\u207b" if sign == "-" else "") + exp.translate(SUP))
+    return "%s×10%s" % (mant, sup)
+
+
 def _em(c):
     if CJK_RE.match(c) or unicodedata.east_asian_width(c) in ("W", "F"):
         return 1.0
@@ -979,7 +992,7 @@ def draw_chart(fig, el, b, base, adj):
                     missing_where.append(f"{sr['label']}|{c}" if multi else c)
                     sr.setdefault("_missing_pos", []).append(p)
                 elif el.get("value_labels"):
-                    lab = r.strip() or f"{v:g}"
+                    lab = sci_label(r.strip() or f"{v:g}")
                     if horiz:
                         cax.annotate(pretty(lab), (v, p), xytext=(2, 0), textcoords="offset points", va="center",
                                      ha="left", fontsize=fs * 0.82)
