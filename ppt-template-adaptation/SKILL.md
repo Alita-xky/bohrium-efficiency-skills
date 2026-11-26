@@ -56,7 +56,7 @@ stretched pictures, off-slide shapes. Rules and fixes: `references/template_rule
 | route | when | do |
 |---|---|---|
 | **A rebuild** (default when a draft deck must move to the template; always if slide size/master differ) | draft deck + template | `deck_template.py to_spec --pptx <deck> --out /app/work/spec.json --previews /app/work/start_render/previews` → open spec.json, set `role` per slide, split slides that will overflow, optionally `layout_name`; keep all text exactly |
-| **B generate** | paper/materials + template, no deck | write facts.json + spec.json as in `templates/spec_template.json` (claims, sources, notes) |
+| **B generate** | paper/materials + template, no deck | facts.json by pattern (`paper_map.py fact "result::28\.4 BLEU::label" "method::we propose" …` copies each sentence verbatim with `[pN:M]`), then spec.json as in `templates/spec_template.json` (claims, fact ids, notes) |
 | **C repair in place** | deck already on the template's master; only formatting drifted | `deck_template.py fix --pptx <deck> --template <t> --out /app/output/deck.pptx --log /app/output/fix_log.json` |
 to_spec copies text, levels, pictures (exported), tables, notes and footer text exactly; "Figure N: …" text
 boxes become the visual's caption, "来源/Source: …" boxes its source note; shape names (Picture 2, Table 5) are

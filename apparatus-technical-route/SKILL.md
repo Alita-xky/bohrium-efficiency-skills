@@ -20,9 +20,9 @@ cat /input/case.json /input/task.md 2>/dev/null; python3 $SKILL/scripts/make_res
 python3 $SKILL/scripts/extract_materials.py --input /input --work /app/work
 #   extract also starts a SAFETY DRAFT: within ~1 min /app/output holds result.json (status partial);
 #   your step-4 run replaces it. fig_make prints [budget] (s used of 900): past 60 % fix FAILs only, past 80 % stop.
-# 2 verbatim quotes + locators for everything you will draw                    [1-2 calls]
-python3 $SKILL/scripts/extract_materials.py --work /app/work --find "keyword" "41 ng" "Table 2"
-# 3 write /app/work/facts.json + /app/work/spec.json from $SKILL/templates/spec_template_setup.json  [1-2 calls]
+# 2 facts.json by pattern: the script copies each sentence verbatim with its locator  [1-2 calls]
+python3 $SKILL/scripts/extract_materials.py --work /app/work --fact "relation::inhibits::X inhibits Y" "value::41 ng" "entity::Table 2"
+# 3 write /app/work/spec.json from $SKILL/templates/spec_template_setup.json, sources as fact ids ("source": "F3")  [1-2 calls]
 # 4 ONE command: check -> render -> re-run check -> records -> result.json      [1 call]
 python3 $SKILL/scripts/fig_make.py --spec /app/work/spec.json --mode setup --name setup_route
 # 5 fix every FAIL/ISSUE it prints in spec.json, run step 4 again (max 2 rounds)
@@ -65,13 +65,20 @@ PDFs untangled, **one paragraph per line starting with its locator `[p3:12]`**),
 python3 $SKILL/scripts/extract_materials.py --work /app/work --find "inhibits" "3.3 ng" "Table 2"
 grep -n -A15 "Table 2" /app/work/materials/*.layout.txt      # tables: rows stay on one line
 ```
-`--find` prints each matching **sentence with its locator** — paste it verbatim as `source.quote`.
+`--find` prints each matching **sentence with its locator** (a look-up; step 3 copies quotes for you).
 PDF text flattens superscripts: `2.3 · 1019` means 2.3×10^19, `ng.mL−1` means ng/mL.
 
-## 3. Evidence table + spec [1 call: write both files]
-`/app/work/facts.json`: one row per thing that will appear: `{"id","kind":"entity|relation|value|condition|claim",
-"text","source":{"file","loc","quote"}}`. Never invent a value, unit, n, direction or name. Missing
-but requested → row with `"status":"not_in_materials"` and a visible "not reported" placeholder.
+## 3. Evidence table by pattern + spec [2 calls]
+```bash
+python3 $SKILL/scripts/extract_materials.py --work /app/work --fact "entity::IL-10::IL-10"   "relation::upregulates IL-10::TNFα upregulates IL-10" "value::3\.3 ng::3.3 ng/mL" "condition::incubated|at 37"
+```
+Each `kind::regex[::short label[::n]]` (kind entity|relation|value|condition|claim) appends one row
+`{"id","kind","text","source":{"file","loc","quote"}}` to `/app/work/facts.json`: the matching sentence **copied
+verbatim** (≤ 30 words around the match) with its `[pN:M]` locator, plus up to two alternatives (`::2`, `::3`);
+a wrong pick → `--drop F7 --fact "relation::…::label::2"`. Re-running appends (ids continue). In the spec, cite
+evidence by id: `"source": "F3"` — fig_make fills in file, loc and the verbatim quote before checking, so you
+never retype a quote. Never invent a value, unit, n, direction or name. Missing but requested → a hand-written
+row `{"id","kind","text","status":"not_in_materials"}` and a visible "not reported" placeholder.
 
 ## 4a. Create mode — `/app/work/spec.json`
 Copy `$SKILL/templates/spec_template_setup.json` and replace every TODO (other layouts in the same folder: schematic,
@@ -94,7 +101,7 @@ chart, mechanism, setup, ga; a filled example: `$SKILL/examples/minimal/spec.jso
   empty cells are drawn as **"n.r."** (never fill them);
 - text notation: `10^18`, `10^{-3}`, `Ca^{2+}`, `CO_{2}` render as real super/subscripts; Greek
   and CJK work (a font with the glyphs is picked automatically);
-- every scientific element has `"source":{"file","loc"}` (+`quote` for relations and numbers);
+- every scientific element has a source: a fact id `"source": "F3"` (preferred) or `{"file","loc"}` (+`quote` for relations and numbers);
   purely visual items use `"source":{"type":"design"}`;
 - legend swatch colour = the `edge` (or `fill`) colour of that category's entities; one colour per category.
 
@@ -172,7 +179,7 @@ model that cannot view images can still fix the layout:
 | chart_out_of_canvas / tick_labels_overlap | reduce chart `h`, or use `kind:"barh"` |
 | text_overflow (FAIL) | shorten with source wording or enlarge the box |
 | glyph_missing / cjk_font_missing | replace the character (`->`, `alpha`), or use English labels and report it |
-| quote_not_found (warn) | re-copy the quote from `--find` output |
+| quote_not_found (warn) | cite a fact id from `--fact` instead of a typed quote |
 | glyph_mismatch (FAIL, charts) | `clipped`: widen or drop `ylim`/`xlim` (or log axis); `tick`: fix the x column; `legend`: one colour per series |
 | series_colours_repeat (FAIL) | give the chart a `colors` list with one distinct colour per series |
 

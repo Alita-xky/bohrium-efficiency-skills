@@ -21,8 +21,9 @@ python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
 #   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
 #   partial) built from the paper map, with a minimal talk plan; your step-4 run replaces it. Every make run prints [budget] (s used of 900):
 #   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
-# 2 verbatim quotes with locators: python3 $SKILL/scripts/paper_map.py find "..." "..."             [1-3 calls]
-# 3 write facts.json, talk_plan.json, spec.json in /app/work (templates/)                         [2-3 calls]
+# 2 facts.json by pattern - the script copies each sentence verbatim with [pN:M] + section, you never retype quotes  [1-2 calls]
+python3 $SKILL/scripts/paper_map.py fact "result::28\.4 BLEU::EN-DE BLEU 28.4" "method::we propose" "limit::limitation|future work" ...
+# 3 write talk_plan.json and spec.json in /app/work (templates/), citing the printed fact ids     [2 calls]
 # 4 ONE command: check (incl. time budget, Q&A) -> build -> render -> records -> result.json     [1 call]
 python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --mode talk \
   --plan /app/work/talk_plan.json --duration-min <M> --case /input/case.json
@@ -44,16 +45,25 @@ crops, key sentences), template layouts and tools.
 ## 2. Read the evidence (2–4 calls)
 - `python3 -c "import json;d=json.load(open('/app/work/paper_map.json'));[print(k['loc'],k['role'],k['text'][:230]) for k in d['key_sentences']];[print(f['ref'],f['page'],f.get('crop_png'),f.get('table_rows')) for f in d['figures_tables']]"`
 - `python3 $SKILL/scripts/paper_map.py find "parallel" "limitation" "Table 2" …` → verbatim sentences with `[pN:M]`
-  (one pattern per likely question of this audience).
+  (one pattern per likely question of this audience) - optional: step 3 prints the matches anyway.
 - One look at `/app/work/figs/fig_candidates.png` (crops of every Fig./Table; equations are in `paper_map.json`
   → `equations`, crops `figs/eq*.png`).
 Collect what this audience needs: the problem in their terms, the idea, 2–3 results with numbers, limits, and
 answers to their likely doubts. If the paper states one number twice with different values (abstract vs text),
 report both (Q&A + uncertainty) — never pick silently.
 
-## 3. `/app/work/facts.json` — the evidence table (1 call)
-Rows `{"id","kind","text","source":{"file","loc","ref","quote"}}` with **verbatim** quotes (≤ 30 words) and
-`[pN:M]` locators (template: `$SKILL/templates/facts_template.json`). Missing items → `"status":"not_in_materials"`.
+## 3. `/app/work/facts.json` — the evidence table, built by pattern (1–2 calls)
+```bash
+python3 $SKILL/scripts/paper_map.py fact "problem::long-range dependenc" "method::we propose::core idea" \
+  "result::28\.4 BLEU::EN-DE BLEU 28.4" "result::Table 2" "cost::GPU|hours|days" "limit::limitation|future work|fail"
+```
+Each `kind::regex[::short label[::n]]` appends one row `{"id","kind","text","source":{"file","loc","ref","quote"}}`:
+the matching sentence **copied verbatim** (≤ 30 words around the match), its `[pN:M]` locator and section heading;
+`kind` steers the search to the fitting section (result → results, method → method, limit → limitations/
+conclusion). It prints `F7 result [p8:12] 6.1 Machine Translation :: …` plus up to two alternatives (`::2`, `::3`);
+a wrong pick → `--drop F7 "result::…::label::2"` in the next call. Write one spec per claim, number or answer the
+talk needs (typically 12–25), cite the printed ids in plan and spec. Re-running appends (ids continue, duplicates
+skipped). Only an item the materials do not contain is typed by hand: `{"id","kind","text","status":"not_in_materials"}`.
 
 ## 4. `/app/work/talk_plan.json` + `/app/work/spec.json` (2 calls)
 Plan (template `$SKILL/templates/talk_plan_template.json`, method `references/talk_patterns.md`):

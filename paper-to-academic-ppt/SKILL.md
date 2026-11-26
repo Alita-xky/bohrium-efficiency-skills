@@ -21,9 +21,9 @@ python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
 #   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
 #   partial) built from the paper map; your step-4 run replaces it. Every make run prints [budget] (s used of 900):
 #   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
-# 2 verbatim quotes with locators                                                                  [1-3 calls]
-python3 $SKILL/scripts/paper_map.py find "we propose" "outperform" "limitation" "Table 2"
-# 3 write /app/work/facts.json and /app/work/spec.json (templates/; rules in references/)            [2-3 calls]
+# 2 facts.json by pattern - the script copies each sentence verbatim with [pN:M] + section          [1-2 calls]
+python3 $SKILL/scripts/paper_map.py fact "method::we propose" "result::outperform" "limit::limitation" "result::Table 2"
+# 3 write /app/work/spec.json citing the printed fact ids (templates/; rules in references/)          [1-2 calls]
 # 4 ONE command: check -> build -> LibreOffice render -> records -> result.json                     [1 call]
 python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --mode paper \
   --max-slides 15 --case /input/case.json [--template /input/<template>.pptx]
@@ -50,17 +50,26 @@ template, and the **output_contract** field names.
 ## 2. Read the evidence (2–4 calls)
 - Key sentences + tables in one call:
   `python3 -c "import json;d=json.load(open('/app/work/paper_map.json'));[print(k['loc'],k['role'],k['text'][:230]) for k in d['key_sentences']];[print(f['ref'],f['page'],f.get('crop_png'),f.get('table_rows')) for f in d['figures_tables']]"`
-- Verbatim quotes with locators: `python3 $SKILL/scripts/paper_map.py find "we propose" "outperform" "limitation" "Table 2"`
-  (prints `[pN:M] file :: sentence` — paste these into facts.json).
+- Optional look-up: `python3 $SKILL/scripts/paper_map.py find "we propose" "outperform" "limitation" "Table 2"`
+  (prints `[pN:M] file :: sentence`); step 3 copies the quotes for you.
 - Look once at `/app/work/figs/fig_candidates.png` (red boxes = auto crops of each Fig./Table). If a box is
   wrong, fix it in the spec (`bbox` page fractions) or with `paper_map.py crop`.
 Fill the five slots of `references/storyline.md` (problem, gap/idea, method, evidence, limits+take-home).
 
-## 3. Write `/app/work/facts.json` — the evidence table (1 call)
-Start from `$SKILL/templates/facts_template.json`. One row per fact that will appear on a slide:
-`{"id","kind","text","source":{"file","loc","ref","quote"}}`. **Copy quotes verbatim** (≤ 30 words) from
-`materials/*.txt`; `ref` = "Fig. 3" / "Table 2" / "Sec. 4.1" / "Abstract". A requested item that the paper
-does not contain gets `"status":"not_in_materials"` — it is reported, never invented.
+## 3. `/app/work/facts.json` — the evidence table, built by pattern (1–2 calls)
+One spec per fact that will appear on a slide (typically 12–25):
+```bash
+python3 $SKILL/scripts/paper_map.py fact "problem::long-range dependenc" "method::we propose::core idea" \
+  "result::28\.4 BLEU::EN-DE BLEU 28.4" "result::Table 2" "cost::GPU|hours|days" "limit::limitation|future work|fail"
+```
+Each `kind::regex[::short label[::n]]` appends one row `{"id","kind","text","source":{"file","loc","ref","quote"}}`:
+the matching sentence **copied verbatim** (≤ 30 words around the match), its `[pN:M]` locator and section heading;
+`kind` steers the search to the fitting section (result → results, method → method, limit → limitations/
+conclusion). It prints `F7 result [p8:12] 6.1 Machine Translation :: …` plus up to two alternatives (`::2`, `::3`);
+a wrong pick → `--drop F7 "result::…::label::2"` in the next call. Re-running appends (ids continue, duplicates
+skipped); cite the printed ids in the spec.
+Only a requested item that the paper does not contain is typed by hand (format `$SKILL/templates/facts_template.json`):
+`{"id","kind","text","status":"not_in_materials"}` — it is reported, never invented.
 
 ## 4. Write `/app/work/spec.json` (1–2 calls)
 Start from `$SKILL/templates/spec_template.json`; full field list in `references/formats.md`; rules in

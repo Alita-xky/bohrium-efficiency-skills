@@ -19,6 +19,7 @@ cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
 #   step 4 prints [budget] (s used of 900): past 60 % fix only ops_errors/FAILs and finish, past 80 % stop.
 # 2 values the instructions need, with locators: python3 $SKILL/scripts/paper_map.py find "..."   [1-3 calls]
+#   (new content that must cite the paper: paper_map.py fact "kind::regex[::label]" writes facts.json rows verbatim)
 # 3 write /app/work/ops.json: one op per instruction, addressed by slide + shape, with reason/src [1 call]
 # 4 ONE command: snapshot v0 -> apply -> render -> diff -> evidence check -> audit -> result.json [1 call]
 python3 $SKILL/scripts/deck_edit.py round --pptx /input/<deck>.pptx --ops /app/work/ops.json --outdir /app/output \
@@ -74,7 +75,7 @@ instructions do not address are not yours to fix (leave them). Open `previews/co
 ## 5. Iterate or roll back (0–2 calls)
 Wrong or incomplete? Write `/app/work/ops2.json` and run `round --pptx /app/output/deck.pptx --ops /app/work/ops2.json …`
 (→ v2, diff vs v1). A round that broke something: `cp /app/output/versions/v<N-1>.pptx /app/output/deck.pptx`
-and redo. No starting deck? Generate v0 first exactly like paper2ppt (facts.json + spec.json →
+and redo. No starting deck? Generate v0 first exactly like paper2ppt (facts.json via `paper_map.py fact` + spec.json →
 `deck_make.py --outdir /app/work/gen`), then run rounds on `/app/work/gen/deck.pptx`.
 
 ## 6. Records and result.json (0–2 calls)

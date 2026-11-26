@@ -762,6 +762,116 @@ def main_find(a):
     return 0
 
 
+BIB_RE = re.compile(r"^\s*\[\d+\]|^\s*\d+\.\s+[A-Z][a-z]+,|\bIn Proceedings\b|\barXiv preprint\b|\bpp\.\s*\d", re.I)
+
+
+FOOT_RE = re.compile(r"@|equal contribution|work (was )?(performed|done) while|corresponding author|"
+                     r"\b(proposed|designed|implemented) .{0,80}\b(became|was responsible)", re.I)
+KIND_ROLES = dict(result=("results",), number=("results",), data=("results",), cost=("results", "method"),
+                  method=("method",), definition=("method",), limit=("limitations", "discussion", "conclusion"),
+                  limitation=("limitations", "discussion", "conclusion"), problem=("motivation", "summary"),
+                  motivation=("motivation", "summary"), context=("motivation", "context"),
+                  claim=("summary", "motivation", "conclusion"), contribution=("summary", "motivation", "conclusion"))
+
+
+def section_of(loc, sections):
+    """(heading, role) of the section that holds locator pN:M (sections are in reading order with their first tag)"""
+    def key(t):
+        m = re.match(r"p(\d+):(\d+)", str(t or ""))
+        return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+    k, best = key(loc), ("", "")
+    for s in sections or []:
+        if key(s.get("tag")) <= k:
+            best = (s.get("heading") or best[0], s.get("role") or "")
+    return best
+
+
+def main_fact(a):
+    """Append evidence rows to facts.json from search patterns: the script copies the sentence verbatim with its
+    [pN:M] locator and section, so the agent never retypes quotes. SPEC = "kind::regex[::short label[::n-th match]]"."""
+    files = sorted(f for f in os.listdir(a.materials) if f.endswith(".txt") and f not in ("task.md.txt", "case.json.txt"))
+    sents = []
+    for fn in files:
+        txt = open(os.path.join(a.materials, fn), encoding="utf-8").read()
+        parts = re.split(r"(?m)^\[(p\d+:\d+)\] ", txt)
+        for i in range(1, len(parts) - 1, 2):
+            for s in sentences(parts[i + 1]) or [re.sub(r"\s+", " ", parts[i + 1]).strip()]:
+                sents.append((fn[:-4], parts[i], s))
+    try:
+        sections = json.load(open(a.map, encoding="utf-8")).get("sections") or []
+    except Exception:
+        sections = []
+    box, rows = None, []
+    if os.path.exists(a.out):
+        try:
+            box = json.load(open(a.out, encoding="utf-8"))
+        except ValueError:
+            print("facts file %s is not valid JSON: fix or remove it first" % a.out)
+            return 1
+        rows = box["facts"] if isinstance(box, dict) else box
+    if a.drop:
+        gone = {x.strip() for x in a.drop.split(",") if x.strip()}
+        rows[:] = [r for r in rows if r.get("id") not in gone]
+        print("dropped:", ", ".join(sorted(gone)))
+    used = {int(m.group(1)) for r in rows for m in [re.match(r"F(\d+)$", str(r.get("id", "")))] if m}
+    nxt = max(used or {0}) + 1
+    have = {(r.get("source", {}).get("loc"), r.get("source", {}).get("quote")): r.get("id") for r in rows}
+    added = 0
+    for spec in a.specs:
+        f = spec.split("::")
+        if len(f) < 2:
+            print("!! %s: use kind::regex[::label[::n]]" % spec)
+            continue
+        kind, pat = f[0].strip() or "claim", f[1].strip()
+        label = f[2].strip() if len(f) > 2 else ""
+        nth = int(f[3]) if len(f) > 3 and f[3].strip().isdigit() else 1
+        try:
+            rx = re.compile(pat, re.I)
+        except re.error as e:
+            print("!! %s: bad regex (%s)" % (spec, e))
+            continue
+        hits = [x for x in sents if rx.search(x[2])]
+        pref = KIND_ROLES.get(kind.lower(), ())
+
+        def rank(x):                     # body text of the section that fits the kind first; references/footnotes last
+            role = section_of(x[1], sections)[1]
+            return (bool(BIB_RE.search(x[2])) or role in ("references", "front", "other"), bool(FOOT_RE.search(x[2])),
+                    len(x[2].split()) < 8, bool(pref) and role not in pref)      # headings/short captions after sentences
+        body = sorted(hits, key=rank)
+        if len(body) < nth:
+            print("-- %s::%s  (no match%s) - try another wording, or add a row with \"status\":\"not_in_materials\""
+                  % (kind, pat, "" if not body else "; only %d" % len(body)))
+            continue
+        fn, loc, s = body[nth - 1]
+        w = s.split()
+        if len(w) > a.words:                                              # quote window around the match
+            m = rx.search(s)
+            at = len(s[:m.start()].split()) if m else 0
+            lo = max(0, min(at - a.words // 3, len(w) - a.words))
+            w = w[lo:lo + a.words]
+        quote = " ".join(w)
+        if (loc, quote) in have:
+            print("== %s [%s] already %s" % (kind, loc, have[(loc, quote)]))
+            continue
+        fid = "F%d" % nxt
+        nxt += 1
+        sec = section_of(loc, sections)[0]
+        rows.append(dict(id=fid, kind=kind, text=label or quote, source=dict(file=fn, loc=loc, ref=sec, quote=quote)))
+        have[(loc, quote)] = fid
+        added += 1
+        print("%s %-10s [%s] %s :: %s" % (fid, kind, loc, sec[:28], quote[:a.width]))
+        alts = [(j + 1, x) for j, x in enumerate(body) if j + 1 != nth][:2]
+        for j, x in alts:
+            print("      ::%d [%s] %s" % (j, x[1], x[2][:90]))
+        if len(body) > len(alts) + 1:
+            print("      (%d matches in all; to swap: --drop %s and re-run with ::n)" % (len(body), fid))
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+    json.dump(rows if isinstance(box, list) else dict(box or {}, facts=rows), open(a.out, "w", encoding="utf-8"),
+              ensure_ascii=False, indent=1)
+    print("%s: %d rows (%d added)" % (a.out, len(rows), added))
+    return 0
+
+
 TITLE_BAD = re.compile(r"permission|licen[cs]e|copyright|arxiv|preprint|attribution|proceedings|conference on|journal of|"
                        r"vol\.|doi|https?:|©|under review|workshop|accepted|published", re.I)
 
@@ -808,6 +918,17 @@ def main():
         ap.add_argument("--max", type=int, default=8, help="matches per pattern")
         ap.add_argument("--width", type=int, default=320)
         return main_find(ap.parse_args())
+    if len(sys.argv) > 1 and sys.argv[1] == "fact":
+        ap = argparse.ArgumentParser(description="append verbatim evidence rows to facts.json")
+        ap.add_argument("cmd")
+        ap.add_argument("specs", nargs="*", help='"kind::regex[::short label[::n-th match]]"')
+        ap.add_argument("--drop", default="", help="comma-separated fact ids to remove first (e.g. F3,F7: wrong matches)")
+        ap.add_argument("--out", default="/app/work/facts.json")
+        ap.add_argument("--materials", default="/app/work/materials")
+        ap.add_argument("--map", default="/app/work/paper_map.json")
+        ap.add_argument("--words", type=int, default=30, help="max quote length in words")
+        ap.add_argument("--width", type=int, default=150)
+        return main_fact(ap.parse_args())
     if len(sys.argv) > 1 and sys.argv[1] == "crop":
         ap = argparse.ArgumentParser()
         ap.add_argument("cmd")

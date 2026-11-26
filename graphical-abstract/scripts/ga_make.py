@@ -308,6 +308,53 @@ def drop_draft_leftovers(outdir, t_start):
     return n
 
 
+FACT_ID = re.compile(r"^F\d+$")
+
+
+def resolve_facts(spec, facts_path):
+    """"source": "F3" / {"fact": "F3"} (or an element's "fact": "F3") -> the full source row of facts.json, so the
+    spec cites evidence by id. Returns (number filled, unknown ids)."""
+    try:
+        box = json.load(open(facts_path, encoding="utf-8"))
+        rows = box["facts"] if isinstance(box, dict) else box
+        by = {str(r.get("id")): r for r in rows if isinstance(r, dict)}
+    except Exception:
+        by = {}
+    n, miss = [0], set()
+
+    def src_of(fid):
+        r = by.get(fid)
+        if not r:
+            miss.add(fid)
+            return None
+        s = dict(r.get("source") or {})
+        if r.get("status") == "not_in_materials":
+            s["status"] = "not_in_materials"
+        s["fact"] = fid
+        return s
+
+    def walk(x):
+        if isinstance(x, dict):
+            src = x.get("source")
+            fid = src if isinstance(src, str) and FACT_ID.match(src.strip()) else (
+                src.get("fact") if isinstance(src, dict) and src.get("fact") and not src.get("quote") else (
+                    x.get("fact") if isinstance(x.get("fact"), str) and FACT_ID.match(x["fact"]) and not src else None))
+            if fid:
+                s = src_of(fid.strip())
+                if s:
+                    x["source"] = dict(s, **{k: v for k, v in (src.items() if isinstance(src, dict) else []) if k != "fact"})
+                    n[0] += 1
+            for k, v in list(x.items()):
+                if k != "source":                 # a filled source carries "fact" itself: never resolve inside it
+                    walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    if by:
+        walk(spec)
+    return n[0], miss
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--spec", default=None)
@@ -359,6 +406,12 @@ def main():
     spec = None
     if not edit:
         spec = MR.load_json_lenient(a.spec)
+        nres, miss = resolve_facts(spec, os.path.join(wd, "facts.json"))
+        if nres:
+            json.dump(spec, open(a.spec, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            print("facts: %d source references filled from facts.json (file, loc, verbatim quote)" % nres)
+        if miss:
+            print("facts: unknown fact ids %s - add them with extract_materials.py --fact" % ", ".join(sorted(miss)))
         c = [CHECK, "--spec", a.spec, "--mode", a.mode, "--out", os.path.join(od, "check_report.json")]
         if mats:
             c += ["--materials"] + mats

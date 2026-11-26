@@ -120,6 +120,87 @@ def find_terms(mdir, terms, width=1):
             print(f"NOT FOUND: {term!r} (try a shorter term, other spelling, or the .layout.txt for tables)")
 
 
+BIB_RE = re.compile(r"^\s*\[\d+\]|^\s*\d+\.\s+[A-Z][a-z]+,|\bIn Proceedings\b|\barXiv preprint\b|\bpp\.\s*\d|\bet al\.,? \(?\d{4}", re.I)
+FOOT_RE = re.compile(r"@|equal contribution|work (was )?(performed|done) while|corresponding author|received:|accepted:", re.I)
+
+
+def add_facts(mdir, specs, out, drop="", words=30, width=150):
+    """Append evidence rows to facts.json from search patterns: each matching sentence is copied verbatim
+    (<= `words` words around the match) with its [pN:M] locator, so quotes are never retyped.
+    SPEC = "kind::regex[::short label[::n-th match]]"; cite the printed ids in the spec as "source": "F3"."""
+    import glob
+    files = sorted(f for f in glob.glob(os.path.join(mdir, "*.txt")) if not f.endswith(".layout.txt"))
+    sents = []
+    for f in files:
+        for line in open(f, encoding="utf-8", errors="ignore"):
+            m = re.match(r"\[(p\d+:\d+)\] (.*)", line.rstrip("\n"))
+            if m:
+                for snt in re.split(r"(?<=[.;!?。；！？])\s+(?=[A-Z(\[0-9一-鿿])", m.group(2)):
+                    if snt.strip():
+                        sents.append((os.path.basename(f)[:-4], m.group(1), snt.strip()))
+    rows, box = [], None
+    if os.path.exists(out):
+        try:
+            box = json.load(open(out, encoding="utf-8"))
+        except ValueError:
+            print("facts file %s is not valid JSON: fix or remove it first" % out)
+            return 1
+        rows = box["facts"] if isinstance(box, dict) else box
+    if drop:
+        gone = {x.strip() for x in drop.split(",") if x.strip()}
+        rows[:] = [r for r in rows if r.get("id") not in gone]
+        print("dropped:", ", ".join(sorted(gone)))
+    used = {int(m.group(1)) for r in rows for m in [re.match(r"F(\d+)$", str(r.get("id", "")))] if m}
+    nxt = max(used or {0}) + 1
+    have = {((r.get("source") or {}).get("loc"), (r.get("source") or {}).get("quote")): r.get("id") for r in rows}
+    added = 0
+    for spec in specs:
+        f = spec.split("::")
+        if len(f) < 2:
+            print("!! %s: use kind::regex[::label[::n]]" % spec)
+            continue
+        kind, pat = f[0].strip() or "claim", f[1].strip()
+        label = f[2].strip() if len(f) > 2 else ""
+        nth = int(f[3]) if len(f) > 3 and f[3].strip().isdigit() else 1
+        try:
+            rx = re.compile(pat, re.I)
+        except re.error as e:
+            print("!! %s: bad regex (%s)" % (spec, e))
+            continue
+        body = sorted((x for x in sents if rx.search(x[2])),
+                      key=lambda x: (bool(BIB_RE.search(x[2])), bool(FOOT_RE.search(x[2])), len(x[2].split()) < 6))
+        if len(body) < nth:
+            print("-- %s::%s  (no match%s) - try another wording or the .layout.txt (tables); a requested item that is "
+                  "not in the materials gets a row with \"status\":\"not_in_materials\"" % (kind, pat, "" if not body else "; only %d" % len(body)))
+            continue
+        fn, loc, snt = body[nth - 1]
+        w = snt.split()
+        if len(w) > words:
+            m = rx.search(snt)
+            at = len(snt[:m.start()].split()) if m else 0
+            lo = max(0, min(at - words // 3, len(w) - words))
+            w = w[lo:lo + words]
+        quote = " ".join(w)
+        if (loc, quote) in have:
+            print("== %s [%s] already %s" % (kind, loc, have[(loc, quote)]))
+            continue
+        fid = "F%d" % nxt
+        nxt += 1
+        rows.append(dict(id=fid, kind=kind, text=label or quote, source=dict(file=fn, loc=loc, quote=quote)))
+        have[(loc, quote)] = fid
+        added += 1
+        print("%s %-9s %s [%s] :: %s" % (fid, kind, fn[:24], loc, quote[:width]))
+        alts = [(j + 1, x) for j, x in enumerate(body) if j + 1 != nth][:2]
+        for j, x in alts:
+            print("      ::%d [%s] %s" % (j, x[1], x[2][:90]))
+        if len(body) > len(alts) + 1:
+            print("      (%d matches in all; to swap: --drop %s and re-run with ::n)" % (len(body), fid))
+    json.dump(rows if isinstance(box, list) else dict(box or {}, facts=rows), open(out, "w", encoding="utf-8"),
+              ensure_ascii=False, indent=1)
+    print("%s: %d rows (%d added). In spec.json write \"source\": \"F3\" - fig_make fills file/loc/quote from it." % (out, len(rows), added))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", default="/input")
@@ -128,8 +209,14 @@ def main():
     ap.add_argument("--render-pages", type=int, default=6, help="max pages rendered (caption pages first)")
     ap.add_argument("--find", nargs="+", default=None,
                     help="search already extracted materials: print each sentence containing a term with its locator")
+    ap.add_argument("--fact", nargs="+", default=None,
+                    help='append verbatim rows to facts.json: "kind::regex[::short label[::n-th match]]"')
+    ap.add_argument("--facts-out", default=None, help="default <work>/facts.json")
+    ap.add_argument("--drop", default="", help="comma-separated fact ids to remove first (wrong matches)")
     a = ap.parse_args()
     mdir = os.path.join(a.work, "materials")
+    if a.fact is not None or a.drop:
+        return add_facts(mdir, a.fact or [], a.facts_out or os.path.join(a.work, "facts.json"), a.drop)
     if a.find:
         find_terms(mdir, a.find)
         return 0
