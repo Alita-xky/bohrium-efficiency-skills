@@ -113,6 +113,7 @@ RULES = [  # (evidence kind, regex on the contract field name); several hits -> 
     ("editable", r"editable|svg|vector|layer|source_file|figure_source|源文件|可编辑|矢量|图层"),
     ("exports", r"export|png|pdf|preview|raster|render|resolution|dpi|导出|预览|分辨率|渲染"),
     ("changes", r"change|edit(?!able)|modif|history|version|diff|log|revision|修改|版本|变更|日志|记录"),
+    ("relations", r"relation|edge|arrow|interaction|regulat|link_table|关系|相互作用|调控|连线"),
     ("provenance", r"source|provenance|evidence|trace|locator|citation|element|mapping|map|来源|溯源|证据|定位|映射|元素"),
     ("data", r"data|value|column|series|数据|数值|字段"),
     ("checks", r"check|validat|(^|_)qa|qc|audit|verif|consisten|校验|检查|核验|审查|验证"),
@@ -421,6 +422,18 @@ def main():
                 print("contract answers from spec.json \"fill\": %s" % ", ".join(list(spec["fill"])[:8]))
             if isinstance(spec.get("uncertainty"), list):
                 a.uncertainty += [u if isinstance(u, str) else json.dumps(u, ensure_ascii=False) for u in spec["uncertainty"] if u]
+        fixed = []
+        if isinstance(spec, dict):        # common shorthand the checker/renderer would crash on
+            if isinstance(spec.get("title"), str):
+                spec["title"] = {"text": spec["title"]}
+                fixed.append("title")
+            for pn in spec.get("panels") or []:
+                if isinstance(pn, dict) and isinstance(pn.get("title"), dict):
+                    pn["title"] = pn["title"].get("text", "")
+                    fixed.append("panel title")
+        if fixed:
+            json.dump(spec, open(a.spec, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            print("spec: normalised %s" % ", ".join(sorted(set(fixed))))
         nres, miss = resolve_facts(spec, os.path.join(wd, "facts.json"))
         if nres:
             json.dump(spec, open(a.spec, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -634,6 +647,28 @@ def main():
     val["inputs"] = dict(case=a.case, files=[dict(file=x["file"], sha256=x["sha256"]) for x in inputs][:40])
     val["figure"] = dict(svg=val["editable"]["svg"], pdf=val["exports"]["pdf"], png=val["exports"]["png"],
                          title=(spec or {}).get("title"), mode=a.mode)
+    labels = {}
+
+    def _lab(els):
+        for e in els or []:
+            if isinstance(e, dict):
+                if e.get("id"):
+                    labels[e["id"]] = e.get("label") or e.get("text") or e["id"]
+                _lab(e.get("elements"))
+    for pn in (spec or {}).get("panels") or []:
+        if isinstance(pn, dict):
+            labels.setdefault(pn.get("id"), pn.get("title") or pn.get("id"))
+            _lab(pn.get("elements"))
+    _lab((spec or {}).get("elements"))
+    def _ev(src):
+        if isinstance(src, dict) and isinstance(src.get("file"), str) and not os.path.isabs(src["file"]):
+            hit = glob.glob(os.path.join(a.input, "**", src["file"]), recursive=True)
+            if hit:
+                return dict(src, file=hit[0])
+        return src
+    val["relations"] = [dict(id=r.get("id"), from_entity=labels.get(r.get("from"), r.get("from")),
+                             to_entity=labels.get(r.get("to"), r.get("to")), kind=r.get("kind"), label=r.get("label"),
+                             evidence=_ev(r.get("source"))) for r in ((spec or {}).get("arrows") or []) if isinstance(r, dict)] or None
     unc = list(a.uncertainty)
     unc += ["check FAIL: " + f[7:][:160] for f in fails if f.startswith("check:")][:8]
     unc += ["render FAIL: " + f[8:][:160] for f in fails if f.startswith("render:")][:8]

@@ -139,6 +139,97 @@ AUTO_FACTS = [
 ]
 
 
+ENT_RE = re.compile(r"(?<![\w-])(?:NF-κB|NF-kB|Ca2\+|Ca²⁺|cAMP|cGMP|ROS|NO\b|"
+                    r"[A-Z][A-Za-z]{0,6}[-]?[0-9α-ωΑ-Ωκβγ][A-Za-z0-9α-ωκβγ/-]{0,10}|[A-Z]{2,}[a-z]?[0-9]{0,3}[A-Za-z0-9/-]{0,6})(?![\w-])")
+ENT_STOP = {"Fig", "FIG", "Fig.", "Table", "Eq", "WT", "DNA", "RNA", "mRNA", "PCR", "qPCR", "ELISA", "SD", "SEM", "ANOVA", "USA", "UK", "CI",
+            "OD", "PBS", "DMSO", "ID", "HR", "OR", "II", "III", "IV", "S1", "S2", "S3", "S4", "S5", "A1", "B1", "PLOS", "PNAS"}
+VERB_RE = re.compile(r"\b(activat\w*|inhibit\w*|induc\w*|suppress\w*|promot\w*|up-?regulat\w*|down-?regulat\w*|"
+                     r"stimulat\w*|enhanc\w*|reduc\w*|bind\w*|bound|phosphorylat\w*|convert\w*|increas\w*|decreas\w*|"
+                     r"trigger\w*|abolish\w*|attenuat\w*|lead(?:s)? to|led to|result(?:s|ed)? in|激活|抑制|促进|诱导|结合)", re.I)
+PERTURB = re.compile(r"(block\w*|knock\w*|delet\w*|neutraliz\w*|antagoni\w*|inhibit\w* of|loss of|absence of|silenc\w*|"
+                     r"deficien\w*|anti-)\W+(?:\w+\W+){0,4}$", re.I)
+CLAUSE = re.compile(r"[,;:()]|\b(while|whereas|but|although|which|that)\b", re.I)
+NEG_SIGN = re.compile(r"inhibit|suppress|block|down-?regulat|reduc|decreas|abolish|attenuat|antagoni|抑制", re.I)
+NOT_RE = re.compile(r"\b(not|no|neither|nor|without|fail\w*)\b", re.I)
+
+
+def edge_candidates(mdir, fp, limit=14):
+    """Mechanism figures: candidate arrows 'A -> B (activates|inhibits|binds|converts|modifies)' read from sentences that
+    name two entities around a relation verb (passive 'B is inhibited by A' reversed, negated sentences skipped). Each
+    becomes a facts.json row (verbatim quote + locator) and an arrow in edges.json, ready to paste into the spec."""
+    files = sorted(f for f in glob.glob(os.path.join(mdir, "*.txt")) if not f.endswith(".layout.txt"))
+    try:
+        box = json.load(open(fp, encoding="utf-8")) if os.path.exists(fp) else {"facts": []}
+    except ValueError:
+        return []
+    rows = box["facts"] if isinstance(box, dict) else box
+    nxt = max([int(m.group(1)) for r in rows for m in [re.match(r"F(\d+)$", str(r.get("id", "")))] if m] or [0]) + 1
+    seen, edges, ents = set(), [], {}
+
+    def eid(name):
+        k = re.sub(r"[^a-z0-9]+", "_", name.lower().replace("α", "a").replace("β", "b").replace("γ", "g").replace("κ", "k")).strip("_")
+        ents.setdefault(k, name)
+        return k
+    for f in files:
+        for line in open(f, encoding="utf-8", errors="ignore"):
+            m = re.match(r"\[(p\d+:\d+)\] (.*)", line.rstrip("\n"))
+            if not m or BIB_RE.search(m.group(2)):
+                continue
+            for snt in re.split(r"(?<=[.;!?。；！？])\s+(?=[A-Z(\[0-9一-鿿])", m.group(2)):
+                if len(edges) >= limit or NOT_RE.search(snt):
+                    continue
+                es = [(x.start(), x.end(), x.group(0)) for x in ENT_RE.finditer(snt)
+                      if x.group(0) not in ENT_STOP and not re.match(r"(Fig|Table|Eq|Supp)", x.group(0), re.I)]
+                for v in VERB_RE.finditer(snt):
+                    before = [e for e in es if e[1] <= v.start() and len(snt[e[1]:v.start()].split()) <= 6
+                              and not CLAUSE.search(snt[e[1]:v.start()])]
+                    after = [e for e in es if e[0] >= v.end() and len(snt[v.end():e[0]].split()) <= 6
+                             and not CLAUSE.search(snt[v.end():e[0]])]
+                    if not before or not after or len(edges) >= limit:
+                        continue
+                    ea, eb = before[-1], after[0]
+                    a, b = ea[2], eb[2]
+                    mid = snt[v.end():eb[0]]
+                    if PERTURB.search(snt[:eb[0]][-40:]) and not PERTURB.search(snt[:ea[0]][-40:]):
+                        continue                                   # 'X increases blocking of B': a different experiment
+                    if mid.strip().lower().startswith("by"):       # passive: B is inhibited by A
+                        a, b = b, a
+                    if a == b:
+                        continue
+                    vb = v.group(0).lower()
+                    if re.search(r"ions?$", vb):                    # nouns (activation, induction): no direction
+                        continue
+                    neg = bool(NEG_SIGN.search(vb)) or (not re.search(r"increas|enhanc|activat|up", vb) and
+                                                        bool(re.search(r"decreas|reduc|lower|less|loss|abolish", mid, re.I)))
+                    if PERTURB.search(snt[:ea[0]][-40:]):        # 'blocking A decreased B' => A activates B
+                        neg = not neg
+                    kind = ("binds" if re.match(r"bind|bound|结合", vb) else "converts" if vb.startswith("convert") else
+                            "modifies" if vb.startswith("phosphorylat") else "inhibits" if neg else "activates")
+                    key = (a, b, kind)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    w = snt.split()
+                    if len(w) > 30:
+                        at = len(snt[:v.start()].split())
+                        lo = max(0, min(at - 10, len(w) - 30))
+                        w = w[lo:lo + 30]
+                    fid = "F%d" % nxt
+                    nxt += 1
+                    label = "%s → %s (%s)" % (a, b, kind)
+                    rows.append(dict(id=fid, kind="relation", text=label, source=dict(file=os.path.basename(f)[:-4],
+                                                                                         loc=m.group(1), quote=" ".join(w))))
+                    edges.append(dict(id="r%d" % (len(edges) + 1), **{"from": eid(a), "to": eid(b)}, kind=kind,
+                                      label=vb, source=fid))
+    if edges:
+        json.dump(rows if isinstance(box, list) else dict(box, facts=rows), open(fp, "w", encoding="utf-8"),
+                  ensure_ascii=False, indent=1)
+        json.dump(dict(entities=[dict(id=k, label=v) for k, v in ents.items()], arrows=edges),
+                  open(os.path.join(os.path.dirname(fp), "edges.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return [(r["id"], r["text"], r["source"]["loc"], r["source"]["quote"]) for r in rows if r.get("text") in
+            {"%s → %s (%s)" % (ents[e["from"]], ents[e["to"]], e["kind"]) for e in edges}]
+
+
 def add_facts(mdir, specs, out, drop="", words=30, width=150, skip_used=False):
     """Append evidence rows to facts.json from search patterns: each matching sentence is copied verbatim
     (<= `words` words around the match) with its [pN:M] locator, so quotes are never retyped.
@@ -361,6 +452,25 @@ def main():
             print("\n".join(rows))
             print("Cite these ids in spec.json as \"source\": \"F3\". Missing item -> --fact \"kind::regex::label\"; "
                   "wrong row -> --drop F3. Tables: grep -n -A15 'Table N' %s/*.layout.txt" % mdir)
+        try:
+            mech = "mechanism" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "SKILL.md"),
+                                       encoding="utf-8").read(600).lower()
+        except Exception:
+            mech = False
+        if mech:
+            cand = edge_candidates(mdir, fp)
+            if cand:
+                print("---- candidate arrows (A → B, sign from the verb; verbatim quote in facts.json; arrows + entity ids "
+                      "in %s/edges.json - paste the right ones into spec.json \"arrows\", drop the wrong ones)" % a.work)
+                pairs = {}
+                for fid, text, loc, q in cand:
+                    pr = text.rsplit(" (", 1)[0]
+                    pairs.setdefault(pr, set()).add(text.rsplit(" (", 1)[-1])
+                for fid, text, loc, q in cand:
+                    flag = " !conflicting sign: read both quotes" if len(pairs[text.rsplit(" (", 1)[0]]) > 1 else ""
+                    print("%s %-34s [%s] :: %s%s" % (fid, text[:34], loc, q[:120], flag))
+                print("These are machine-read candidates: keep an arrow only if its quote states that direction and sign "
+                      "(about 1 in 3 needs fixing or dropping); a perturbation sentence 'blocking A decreased B' means A activates B.")
     else:
         print("NEXT: grep -n -i '<keyword>' %s/*.txt  (each hit line starts with its locator [pX:Y]);"
               " tables: grep -n -A15 'Table N' %s/*.layout.txt" % (mdir, mdir))

@@ -1,6 +1,6 @@
 # Measured gain (SYNTHETIC example, mode `graphical_abstract`)
 
-Generated 2026-11-27 01:14 by `python3 scripts/gain_check.py --mode graphical_abstract --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-27 01:58 by `python3 scripts/gain_check.py --mode graphical_abstract --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
@@ -16,7 +16,7 @@ Generated 2026-11-27 01:14 by `python3 scripts/gain_check.py --mode graphical_ab
 | contract fields filled | 0/6 | 6/6 |
 | re-run byte-identical (SVG, PDF, PNG) | False | True |
 | automatic checks | none | spec vs materials (ga_check.py), layout/export (ga_render.py), re-run hash, contract |
-| wall time (s) | 0.5 | 1.5 |
+| wall time (s) | 1.1 | 3.0 |
 
 ## 2. One injected defect per run (same spec otherwise)
 

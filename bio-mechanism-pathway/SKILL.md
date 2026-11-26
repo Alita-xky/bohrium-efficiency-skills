@@ -54,6 +54,9 @@ contract field and an honest status), so a run that stops early still delivers. 
 - Entity type must match the source (`"etype"`): `gene` (label in italics, as convention), `protein`,
   `complex` (double border), `family` (stacked boxes, e.g. "TNFR1/2"), `small_molecule`, `cell`,
   `process`, `phenotype` — never draw a gene where the source means its protein, or a family as one member.
+- Step 1 also prints **candidate arrows** (`A → B (activates|inhibits|binds|…)`, each a facts row with its
+  verbatim quote) and writes `/app/work/edges.json` (entity ids + arrows citing those rows): paste the arrows whose
+  quote really states that direction and sign into the spec, drop or flip the rest, add what is missing with `--fact`.
 - Every mechanistic arrow needs `source.quote` stating direction AND sign: activates/promotes (→),
   inhibits (⊣), produces/converts (dashed →, label enzyme or condition), binds (dotted, no
   direction), `modifies` (dash-dot →, e.g. phosphorylation), `catalyzes` (dotted →), `transports`
