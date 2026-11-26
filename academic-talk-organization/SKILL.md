@@ -15,18 +15,22 @@ Deliver an editable `.pptx` (notes = speaker script), PDF/PNG renders, `talk_pla
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
-# 1 task + contract + paper map + AUTOMATIC EVIDENCE TABLE (F1..F11 copied verbatim, [pN:M] + section)  [1 call]
+# 1 task + contract + TALK BUDGET (minutes/slides per section, notes length) + paper map + AUTOMATIC
+#   EVIDENCE TABLE (F1..F11 copied verbatim, [pN:M] + section)                                      [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
 #   (also starts a SAFETY DRAFT: complete deck + result.json, status partial, within ~1 min; step 4 replaces it)
 # 2 ONLY if the talk needs a claim/number the table lacks (0-1 call; appends F12.. verbatim; wrong row -> --drop):
 python3 $SKILL/scripts/paper_map.py fact "result::28\.4 BLEU::EN-DE BLEU 28.4" "limit::restricted attention" --drop F9
-# 3 write ONE file /app/work/spec.json: "plan" + "slides" citing F-ids (+ optional "fill", "uncertainty")  [1 call]
+# 3 write /app/work/spec.json = "plan" (start from the printed TALK BUDGET) + slides S1..S5 citing F-ids (+ "fill",
+#   "uncertainty"), then /app/work/spec_part2.json = {"slides": [the rest + backup slides]} - two smaller writes,
+#   so no single reply runs into the per-reply token limit; step 4 merges them                 [2 calls]
 # 4 ONE command - spec, facts, plan, case, minutes and template are found automatically:                [1 call]
 python3 $SKILL/scripts/deck_make.py --mode talk        # add --max-slides N / --duration-min M if the task says so
-# 5 FAIL lines -> fix only those slides in spec.json, run step 4 again; DONE -> report and end   [0-2 calls]
+# 5 FAIL lines -> fix only those slides (spec.json / spec_part2.json), run step 4 again; DONE -> end [0-2 calls]
 ```
-spec.json skeleton (one file; `plan` is the talk plan, §4; `notes` = the spoken script for `time_s` seconds):
+spec.json skeleton (`plan` is the talk plan, §4; `notes` = the spoken script for `time_s` seconds, as long as the
+budget line says; slides after S5 go into spec_part2.json as `{"slides": [...]}`):
 ```json
 {"plan": {"goal": "what this audience can decide/do after the talk", "occasion": "...", "duration_min": 10,
   "audience": {"who": "...", "knows": "...", "cares_about": "...", "likely_doubts": ["...", "..."]},

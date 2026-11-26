@@ -97,8 +97,10 @@ def apply_defaults(a):
     """One short command: every path the run needs is found in /app/work and /input, and the spec may carry the talk
     plan ("plan"), extra contract answers ("fill") and uncertainty notes ("uncertainty") so the agent writes ONE file."""
     notes = []
-    if not a.spec:
-        a.spec = [os.path.join(a.work, "spec.json")]
+    if not a.spec:                      # spec.json + spec_part2.json, spec_part3.json ... (long decks written in parts)
+        a.spec = [os.path.join(a.work, "spec.json")] + sorted(glob.glob(os.path.join(a.work, "spec_part*.json")))
+        if len(a.spec) > 1:
+            notes.append("--spec %s (slides appended in this order)" % " ".join(os.path.basename(x) for x in a.spec))
     if not a.facts and os.path.exists(os.path.join(a.work, "facts.json")):
         a.facts = os.path.join(a.work, "facts.json")
         notes.append("--facts " + a.facts)

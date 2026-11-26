@@ -138,6 +138,10 @@ def main():
         status = "failed"
     notes_n = sum(1 for p in rr.get("per_slide", []) if p.get("notes_chars"))
     spec = jload(os.path.join(a.work, "spec.json"))
+    for part in sorted(glob.glob(os.path.join(a.work, "spec_part*.json"))):   # long decks written in parts
+        extra = jload(part)
+        if isinstance(spec, dict) and isinstance(extra, dict) and isinstance(extra.get("slides"), list):
+            spec.setdefault("slides", []).extend(extra["slides"])
     slide_map = []  # output slide -> source slide (origin) -> template layout
     for i, p in enumerate(rr.get("per_slide", []) or [], 1):
         sl = ((spec or {}).get("slides") or [])[i - 1] if spec and i <= len(spec.get("slides") or []) else {}

@@ -77,6 +77,27 @@ def guess_constraints(case, task_text):
     return c
 
 
+def talk_budget(cons):
+    """Minutes and slide count -> main slides, seconds per slide, minutes and slides per section, notes length."""
+    try:
+        m = float(re.findall(r"\d+(?:\.\d+)?", str((cons.get("minutes") or {}).get("value") or ""))[0])
+    except (IndexError, ValueError):
+        return None
+    nums = [int(x) for x in re.findall(r"\d+", str((cons.get("slides") or {}).get("value") or ""))][:2]
+    lo, hi = (min(nums), max(nums)) if nums else (max(4, int(m * 0.7)), max(5, int(m * 1.1) + 1))
+    main = max(lo, min(hi, round(m * 0.9)))
+    parts = [("Problem + why it matters (incl. title)", 0.2), ("Idea + method", 0.3), ("Results with numbers", 0.35),
+             ("Limits + take-home", 0.15)]
+    n = [max(1, round(main * w)) for _, w in parts]
+    n[2] += main - sum(n)
+    rows = ["%s %.1f min (%d slide%s)" % (name, m * w, k, "s" if k > 1 else "") for (name, w), k in zip(parts, n)]
+    sec = 60.0 * m / main
+    return ("%g min, %s slides -> %d main slides, ~%d s each, + 2-3 backup slides for Q&A (not timed)\n  %s\n"
+            "  notes per slide ≈ %d English words or %d Chinese characters (140 wpm / 240 字/min); the checker compares "
+            "script length with the slot" % (m, "%d-%d" % (lo, hi) if lo != hi else lo, main, sec, " | ".join(rows),
+                                            sec / 60 * 140, sec / 60 * 240))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", default="/input")
@@ -223,6 +244,15 @@ def main():
         print("converted: %s" % json.dumps(converted, ensure_ascii=False))
     print("tools: %s" % json.dumps(tools))
     print("fonts: %s | build backend: %s" % (json.dumps({k: res['fonts'][k] for k in ('latin', 'ea')}, ensure_ascii=False), res["build_backend"]))
+    try:
+        talk = "talk-organizer" in open(os.path.join(HERE, "..", "SKILL.md"), encoding="utf-8").read(300)
+    except Exception:
+        talk = False
+    if talk:
+        b = talk_budget(res["constraints"])
+        if b:
+            print("---- talk budget (computed from the task; copy into plan.sections, then adapt to the audience)")
+            print(b)
     for k in ("paper_map_summary", "facts_summary", "template_summary", "deck_summary"):
         if res.get(k):
             print("---- " + k)
