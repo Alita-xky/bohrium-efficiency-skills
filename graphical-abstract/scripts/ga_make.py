@@ -377,6 +377,12 @@ def main():
     ap.add_argument("--draft", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     edit = bool(a.edit_svg)
+    if not edit and not a.spec and os.path.exists(os.path.join(a.work, "spec.json")):
+        a.spec = os.path.join(a.work, "spec.json")
+        print("default: --spec " + a.spec)
+    if not a.fill and not a.draft and os.path.exists(os.path.join(a.work, "fill.json")):
+        a.fill = os.path.join(a.work, "fill.json")
+        print("default: --fill " + a.fill)
     if not edit and not a.spec:
         ap.error("give --spec (create mode) or --edit-svg + --ops (edit mode)")
     if edit and not a.ops:
@@ -406,6 +412,15 @@ def main():
     spec = None
     if not edit:
         spec = MR.load_json_lenient(a.spec)
+        if isinstance(spec, dict):        # ONE file: contract answers ("fill") and open issues ("uncertainty") may ride in the spec
+            if isinstance(spec.get("fill"), dict) and spec["fill"]:
+                own = MR.load_json_lenient(a.fill) if a.fill and os.path.exists(a.fill) else {}
+                merged_fill = dict(spec["fill"], **(own if isinstance(own, dict) else {}))
+                a.fill = os.path.join(wd, "fill_from_spec.json")
+                json.dump(merged_fill, open(a.fill, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+                print("contract answers from spec.json \"fill\": %s" % ", ".join(list(spec["fill"])[:8]))
+            if isinstance(spec.get("uncertainty"), list):
+                a.uncertainty += [u if isinstance(u, str) else json.dumps(u, ensure_ascii=False) for u in spec["uncertainty"] if u]
         nres, miss = resolve_facts(spec, os.path.join(wd, "facts.json"))
         if nres:
             json.dump(spec, open(a.spec, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -704,8 +719,24 @@ def main():
         n = drop_draft_leftovers(od, t0)
         if n:
             print("safety draft replaced (%d draft-only files removed)" % n)
-    if fails:
-        print("NEXT: fix each FAIL in the spec (see SKILL.md table), then run this same command again")
+    rounds = 1
+    if not a.draft:
+        rp = os.path.join(wd, ".make_rounds")
+        try:
+            rounds = int(open(rp).read().strip() or 0) + 1
+        except Exception:
+            rounds = 1
+        try:
+            open(rp, "w").write(str(rounds))
+        except Exception:
+            pass
+    if fails and rounds < 3:
+        print("NEXT (round %d of max 3): fix each FAIL in spec.json (see SKILL.md table), then run this same command again" % rounds)
+    elif fails:
+        print("STOP: round %d - leave the remaining FAILs; result.json records them as uncertainty. Report and end." % rounds)
+    elif not a.draft:
+        print("DONE: no FAIL - the deliverable in %s is complete. Optionally look at the PNG once; then report and end "
+              "(do not re-render for polish)." % od)
     b = budget_line(wd)
     if b and not a.draft:
         print(b)

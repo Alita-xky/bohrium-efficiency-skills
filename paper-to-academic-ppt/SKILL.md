@@ -10,29 +10,39 @@ figure, table, section or data row of the paper, delivered as an **editable .ppt
 speaker notes) + **PDF/PNG renders**, an **evidence map** and an honest `result.json`.
 Correctness and traceability beat decoration.
 
-## Quick path (copy these; details in §1–§6) — budget 64 requests / 900 s, target ≈ 12–15 calls
+## Quick path — budget 64 requests / 900 s, target 5–8 calls (details in §1–§6)
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
-# 1 task + contract + paper map (text with [pN:M] locators, figure/table crops, tables, equations)   [1 call]
+# 1 task + contract + paper map + AUTOMATIC EVIDENCE TABLE (F1..F11 copied verbatim, [pN:M] + section)  [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
-#   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
-#   partial) built from the paper map; your step-4 run replaces it. Every make run prints [budget] (s used of 900):
-#   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
-# 2 facts.json by pattern - the script copies each sentence verbatim with [pN:M] + section          [1-2 calls]
-python3 $SKILL/scripts/paper_map.py fact "method::we propose" "result::outperform" "limit::limitation" "result::Table 2"
-# 3 write /app/work/spec.json citing the printed fact ids (templates/; rules in references/)          [1-2 calls]
-# 4 ONE command: check -> build -> LibreOffice render -> records -> result.json                     [1 call]
-python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --mode paper \
-  --max-slides 15 --case /input/case.json [--template /input/<template>.pptx]
-# 5 fix every FAIL in the spec, run step 4 again (max 2 rounds); open previews/contact_sheet.png once
+#   (also starts a SAFETY DRAFT: complete deck + result.json, status partial, within ~1 min; step 4 replaces it)
+# 2 ONLY if the deck needs a claim/number the table lacks (0-1 call; appends F12.. verbatim; wrong row -> --drop):
+python3 $SKILL/scripts/paper_map.py fact "result::Table 2::main comparison" "limit::limitation|future work" --drop F9
+# 3 write ONE file /app/work/spec.json: "slides" citing F-ids (+ optional "fill", "uncertainty")          [1 call]
+# 4 ONE command - spec, facts, case and a template in /input are found automatically:                     [1 call]
+python3 $SKILL/scripts/deck_make.py --mode paper --max-slides 15   # use the task's slide limits
+# 5 FAIL lines -> fix only those slides in spec.json, run step 4 again; DONE -> report and end   [0-2 calls]
 ```
-Step 4 always leaves a complete, honest deliverable: `deck.pptx`, `deck.pdf`, `previews/`, `evidence_map`,
-`version_record.json`, `result.json` (`case_id`, every contract field, status). Task-specific answers go in
-`/app/work/fill.json` keyed by contract field → add `--fill /app/work/fill.json` to step 4.
-
+spec.json skeleton (`notes` = speaker notes; tables as native rows, numbers exactly as in the paper):
+```json
+{"slides": [
+  {"id": "S1", "role": "title", "title": "...", "subtitle": ["authors · venue"], "sources": ["F11"], "notes": "..."},
+  {"id": "S2", "role": "motivation", "title": "One claim sentence", "bullets": [{"text": "...", "src": ["F1"]}], "sources": ["F1"], "notes": "..."},
+  {"id": "S4", "role": "method", "title": "...", "figure": {"image": "/app/work/figs/fig1_p3.png", "ref": "Fig. 1",
+   "caption": "...", "src": ["F3"]}, "bullets": [{"text": "...", "src": ["F3"]}], "sources": ["F3"], "notes": "..."},
+  {"id": "S6", "role": "results", "title": "...", "table": {"ref": "Table 2", "caption": "...", "rows": [["Method", "BLEU"], ["...", "..."]],
+   "src": ["F6"]}, "bullets": [{"text": "...", "src": ["F6"]}], "sources": ["F6"], "notes": "..."}],
+ "fill": {"limitations": ["..."]}, "uncertainty": ["..."]}
+```
+**Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help` (every
+flag you need is above), never `cat` templates/examples (the skeleton below is enough), never rewrite a whole file
+to change one slide (edit those slides only), open at most one image (`previews/contact_sheet.png`). The make
+command prints `NEXT` (fix those FAILs, max 3 rounds), `STOP` or `DONE` — after `DONE`, report and end.
+Every run leaves a complete, honest deliverable (deck, PDF, previews, evidence map, records, `result.json` with
+`case_id`, every contract field and status), so a run cut short still delivers.
 
 ## 1. Prepare (1 call)
 ```bash
@@ -56,7 +66,9 @@ template, and the **output_contract** field names.
   wrong, fix it in the spec (`bbox` page fractions) or with `paper_map.py crop`.
 Fill the five slots of `references/storyline.md` (problem, gap/idea, method, evidence, limits+take-home).
 
-## 3. `/app/work/facts.json` — the evidence table, built by pattern (1–2 calls)
+## 3. `/app/work/facts.json` — the evidence table (built by prepare; add rows by pattern, 0–1 call)
+`deck_prepare.py` already wrote F1..F11 (problem, idea, method, main results, data, cost, limits, claims), each a
+verbatim sentence with `[pN:M]` and section. Add only what the deck still needs:
 One spec per fact that will appear on a slide (typically 12–25):
 ```bash
 python3 $SKILL/scripts/paper_map.py fact "problem::long-range dependenc" "method::we propose::core idea" \
@@ -116,9 +128,9 @@ Run them by hand only to change answers: `--set field=value`, `--uncertainty "..
 (your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
 verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
-python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json \
+python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill_auto.json \
   [--uncertainty "Fig. 5 is a bitmap: values not re-checked"] [--set field=value]
-python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
+python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill_auto.json
 ```
 deck_fill writes `version_record.json` (inputs + sha256, deck/PDF/PNGs, template, fonts requested vs embedded,
 tools, backend, re-run command) and maps every output_contract field to the produced files

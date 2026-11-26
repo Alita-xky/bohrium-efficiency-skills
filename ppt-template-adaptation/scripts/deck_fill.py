@@ -2,7 +2,7 @@
 """deck_fill.py - write version_record.json and a pre-filled fill.json for make_result.py.
 
 Usage:
-  python3 deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json \
+  python3 deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill_auto.json \
       [--status complete|partial|failed] [--uncertainty "text" ...] [--set field=value | field=@file.json ...]
 
 version_record.json (in outdir): input files + sha256, deck/PDF/previews + sha256, template, fonts requested vs
@@ -68,7 +68,7 @@ def main():
     ap.add_argument("--outdir", default="/app/output")
     ap.add_argument("--work", default="/app/work")
     ap.add_argument("--input", default="/input")
-    ap.add_argument("--out", default="/app/work/fill.json")
+    ap.add_argument("--out", default="/app/work/fill_auto.json")
     ap.add_argument("--status", default=None, choices=[None, "complete", "partial", "failed"])
     ap.add_argument("--uncertainty", action="append", default=[])
     ap.add_argument("--set", action="append", default=[])

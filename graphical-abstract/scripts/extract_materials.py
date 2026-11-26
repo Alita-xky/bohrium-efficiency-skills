@@ -124,7 +124,22 @@ BIB_RE = re.compile(r"^\s*\[\d+\]|^\s*\d+\.\s+[A-Z][a-z]+,|\bIn Proceedings\b|\b
 FOOT_RE = re.compile(r"@|equal contribution|work (was )?(performed|done) while|corresponding author|received:|accepted:", re.I)
 
 
-def add_facts(mdir, specs, out, drop="", words=30, width=150):
+# default evidence rows (kind::regex::label::n) for figure tasks: relations, values, steps, setup, results, claims
+AUTO_FACTS = [
+    "relation::activat|inhibit|promot|induc|suppress|binds?\\b|convert|phosphorylat|transport|upregulat|downregulat|leads? to|results? in|激活|抑制|促进|诱导|结合|转化",
+    "relation::activat|inhibit|promot|induc|suppress|binds?\\b|convert|phosphorylat|transport|upregulat|downregulat|leads? to|results? in|激活|抑制|促进|诱导|结合|转化",
+    "relation::activat|inhibit|promot|induc|suppress|binds?\\b|convert|phosphorylat|transport|upregulat|downregulat|leads? to|results? in|激活|抑制|促进|诱导|结合|转化",
+    "value::\\d+(\\.\\d+)?\\s?(%|mg|ng|µg|μg|g/L|mM|µM|μM|nM|°C|K\\b|h\\b|min\\b|kg|cm|mm|nm|MPa|kPa|mV|V\\b|mA|W\\b|Hz)",
+    "value::\\d+(\\.\\d+)?\\s?(%|mg|ng|µg|μg|g/L|mM|µM|μM|nM|°C|K\\b|h\\b|min\\b|kg|cm|mm|nm|MPa|kPa|mV|V\\b|mA|W\\b|Hz)",
+    "step::first(ly)?,|then\\b|finally|subsequently|step \\d|stage|procedure|workflow|首先|然后|最后|步骤|流程",
+    "setup::apparatus|device|instrument|chamber|sensor|pump|laser|electrode|reactor|detector|装置|仪器|传感器|反应器",
+    "result::increas|decreas|higher|lower|significant|improv|reduc|enhanc|增加|降低|显著|提高",
+    "result::increas|decreas|higher|lower|significant|improv|reduc|enhanc|增加|降低|显著|提高",
+    "claim::we (show|propose|demonstrate|find|report)|in (summary|conclusion)|conclude|本文|结论|综上",
+]
+
+
+def add_facts(mdir, specs, out, drop="", words=30, width=150, skip_used=False):
     """Append evidence rows to facts.json from search patterns: each matching sentence is copied verbatim
     (<= `words` words around the match) with its [pN:M] locator, so quotes are never retyped.
     SPEC = "kind::regex[::short label[::n-th match]]"; cite the printed ids in the spec as "source": "F3"."""
@@ -167,8 +182,17 @@ def add_facts(mdir, specs, out, drop="", words=30, width=150):
         except re.error as e:
             print("!! %s: bad regex (%s)" % (spec, e))
             continue
+        def numeric(t):                                   # table dumps / number runs rank last
+            ws = t.split()
+            return sum(bool(re.fullmatch(r"[-+±]?\d+([.,]\d+)?%?", x)) for x in ws) > 0.35 * max(1, len(ws))
         body = sorted((x for x in sents if rx.search(x[2])),
-                      key=lambda x: (bool(BIB_RE.search(x[2])), bool(FOOT_RE.search(x[2])), len(x[2].split()) < 6))
+                      key=lambda x: (bool(BIB_RE.search(x[2])), numeric(x[2]), bool(FOOT_RE.search(x[2])), len(x[2].split()) < 6))
+        if skip_used:                                     # automatic table: never two rows from one sentence
+            usedq = [((r.get("source") or {}).get("loc"), ((r.get("source") or {}).get("quote") or "")[:40]) for r in rows]
+            body = [x for x in body if not any(l == x[1] and q and q in x[2] for l, q in usedq)]
+            nth = 1
+            if not body:
+                continue
         if len(body) < nth:
             print("-- %s::%s  (no match%s) - try another wording or the .layout.txt (tables); a requested item that is "
                   "not in the materials gets a row with \"status\":\"not_in_materials\"" % (kind, pat, "" if not body else "; only %d" % len(body)))
@@ -325,8 +349,21 @@ def main():
                          ensure_ascii=False))
         for c in r.get("captions", [])[:25]:
             print("   CAPTION", c)
-    print("NEXT: grep -n -i '<keyword>' %s/*.txt  (each hit line starts with its locator [pX:Y]);"
-          " tables: grep -n -A15 'Table N' %s/*.layout.txt" % (mdir, mdir))
+    fp = a.facts_out or os.path.join(a.work, "facts.json")
+    if not os.path.exists(fp) and glob.glob(os.path.join(mdir, "*.txt")):
+        import contextlib, io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            add_facts(mdir, AUTO_FACTS, fp, width=170, skip_used=True)
+        rows = [l for l in buf.getvalue().splitlines() if re.match(r"F\d+ ", l)]
+        if rows:
+            print("---- evidence table (automatic, each quote verbatim with its locator): %s" % fp)
+            print("\n".join(rows))
+            print("Cite these ids in spec.json as \"source\": \"F3\". Missing item -> --fact \"kind::regex::label\"; "
+                  "wrong row -> --drop F3. Tables: grep -n -A15 'Table N' %s/*.layout.txt" % mdir)
+    else:
+        print("NEXT: grep -n -i '<keyword>' %s/*.txt  (each hit line starts with its locator [pX:Y]);"
+              " tables: grep -n -A15 'Table N' %s/*.layout.txt" % (mdir, mdir))
     start_draft(a)
     return 0
 

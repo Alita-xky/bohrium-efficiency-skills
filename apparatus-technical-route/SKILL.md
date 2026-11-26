@@ -10,29 +10,33 @@ editable layered SVG + PDF/PNG + element→source map + honest `result.json`. Wo
 Correctness, traceability and editability beat decoration. Budget 64 requests / 900 s: a normal run is
 **6–10 tool calls**. Never invent a value, name, unit, n or arrow direction; never redraw an edit task.
 
-## Quick path (copy these commands; details in §1–§6)
+## Quick path — budget 64 requests / 900 s, target 5–7 calls (details in §1–§6)
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/fig_make.py" ] || SKILL=$(dirname "$(dirname "$(find / -name fig_make.py 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
-# 1 task, contract field names, materials with locators                         [1 call]
+# 1 task + contract fields + spec skeleton + materials + AUTOMATIC EVIDENCE TABLE (F1.. verbatim + locator)  [1 call]
 cat /input/case.json /input/task.md 2>/dev/null; python3 $SKILL/scripts/make_result.py --case /input/case.json --list-fields
+cat $SKILL/templates/spec_template_setup.json
 python3 $SKILL/scripts/extract_materials.py --input /input --work /app/work
-#   extract also starts a SAFETY DRAFT: within ~1 min /app/output holds result.json (status partial);
-#   your step-4 run replaces it. fig_make prints [budget] (s used of 900): past 60 % fix FAILs only, past 80 % stop.
-# 2 facts.json by pattern: the script copies each sentence verbatim with its locator  [1-2 calls]
-python3 $SKILL/scripts/extract_materials.py --work /app/work --fact "relation::inhibits::X inhibits Y" "value::41 ng" "entity::Table 2"
-# 3 write /app/work/spec.json from $SKILL/templates/spec_template_setup.json, sources as fact ids ("source": "F3")  [1-2 calls]
-# 4 ONE command: check -> render -> re-run check -> records -> result.json      [1 call]
-python3 $SKILL/scripts/fig_make.py --spec /app/work/spec.json --mode setup --name setup_route
-# 5 fix every FAIL/ISSUE it prints in spec.json, run step 4 again (max 2 rounds)
+#   (also starts a SAFETY DRAFT: result.json, status partial, within ~1 min; step 4 replaces it)
+# 2 ONLY for an entity/relation/value the table lacks (0-1 call; appends F11.. verbatim; wrong row -> --drop):
+python3 $SKILL/scripts/extract_materials.py --work /app/work --fact "relation::inhibits::X inhibits Y" "value::41 ng" --drop F4
+# 3 write ONE file /app/work/spec.json from the skeleton: "source": "F3" on every element, plus optional
+#   "fill" (contract answers the task asks for) and "uncertainty" (open issues)                         [1 call]
+# 4 ONE command (spec.json found automatically): check -> render -> re-check -> records -> result.json  [1 call]
+python3 $SKILL/scripts/fig_make.py --mode setup --name setup_route
+# 5 FAIL/ISSUE lines -> fix only those elements in spec.json, run step 4 again; DONE -> report and end [0-2 calls]
 ```
+**Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help` (every
+flag you need is above), never rewrite the whole spec to fix one element, open at most one image (the PNG).
+fig_make prints `NEXT` (fix those FAILs, max 3 rounds), `STOP` or `DONE` — after `DONE`, report and end.
 **Edit task** (a figure source, e.g. an .svg, is given and must be changed): step 1, then
 `svg_edit.py inventory` → `/app/work/ops.json` → `fig_make.py --edit-svg <given.svg> --ops /app/work/ops.json
 --name setup_route_edited` (§4b). Step 4 always writes a complete deliverable (`result.json` with `case_id`, every
 contract field and an honest status), so a run that stops early still delivers. Task-specific answers
-(e.g. a panel–point mapping the task asks for) go into `/app/work/fill.json` keyed by contract field; add
-`--fill /app/work/fill.json` to step 4.
+(e.g. a panel–point mapping the task asks for) go into the spec's `"fill"` object keyed by contract field
+(or `/app/work/fill.json`, picked up automatically).
 
 ## Focus: apparatus and technical-route figures
 - Technical route: stages left→right (or top→bottom) in the order of the methods section, joined by
@@ -68,7 +72,9 @@ grep -n -A15 "Table 2" /app/work/materials/*.layout.txt      # tables: rows stay
 `--find` prints each matching **sentence with its locator** (a look-up; step 3 copies quotes for you).
 PDF text flattens superscripts: `2.3 · 1019` means 2.3×10^19, `ng.mL−1` means ng/mL.
 
-## 3. Evidence table by pattern + spec [2 calls]
+## 3. Evidence table (built by extract) + spec [1–2 calls]
+`extract_materials.py` already wrote F1..F10 (relations, values, steps, setup, results, claims), each a verbatim
+sentence with its `[pN:M]` locator. Add only the entities/relations/values the figure still needs:
 ```bash
 python3 $SKILL/scripts/extract_materials.py --work /app/work --fact "entity::IL-10::IL-10"   "relation::upregulates IL-10::TNFα upregulates IL-10" "value::3\.3 ng::3.3 ng/mL" "condition::incubated|at 37"
 ```

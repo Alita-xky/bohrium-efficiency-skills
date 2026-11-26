@@ -21,6 +21,22 @@ import pptkit as K  # noqa: E402
 PY = sys.executable
 
 
+# default evidence rows (kind::regex::label::n): problem, idea, method, main results, cost, limits, claims - verbatim
+AUTO_FACTS = [
+    "problem::challeng|bottleneck|suffer|difficult|limited by|remains (an )?open|costly|expensive|问题|挑战|瓶颈|困难",
+    "method::we propose|we introduce|we present|in this (paper|work)|our (method|approach|model|framework)|本文提出|我们提出",
+    "method::consists? of|composed of|architecture|pipeline|framework|stage|module|模块|框架|流程",
+    "result::outperform|state[- ]of[- ]the[- ]art|surpass|achiev|improv|优于|提升|提高|达到",
+    "result::outperform|state[- ]of[- ]the[- ]art|surpass|achiev|improv|优于|提升|提高|达到::::2",
+    "result::\\d+(\\.\\d+)?\\s?(%|×|x faster|times)|(accuracy|BLEU|F1|AUC|error|RMSE|mAP|准确率|误差)\\D{0,30}\\d",
+    "result::\\d+(\\.\\d+)?\\s?(%|×|x faster|times)|(accuracy|BLEU|F1|AUC|error|RMSE|mAP|准确率|误差)\\D{0,30}\\d::::2",
+    "data::dataset|benchmark|corpus|samples|participants|trained on|数据集|样本",
+    "cost::GPUs?\\b|GPU hours|\\d+ (hours|days)|FLOPs|training (cost|time)|computational cost|runtime|latency|计算量|耗时|成本",
+    "limit::limitation|future work|fail|cannot|does not|restricted|only (applies|works)|局限|不足|未来工作",
+    "claim::we (show|demonstrate|find)|our contributions?|in (summary|conclusion)|conclude|结论|总之",
+]
+
+
 def sh(args, timeout=300):
     try:
         p = subprocess.run([PY] + args, capture_output=True, text=True, timeout=timeout)
@@ -156,6 +172,15 @@ def main():
                            "--out", os.path.join(a.work, "paper_map.json"), "--figdir", os.path.join(a.work, "figs")])
         res["paper_map"] = os.path.join(a.work, "paper_map.json") if rc == 0 else None
         res["paper_map_summary"] = out[-2500:] if rc == 0 else (out + err)[-800:]
+        fp = os.path.join(a.work, "facts.json")
+        if rc == 0 and not os.path.exists(fp):      # evidence table built automatically: the agent cites F-ids at once
+            rc3, out3, err3 = sh([os.path.join(HERE, "paper_map.py"), "fact"] + AUTO_FACTS +
+                                 ["--out", fp, "--materials", os.path.join(a.work, "materials"),
+                                  "--map", os.path.join(a.work, "paper_map.json"), "--width", "170", "--skip-used"])
+            rows = [l for l in out3.splitlines() if re.match(r"F\d+ ", l)]
+            res["facts_summary"] = ("\n".join(rows) + "\n%s: %d rows. Cite these ids in spec.json; a needed claim missing -> "
+                                    "paper_map.py fact \"kind::regex::label\"; a wrong row -> --drop Fn" % (fp, len(rows))) \
+                if rows else None
     if templates:
         args = [os.path.join(HERE, "deck_template.py"), "inspect", "--template", templates[0], "--out",
                 os.path.join(a.work, "template_report.json")]
@@ -198,7 +223,7 @@ def main():
         print("converted: %s" % json.dumps(converted, ensure_ascii=False))
     print("tools: %s" % json.dumps(tools))
     print("fonts: %s | build backend: %s" % (json.dumps({k: res['fonts'][k] for k in ('latin', 'ea')}, ensure_ascii=False), res["build_backend"]))
-    for k in ("paper_map_summary", "template_summary", "deck_summary"):
+    for k in ("paper_map_summary", "facts_summary", "template_summary", "deck_summary"):
         if res.get(k):
             print("---- " + k)
             print(res[k].strip())

@@ -81,9 +81,73 @@ def first_json(out):
     return {}
 
 
+def _jload(path):
+    try:
+        sys.path.insert(0, HERE)
+        from make_result import load_json_lenient
+        return load_json_lenient(path)
+    except Exception:
+        try:
+            return json.load(open(path, encoding="utf-8"))
+        except Exception:
+            return None
+
+
+def apply_defaults(a):
+    """One short command: every path the run needs is found in /app/work and /input, and the spec may carry the talk
+    plan ("plan"), extra contract answers ("fill") and uncertainty notes ("uncertainty") so the agent writes ONE file."""
+    notes = []
+    if not a.spec:
+        a.spec = [os.path.join(a.work, "spec.json")]
+    if not a.facts and os.path.exists(os.path.join(a.work, "facts.json")):
+        a.facts = os.path.join(a.work, "facts.json")
+        notes.append("--facts " + a.facts)
+    if not a.case and not a.draft and os.path.exists(os.path.join(a.input, "case.json")):
+        a.case = os.path.join(a.input, "case.json")
+        notes.append("--case " + a.case + " (records + result.json in this run)")
+    spec = _jload(a.spec[0]) if os.path.exists(a.spec[0]) else None
+    if isinstance(spec, dict):
+        plan = spec.get("plan") or spec.get("talk_plan")
+        if isinstance(plan, dict) and not a.plan:
+            a.plan = os.path.join(a.work, "talk_plan.json")
+            json.dump(plan, open(a.plan, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            notes.append("talk plan taken from spec.json -> " + a.plan)
+        fill = spec.get("fill")
+        if isinstance(fill, dict) and fill and not a.fill:
+            own_p = os.path.join(a.work, "fill.json")          # the agent's own answers file (if any) wins over spec "fill"
+            own = _jload(own_p) if os.path.exists(own_p) else None
+            fill = dict(fill, **own) if isinstance(own, dict) else fill
+            a.fill = os.path.join(a.work, "fill_from_spec.json")
+            json.dump(fill, open(a.fill, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            notes.append("contract answers taken from spec.json \"fill\" (%s)" % ", ".join(list(fill)[:8]))
+        unc = spec.get("uncertainty")
+        if isinstance(unc, list):
+            a.uncertainty += [u if isinstance(u, str) else json.dumps(u, ensure_ascii=False) for u in unc if u]
+    if not a.fill and not a.draft and os.path.exists(os.path.join(a.work, "fill.json")):
+        a.fill = os.path.join(a.work, "fill.json")
+        notes.append("--fill " + a.fill)
+    if not a.plan and a.mode == "talk" and os.path.exists(os.path.join(a.work, "talk_plan.json")):
+        a.plan = os.path.join(a.work, "talk_plan.json")
+        notes.append("--plan " + a.plan)
+    prep = _jload(os.path.join(a.work, "prepare.json")) or {}
+    if not a.duration_min and a.mode == "talk":
+        m = str(((prep.get("constraints") or {}).get("minutes") or {}).get("value") or "")
+        if m.strip().isdigit():
+            a.duration_min = m.strip()
+            notes.append("--duration-min %s (from task; pass the flag if the task says otherwise)" % a.duration_min)
+    if not a.template and a.mode != "edit" and prep.get("templates"):
+        t = prep["templates"][0]
+        if t and str(t).lower() != "none" and os.path.exists(t):
+            a.template = t
+            notes.append("--template %s (given in /input; the deck is built on it)" % t)
+    if a.template and str(a.template).lower() == "none":
+        a.template = None
+    return notes
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--spec", action="append", required=True)
+    ap.add_argument("--spec", action="append", default=None, help="default /app/work/spec.json")
     ap.add_argument("--facts", default=None)
     ap.add_argument("--outdir", default="/app/output")
     ap.add_argument("--name", default="deck")
@@ -108,6 +172,8 @@ def main():
     ap.add_argument("--draft", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     t_start = time.time()
+    for note in apply_defaults(a):
+        print("default: " + note)
     if not a.draft and os.path.isdir(a.work):
         stop_draft(a.work)
     os.makedirs(a.outdir, exist_ok=True)
@@ -177,7 +243,7 @@ def main():
         json.dump(dict(status=status, steps=summary, fails=fails, warns=warns), f, ensure_ascii=False, indent=1)
     if a.case:   # records + result.json in the same call: a complete, honest deliverable exists after one command
         fl = [os.path.join(HERE, "deck_fill.py"), "--case", a.case, "--outdir", a.outdir, "--work", a.work, "--input", a.input,
-              "--out", os.path.join(a.work, "fill.json"), "--deck", pptx, "--result"]
+              "--out", os.path.join(a.work, "fill_auto.json"), "--deck", pptx, "--result"]
         fl += sum([["--uncertainty", u] for u in a.uncertainty], []) + sum([["--set", x] for x in a.set], [])
         if a.status:
             fl += ["--status", a.status]
@@ -201,8 +267,24 @@ def main():
         n = drop_draft_leftovers(a.outdir, t_start)
         if n:
             print("safety draft replaced (%d draft-only files removed)" % n)
-    if fails:
-        print("NEXT: fix each FAIL in the spec, then run this same command again")
+    rounds = 1
+    if not a.draft:
+        rp = os.path.join(a.work, ".make_rounds")
+        try:
+            rounds = int(open(rp).read().strip() or 0) + 1
+        except Exception:
+            rounds = 1
+        try:
+            open(rp, "w").write(str(rounds))
+        except Exception:
+            pass
+    if fails and rounds < 3:
+        print("NEXT (round %d of max 3): fix each FAIL in spec.json (only those slides), then run this same command again" % rounds)
+    elif fails:
+        print("STOP: round %d - leave the remaining FAILs; they are recorded in check_report.json / result.json. Report and end." % rounds)
+    elif not a.draft:
+        print("DONE: no FAIL - the deliverable in %s is complete. Optionally look at contact_sheet.png once; then report and end "
+              "(do not rebuild for polish)." % a.outdir)
     b = budget_line(a.work)
     if b and not a.draft:
         print(b)

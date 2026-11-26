@@ -10,28 +10,44 @@ up to the slot**, every slide leaves **one key message** whose wording matches t
 likely questions have **answers with sources and backup slides**, and every claim traces to the materials.
 Deliver an editable `.pptx` (notes = speaker script), PDF/PNG renders, `talk_plan.json/.md`, evidence map, records.
 
-## Quick path (copy these; details in §1–§6) — budget 64 requests / 900 s, target ≈ 13–16 calls
+## Quick path — budget 64 requests / 900 s, target 5–8 calls (details in §1–§6)
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
-# 1 task (audience, minutes, goal) + contract + paper map                                         [1 call]
+# 1 task + contract + paper map + AUTOMATIC EVIDENCE TABLE (F1..F11 copied verbatim, [pN:M] + section)  [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
-#   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
-#   partial) built from the paper map, with a minimal talk plan; your step-4 run replaces it. Every make run prints [budget] (s used of 900):
-#   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
-# 2 facts.json by pattern - the script copies each sentence verbatim with [pN:M] + section, you never retype quotes  [1-2 calls]
-python3 $SKILL/scripts/paper_map.py fact "result::28\.4 BLEU::EN-DE BLEU 28.4" "method::we propose" "limit::limitation|future work" ...
-# 3 write talk_plan.json and spec.json in /app/work (templates/), citing the printed fact ids     [2 calls]
-# 4 ONE command: check (incl. time budget, Q&A) -> build -> render -> records -> result.json     [1 call]
-python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --facts /app/work/facts.json --mode talk \
-  --plan /app/work/talk_plan.json --duration-min <M> --case /input/case.json
-# 5 fix every FAIL, run step 4 again (max 2 rounds); open previews/contact_sheet.png once
+#   (also starts a SAFETY DRAFT: complete deck + result.json, status partial, within ~1 min; step 4 replaces it)
+# 2 ONLY if the talk needs a claim/number the table lacks (0-1 call; appends F12.. verbatim; wrong row -> --drop):
+python3 $SKILL/scripts/paper_map.py fact "result::28\.4 BLEU::EN-DE BLEU 28.4" "limit::restricted attention" --drop F9
+# 3 write ONE file /app/work/spec.json: "plan" + "slides" citing F-ids (+ optional "fill", "uncertainty")  [1 call]
+# 4 ONE command - spec, facts, plan, case, minutes and template are found automatically:                [1 call]
+python3 $SKILL/scripts/deck_make.py --mode talk        # add --max-slides N / --duration-min M if the task says so
+# 5 FAIL lines -> fix only those slides in spec.json, run step 4 again; DONE -> report and end   [0-2 calls]
 ```
-Step 4 always leaves a complete, honest deliverable (deck, PDF, previews, `talk_plan.md`, evidence map,
-`result.json` with `case_id` + every contract field). Extra answers: `/app/work/fill.json` → `--fill`.
-
+spec.json skeleton (one file; `plan` is the talk plan, §4; `notes` = the spoken script for `time_s` seconds):
+```json
+{"plan": {"goal": "what this audience can decide/do after the talk", "occasion": "...", "duration_min": 10,
+  "audience": {"who": "...", "knows": "...", "cares_about": "...", "likely_doubts": ["...", "..."]},
+  "sections": [{"name": "Problem", "minutes": 2.0, "slides": ["S1", "S2"], "key_message": "...", "evidence_strength": "strong"}],
+  "qa": [{"type": "controls", "question": "...", "answer_points": ["..."], "evidence": ["F5"], "backup_slide": "B1", "doubt": 0}],
+  "cuts": [{"content": "Table 3 rows C-E", "reason": "beyond a 10-min slot", "ref": "Table 3"}]},
+ "slides": [
+  {"id": "S1", "role": "title", "title": "...", "subtitle": ["authors · venue"], "sources": ["F11"], "notes": "...", "time_s": 30},
+  {"id": "S2", "role": "motivation", "title": "One claim sentence", "bullets": [{"text": "...", "src": ["F1"]}],
+   "sources": ["F1"], "key_message": "...", "notes": "...", "time_s": 60, "transition": "..."},
+  {"id": "S5", "role": "results", "title": "...", "figure": {"image": "/app/work/figs/tab2_p8.png", "ref": "Table 2",
+   "caption": "...", "src": ["F6"]}, "bullets": [{"text": "...", "src": ["F6"]}], "sources": ["F6"], "notes": "...", "time_s": 90},
+  {"id": "B1", "role": "backup", "title": "...", "table": {"ref": "Table 3", "caption": "...", "rows": [["..."]], "src": ["F7"]}}],
+ "fill": {"limitations": ["..."]}, "uncertainty": ["..."]}
+```
+**Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help` (every
+flag you need is above), never `cat` templates/examples (the skeleton below is enough), never rewrite a whole file
+to change one slide (edit those slides only), open at most one image (`previews/contact_sheet.png`). The make
+command prints `NEXT` (fix those FAILs, max 3 rounds), `STOP` or `DONE` — after `DONE`, report and end.
+Every run leaves a complete, honest deliverable (deck, PDF, previews, evidence map, records, `result.json` with
+`case_id`, every contract field and status), so a run cut short still delivers.
 
 ## 1. Prepare (1 call)
 ```bash
@@ -52,7 +68,9 @@ Collect what this audience needs: the problem in their terms, the idea, 2–3 re
 answers to their likely doubts. If the paper states one number twice with different values (abstract vs text),
 report both (Q&A + uncertainty) — never pick silently.
 
-## 3. `/app/work/facts.json` — the evidence table, built by pattern (1–2 calls)
+## 3. `/app/work/facts.json` — the evidence table (built by prepare; add rows by pattern, 0–1 call)
+`deck_prepare.py` already wrote F1..F11 (problem, idea, method, main results, data, cost, limits, claims), each a
+verbatim sentence with `[pN:M]` and section. Add only what the deck still needs:
 ```bash
 python3 $SKILL/scripts/paper_map.py fact "problem::long-range dependenc" "method::we propose::core idea" \
   "result::28\.4 BLEU::EN-DE BLEU 28.4" "result::Table 2" "cost::GPU|hours|days" "limit::limitation|future work|fail"
@@ -65,7 +83,7 @@ a wrong pick → `--drop F7 "result::…::label::2"` in the next call. Write one
 talk needs (typically 12–25), cite the printed ids in plan and spec. Re-running appends (ids continue, duplicates
 skipped). Only an item the materials do not contain is typed by hand: `{"id","kind","text","status":"not_in_materials"}`.
 
-## 4. `/app/work/talk_plan.json` + `/app/work/spec.json` (2 calls)
+## 4. Plan + slides in ONE file `/app/work/spec.json` (`"plan"` key; a separate talk_plan.json also works) (1 call)
 Plan (template `$SKILL/templates/talk_plan_template.json`, method `references/talk_patterns.md`):
 - `goal` as a checkable outcome; `audience` {who, knows, cares_about, likely_doubts};
 - `sections` with minutes (sum = duration), slide ids, key message, `evidence_strength` strong|moderate|weak;
@@ -110,8 +128,8 @@ Run them by hand only to change answers: `--set field=value`, `--uncertainty "..
 (your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
 verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
-python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
-python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
+python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill_auto.json
+python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill_auto.json
 ```
 deck_fill copies `talk_plan.json` to the output, writes `version_record.json` and maps contract fields (talk
 plan, Q&A, timeline, deck, evidence map, render/version records, uncertainty, status); add unmapped ones with

@@ -1027,7 +1027,7 @@ def main():
         here = os.path.dirname(os.path.abspath(__file__))
         os.makedirs(a.work, exist_ok=True)
         cmd = [sys.executable, os.path.join(here, "deck_fill.py"), "--case", a.case, "--outdir", a.outdir, "--work", a.work,
-               "--input", a.input, "--out", os.path.join(a.work, "fill.json"), "--deck", os.path.join(a.outdir, a.name + ".pptx"),
+               "--input", a.input, "--out", os.path.join(a.work, "fill_auto.json"), "--deck", os.path.join(a.outdir, a.name + ".pptx"),
                "--result"] + sum([["--uncertainty", u] for u in a.uncertainty], []) + (["--fill", a.fill] if a.fill else [])
         p = subprocess.run(cmd, capture_output=True, text=True)
         for line in (p.stdout + p.stderr).splitlines():

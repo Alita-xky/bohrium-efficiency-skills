@@ -9,29 +9,32 @@ Goal: a deck that **truly uses the given template** (every slide on a template l
 placeholders, theme fonts and colours, footers and slide numbers from its placeholders), whose **content is
 unchanged and traceable**, with **per-slide deviation records before and after**, delivered as `.pptx` + PDF/PNG.
 
-## Quick path (copy these; details in §1–§5) — budget 64 requests / 900 s, target ≈ 10–14 calls
+## Quick path — budget 64 requests / 900 s, target 5–8 calls (details in §1–§5)
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
-# 1 task + contract + template anatomy + starting deck (+ paper map)                              [1 call]
+# 1 task + contract + template anatomy + starting deck (+ paper map and AUTOMATIC EVIDENCE TABLE F1..)  [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work --gallery
-#   prepare also starts a SAFETY DRAFT: within ~1 min /app/output holds a complete deck + result.json (status
-#   partial) built from the given draft deck moved into the template (or the paper map); your step-4 run replaces it. Every make run prints [budget] (s used of 900):
-#   past 60 % fix FAILs only and finish, past 80 % stop - the deliverable on disk is final.
-# 2 "before" record of the starting deck                                                          [1 call]
+#   (also starts a SAFETY DRAFT: the given deck moved into the template, status partial; step 3 replaces it)
+# 2 "before" record + starting deck -> spec (content kept), in one call                                  [1 call]
 python3 $SKILL/scripts/deck_template.py audit --pptx /input/<deck>.pptx --template /input/<template> --out /app/output/compliance_before.json
-# 3 starting deck -> spec (content kept)                                                          [1 call]
 python3 $SKILL/scripts/deck_template.py to_spec --pptx /input/<deck>.pptx --out /app/work/spec.json
-# 4 ONE command: build on the template -> render -> audit -> preservation -> records -> result.json [1 call]
-python3 $SKILL/scripts/deck_make.py --spec /app/work/spec.json --template /input/<template> --mode template \
-  --preserve-from /input/<deck>.pptx --case /input/case.json
-# 5 fix every FAIL, run step 4 again (max 2 rounds); open previews/contact_sheet.png once
+# 3 ONE command: build on the template -> render -> audit -> preservation -> records -> result.json      [1 call]
+python3 $SKILL/scripts/deck_make.py --template /input/<template> --mode template --preserve-from /input/<deck>.pptx
+# 4 FAIL lines -> fix only those slides in spec.json (or add "fill"/"uncertainty" keys), run step 3 again;
+#   DONE -> report and end                                                                       [0-2 calls]
 ```
-Step 4 always leaves a complete, honest deliverable (deck on the template, PDF, previews, `compliance.json`
-before/after, `preserve.json`, `result.json` with every contract field). No starting deck → §3 route A.
+No starting deck → §3 route A (spec from the paper, citing the F-ids). Extra contract answers: a `"fill"` object
+in spec.json keyed by contract field; open issues: `"uncertainty": [...]`.
 
+**Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help` (every
+flag you need is above), never `cat` templates/examples (the skeleton below is enough), never rewrite a whole file
+to change one slide (edit those slides only), open at most one image (`previews/contact_sheet.png`). The make
+command prints `NEXT` (fix those FAILs, max 3 rounds), `STOP` or `DONE` — after `DONE`, report and end.
+Every run leaves a complete, honest deliverable (deck, PDF, previews, evidence map, records, `result.json` with
+`case_id`, every contract field and status), so a run cut short still delivers.
 
 ## 1. Prepare (1 call) — template anatomy + starting deck + paper map
 ```bash
@@ -91,8 +94,8 @@ Run them by hand only to change answers: `--set field=value`, `--uncertainty "..
 (your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
 verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
-python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
-python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
+python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill_auto.json
+python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill_auto.json
 ```
 Contract fields about template/format/compliance/layout mapping get compliance before/after, rates, fix log,
 layouts used, `slide_layout_map` (output slide → source slide → template layout) and preservation status; others get the deck, evidence map (auto-matched to the paper for carried content), render and

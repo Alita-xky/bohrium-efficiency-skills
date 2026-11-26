@@ -9,26 +9,26 @@ Goal: the requested changes — **and only those** — applied to the given deck
 reason, source and before/after**, every version **kept and reversible**, numbers **checked against the paper**,
 the template intact, and real renders of the result.
 
-## Quick path (copy these; details in §1–§6) — budget 64 requests / 900 s, target ≈ 8–12 calls
+## Quick path — budget 64 requests / 900 s, target 5–8 calls (details in §1–§6)
 ```bash
 SKILL=$(dirname "$(find /skills /app -name SKILL.md -path '*weekly-skill*' 2>/dev/null | head -1)")
 [ -f "$SKILL/scripts/deck_build.py" ] || SKILL=$(dirname "$(dirname "$(find / -name deck_build.py -path '*scripts*' 2>/dev/null | head -1)")")
 mkdir -p /app/work /app/output
-# 1 task (the numbered instructions) + contract + deck inventory + paper map                      [1 call]
+# 1 task (the numbered instructions) + contract + deck inventory + paper map (+ AUTOMATIC EVIDENCE TABLE) [1 call]
 cat /input/task.md 2>/dev/null | head -150; cat /input/case.json | head -c 5000
 python3 $SKILL/scripts/deck_prepare.py --input /input --work /app/work
-#   step 4 prints [budget] (s used of 900): past 60 % fix only ops_errors/FAILs and finish, past 80 % stop.
-# 2 values the instructions need, with locators: python3 $SKILL/scripts/paper_map.py find "..."   [1-3 calls]
-#   (new content that must cite the paper: paper_map.py fact "kind::regex[::label]" writes facts.json rows verbatim)
-# 3 write /app/work/ops.json: one op per instruction, addressed by slide + shape, with reason/src [1 call]
+# 2 ONLY values the table lacks, with locators: paper_map.py find "..." / fact "kind::regex::label"     [0-1 call]
+# 3 write /app/work/ops.json: one op per instruction, addressed by slide + shape, with reason/src     [1 call]
 # 4 ONE command: snapshot v0 -> apply -> render -> diff -> evidence check -> audit -> result.json [1 call]
 python3 $SKILL/scripts/deck_edit.py round --pptx /input/<deck>.pptx --ops /app/work/ops.json --outdir /app/output \
   --materials /app/work/materials/*.txt /input/*.csv --note "instructions 1-6" --case /input/case.json
-# 5 more instructions or a fix: ops2.json, round --pptx /app/output/deck.pptx ... (v2); roll back with versions/
+# 5 ops_errors/FAIL or an instruction left: ops2.json, round --pptx /app/output/deck.pptx ... (v2); max 2 more
 ```
 Step 4 always leaves a complete, honest deliverable (edited deck, PDF, previews, `edit_log.json`, versions,
 `slide_diff`, `result.json` with every contract field). Unaddressed slides stay byte-identical.
-
+**Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help`, never
+rewrite a whole file to change one op, open at most one image (`previews/contact_sheet.png`); when every
+instruction is applied and the round reports no FAIL, report and end.
 
 ## 1. Prepare (1 call)
 ```bash
@@ -84,8 +84,8 @@ Run them by hand only to change answers: `--set field=value`, `--uncertainty "..
 (your values win) on deck_fill, then make_result. `result.json` also carries `verification` (check/render/template
 verdicts), `inputs` (sha256) and `reproduce`.
 ```bash
-python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill.json
-python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill.json
+python3 $SKILL/scripts/deck_fill.py --case /input/case.json --outdir /app/output --work /app/work --out /app/work/fill_auto.json
+python3 $SKILL/scripts/make_result.py --case /input/case.json --outdir /app/output --fill /app/work/fill_auto.json
 ```
 Change-log / version / diff fields get `edit_log.json`, `versions/versions.json` (with rollback commands),
 `slide_diff.*`; others get the deck, renders, evidence map, version_record.json. State in `--uncertainty` any

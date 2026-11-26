@@ -789,6 +789,7 @@ def section_of(loc, sections):
 def main_fact(a):
     """Append evidence rows to facts.json from search patterns: the script copies the sentence verbatim with its
     [pN:M] locator and section, so the agent never retypes quotes. SPEC = "kind::regex[::short label[::n-th match]]"."""
+    a.specs = [x for x in a.specs if x.strip().lower() != "fact"]          # tolerate "fact fact ..." typos
     files = sorted(f for f in os.listdir(a.materials) if f.endswith(".txt") and f not in ("task.md.txt", "case.json.txt"))
     sents = []
     for fn in files:
@@ -835,13 +836,21 @@ def main_fact(a):
 
         def rank(x):                     # body text of the section that fits the kind first; references/footnotes last
             role = section_of(x[1], sections)[1]
-            return (bool(BIB_RE.search(x[2])) or role in ("references", "front", "other"), bool(FOOT_RE.search(x[2])),
+            ws = x[2].split()
+            numeric = sum(bool(re.fullmatch(r"[-+±]?\d+([.,]\d+)?%?", t)) for t in ws) > 0.35 * max(1, len(ws))  # table dumps
+            return (bool(BIB_RE.search(x[2])) or role in ("references", "front", "other"), numeric, bool(FOOT_RE.search(x[2])),
                     len(x[2].split()) < 8, bool(pref) and role not in pref)      # headings/short captions after sentences
         body = sorted(hits, key=rank)
         if len(body) < nth:
             print("-- %s::%s  (no match%s) - try another wording, or add a row with \"status\":\"not_in_materials\""
                   % (kind, pat, "" if not body else "; only %d" % len(body)))
             continue
+        if getattr(a, "skip_used", False):          # automatic table: never two rows from one sentence
+            used = [(r.get("source", {}).get("loc"), (r.get("source", {}).get("quote") or "")[:40]) for r in rows]
+            body = [x for x in body if not any(l == x[1] and q and q in x[2] for l, q in used)]
+            nth = 1
+            if not body:
+                continue
         fn, loc, s = body[nth - 1]
         w = s.split()
         if len(w) > a.words:                                              # quote window around the match
@@ -923,6 +932,7 @@ def main():
         ap.add_argument("cmd")
         ap.add_argument("specs", nargs="*", help='"kind::regex[::short label[::n-th match]]"')
         ap.add_argument("--drop", default="", help="comma-separated fact ids to remove first (e.g. F3,F7: wrong matches)")
+        ap.add_argument("--skip-used", action="store_true", help=argparse.SUPPRESS)
         ap.add_argument("--out", default="/app/work/facts.json")
         ap.add_argument("--materials", default="/app/work/materials")
         ap.add_argument("--map", default="/app/work/paper_map.json")
