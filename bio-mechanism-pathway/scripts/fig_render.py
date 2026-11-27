@@ -921,6 +921,94 @@ def load_series(el, spec_dir):
     return dict(cats=cats, series=series, origin=origin, numeric_x=numeric_x)
 
 
+# ---- colour-vision safety (v1.14) -------------------------------------------------------------
+# Machado et al. 2009 simulation matrices (severity 1.0) in linear RGB; difference = CIE76 dE in Lab.
+_CVD_M = {
+    "protan": ((0.152286, 1.052583, -0.204868), (0.114503, 0.786281, 0.099216), (-0.003882, -0.048116, 1.051998)),
+    "deutan": ((0.367322, 0.860646, -0.227968), (0.280085, 0.672501, 0.047413), (-0.011820, 0.042940, 0.968881)),
+    "tritan": ((1.255528, -0.076749, -0.178779), (-0.078411, 0.930809, 0.147602), (0.004733, 0.691367, 0.303900)),
+}
+# default arrow colours by meaning (only when the spec gives none): inhibition stands out in vermillion,
+# which stays distinct from the dark default for every colour-vision type; shape still carries the kind
+KIND_COLOR = {"inhibits": "#D55E00"}
+
+
+def _hex_rgb(c):
+    try:
+        from matplotlib.colors import to_rgb
+        return to_rgb(c)
+    except Exception:
+        return None
+
+
+def _lin(v):
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+
+def _lab(rgb_lin):
+    r, g, b = rgb_lin
+    X = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    Y = (0.2126 * r + 0.7152 * g + 0.0722 * b)
+    Z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    fx, fy, fz = f(X), f(Y), f(Z)
+    return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+
+
+def cvd_views(c):
+    """Lab colour of `c` for normal vision and the three simulated dichromacies."""
+    rgb = _hex_rgb(c)
+    if rgb is None:
+        return None
+    lin = [_lin(v) for v in rgb]
+    out = {"normal": _lab(lin)}
+    for k, M in _CVD_M.items():
+        sim = [min(1.0, max(0.0, sum(M[i][j] * lin[j] for j in range(3)))) for i in range(3)]
+        out[k] = _lab(sim)
+    return out
+
+
+def cvd_confusable(colors, min_normal=15.0, max_sim=10.0):
+    """Pairs that look different (dE >= min_normal) but merge (dE < max_sim) for some colour-vision type."""
+    views = [cvd_views(c) for c in colors]
+    bad = []
+    for i in range(len(colors)):
+        for j in range(i + 1, len(colors)):
+            if not views[i] or not views[j] or str(colors[i]).lower() == str(colors[j]).lower():
+                continue
+            d = {k: math.dist(views[i][k], views[j][k]) for k in views[i]}
+            if d["normal"] >= min_normal:
+                hit = [k for k in _CVD_M if d[k] < max_sim]
+                if hit:
+                    bad.append(dict(a=colors[i], b=colors[j], types=hit, dE_normal=round(d["normal"], 1),
+                                    dE_min=round(min(d[k] for k in hit), 1)))
+    return bad
+
+
+def cvd_safe_colors(colors):
+    """Keep the first colour of every confusable pair, swap the later one for the first Okabe-Ito colour
+    that is distinct from all colours kept so far for every vision type. Returns (colors, swaps)."""
+    kept, swaps = [], []
+    for i, c in enumerate(colors):
+        if not cvd_confusable(kept + [c]) or not _hex_rgb(c):
+            kept.append(c)
+            continue
+        others = [cvd_views(o) for o in kept + list(colors[i + 1:]) if cvd_views(o)]
+        for alt in PALETTE:
+            if alt.lower() in [str(k).lower() for k in kept]:
+                continue
+            va = cvd_views(alt)
+            if any(math.dist(va["normal"], o["normal"]) < 20 for o in others):
+                continue   # would look like another series for everyone
+            if not cvd_confusable(kept + [alt]):
+                swaps.append(dict(old=c, new=alt))
+                kept.append(alt)
+                break
+        else:
+            kept.append(c)
+    return kept, swaps
+
+
 def draw_chart(fig, el, b, base, adj):
     import textwrap
     x, y = b.mpl_xy()
@@ -942,6 +1030,14 @@ def draw_chart(fig, el, b, base, adj):
     cax.set_gid(el["id"])
     colors = el.get("colors") or PALETTE
     series, cats = s["series"], s["cats"]
+    cvd_fix = None
+    if el.get("colors") and len(series) > 1 and el.get("cvd_fix", True):
+        used = [colors[i % len(colors)] for i in range(len(series))]
+        fixed, swaps = cvd_safe_colors(used)
+        if swaps:   # series colours that merge for colour-blind readers -> Okabe-Ito replacements
+            cvd_fix = dict(series=[sr.get("name") for sr in series], swaps=swaps,
+                           pairs=cvd_confusable(used))
+            colors = fixed
     multi = len(series) > 1
     highlight = set(map(str, el.get("highlight", [])))
     n_missing, missing_where = 0, []
@@ -1096,7 +1192,7 @@ def draw_chart(fig, el, b, base, adj):
     cax.tick_params(labelsize=fs * 0.9)
     for sp in ("top", "right"):
         cax.spines[sp].set_visible(False)
-    return cax, dict(data_origin=s["origin"], n_points=sum(len(sr["y"]) for sr in series), n_series=len(series),
+    return cax, dict(cvd_fix=cvd_fix, data_origin=s["origin"], n_points=sum(len(sr["y"]) for sr in series), n_series=len(series),
                      n_missing=n_missing, missing=missing_where[:30], horiz=(kind == "barh"), glyphs=glyphs,
                      numeric_x=s["numeric_x"], cats=list(cats), chart_kind=kind,
                      series_key=[(sr["label"], str(colors[gi % len(colors)])) for gi, sr in enumerate(series)] if multi else None)
@@ -1986,7 +2082,8 @@ def draw(spec, spec_dir, adj):
             registry[ar["id"]] = dict(kind="arrow", error=f"endpoint missing: {ar['from']} -> {ar['to']}")
             continue
         st = ARROW_KINDS.get(ar.get("kind", "activates"), ARROW_KINDS["activates"])
-        col = ar.get("color", "#333333")
+        col = ar.get("color") or (KIND_COLOR.get(ar.get("kind", "activates"), "#333333")
+                                  if spec.get("canvas", {}).get("kind_colors", True) else "#333333")
         pA = a.get("anchor_out") or a.get("anchor") or a["box"].center()
         pB = bb.get("anchor_in") or bb.get("anchor") or bb["box"].center()
         if a["kind"] == "panel" or bb["kind"] == "panel":
@@ -2550,6 +2647,27 @@ def main():
             auto[k] = v["auto"]
             if k in layer_map:
                 layer_map[k]["auto_routing"] = v["auto"]
+    # colour-vision check over what was drawn: chart series colours (after any swap) and arrow colours by kind
+    cvd = dict(checked=[], confusable=[], chart_swaps={})
+    try:
+        kind_cols = {}
+        for k, v in registry.items():
+            if v.get("kind") == "chart" and v.get("cvd_fix"):
+                cvd["chart_swaps"][k] = v["cvd_fix"]["swaps"]
+            if v.get("kind") == "arrow" and v.get("color"):
+                kind_cols.setdefault(v.get("arrow_kind"), v["color"])
+        cols = sorted(set(kind_cols.values()))
+        cvd["checked"] = ["arrow colours: " + ", ".join("%s=%s" % (k, c) for k, c in sorted(kind_cols.items(), key=lambda x: str(x[0])))] if kind_cols else []
+        if len(cols) > 1:
+            cvd["confusable"] = cvd_confusable(cols)
+        for b_ in cvd["confusable"]:
+            issues.append(dict(level="warn", check="cvd_confusable", colors=[b_["a"], b_["b"]], types=b_["types"],
+                               hint="these arrow colours merge for colour-blind readers; the arrow kind is still told apart by its head and line style"))
+        for k, sw in cvd["chart_swaps"].items():
+            issues.append(dict(level="info", check="cvd_palette_fixed", id=k, swaps=sw,
+                               hint='series colours that merge for colour-blind readers were replaced (set "cvd_fix": false on the chart to keep them)'))
+    except Exception as e:
+        cvd["error"] = repr(e)[:200]
     with open(os.path.join(args.outdir, "layer_map.json"), "w", encoding="utf-8") as f:
         json.dump(layer_map, f, ensure_ascii=False, indent=1)
 
@@ -2561,7 +2679,7 @@ def main():
                   rotated_ticks={k: v["rotation"] for k, v in adj.items() if "rotation" in v},
                   auto_routing=auto, issues=issues, n_elements=len(layer_map), canvas=spec.get("canvas", {}),
                   glyph_audit=dict(charts=g_summary, map=os.path.join(args.outdir, "glyph_map.json")) if g_rows else None,
-                  journal_preset=preset_note, auto_tidy=registry.get("__tidy__", {}).get("fixes") or None)
+                  journal_preset=preset_note, colour_vision=cvd, auto_tidy=registry.get("__tidy__", {}).get("fixes") or None)
     with open(os.path.join(args.outdir, "render_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     print(json.dumps(dict(status=report["status"], fails=len(fails), warns=len(warns),

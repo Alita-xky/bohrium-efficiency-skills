@@ -635,6 +635,11 @@ def main():
                          render_layout=dict(status=rr.get("status"), fails=render_fail,
                                             n_warn=sum(1 for i in rr.get("issues", []) if i.get("level") == "warn"),
                                             report=os.path.join(od, "render_report.json")) if rr else None,
+                         colour_vision=dict(chart_series_swapped=(rr.get("colour_vision") or {}).get("chart_swaps") or {},
+                                            confusable_arrow_colours=(rr.get("colour_vision") or {}).get("confusable") or [],
+                                            how="Machado 2009 protan/deutan/tritan simulation, CIE76 dE; colours that "
+                                                "look different but merge (dE<10) are flagged, chart series swapped to Okabe-Ito"
+                                            ) if rr.get("colour_vision") else None,
                          edit_verification=dict(applied=(steps.get("edit") or {}).get("applied"),
                                                 not_applied_or_unverified=(steps.get("edit") or {}).get("not_applied_or_unverified"),
                                                 unchanged_check=(el or {}).get("unchanged_check")) if edit else None,
