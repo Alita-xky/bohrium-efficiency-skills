@@ -453,6 +453,68 @@ def selection_ledger(pm, slides, plan):
     return rows
 
 
+# ---- evidence strength per slide (v1.14) --------------------------------------------------------
+HEDGE_RE = re.compile(r"\b(may|might|could|suggests?|suggesting|suggested|possibl[ey]|potential(?:ly)?|likely|appears? to|"
+                      r"seems? to|preliminary|hypothes[ie][sz]e[sd]?|speculat\w*|we believe|tentative(?:ly)?)\b|"
+                      r"可能|或许|初步|提示|推测|似乎|有望|尚需|有待", re.I)
+STRONG_RE = re.compile(r"\b(prove[sn]?|proof|conclusive(?:ly)?|always|never|guarantee[sd]?|definitive(?:ly)?|"
+                       r"universal(?:ly)?|first[- ]ever|state[- ]of[- ]the[- ]art|best|outperforms? all|"
+                       r"significant(?:ly)?|dramatic(?:ally)?|breakthrough|solves?)\b|证明|证实|首次|显著|必然|普遍|最优|"
+                       r"全面(?:超越|优于)|突破|彻底|解决了", re.I)
+STAT_RE = re.compile(r"\bp\s*[<=≤]\s*0?\.\d|\bCI\b|confidence interval|±|\bSD\b|\bSEM\b|t-test|ANOVA|"
+                     r"standard (?:deviation|error)|置信区间|统计学?(?:上)?显著|标准差", re.I)
+STRENGTH_ROLES = {"motivation", "problem", "background", "method", "approach", "results", "result", "analysis",
+                  "evaluation", "evidence", "experiment", "discussion", "conclusion", "takeaway", "summary", "contribution"}
+STRENGTH_ZH = {"strong": "强", "moderate": "中", "tentative": "弱"}
+
+
+def evidence_strength(sl, rows, num_rows):
+    """How strongly the slide's own sources support it, and wording that claims more than they say.
+    strong   = verbatim quote with a number found in the paper (result) or a data figure/table on the slide
+    moderate = verbatim quotes, no number, not hedged
+    tentative = every quote is hedged (may/suggest/可能/初步...), or no verified quote at all"""
+    quotes = [str(x.get("quote") or "") for r in rows for x in r["sources"] if x.get("quote")]
+    verified = [q for r in rows for x in r["sources"] for q in [str(x.get("quote") or "")]
+                if q and x.get("quote_found") not in (False, None)]
+    data_vis = [v for k, v in K.spec_visuals(sl) if k in ("chart", "table") or
+                (k == "figure" and v.get("kind") not in ("schematic", "photo", "diagram", "logo"))]
+    num_found = any(n.get("found_at") and not all(str(w).startswith(META_FILES) for w in n["found_at"]) for n in num_rows)
+    q_num = any(re.search(r"\d", q) for q in verified)
+    hedged = [q for q in verified if HEDGE_RE.search(q)]
+    why = []
+    if not verified:
+        level = "tentative"
+        why.append("no verified verbatim quote" if not quotes else "quote not found verbatim in the materials")
+    elif len(hedged) == len(verified):
+        level = "tentative"
+        why.append("the source itself hedges: '%s'" % HEDGE_RE.search(hedged[0]).group(0))
+    elif (q_num and num_found) or data_vis:
+        level = "strong"
+        why.append("quantitative source" if q_num and num_found else "")
+        if data_vis:
+            why.append("data shown: " + ", ".join(str(v.get("ref") or k) for k, v in K.spec_visuals(sl)
+                                                    if v in data_vis)[:80])
+    else:
+        level = "moderate"
+        why.append("verbatim qualitative statement")
+    # wording on the slide that says more than the sources
+    own = " ".join(str(x) for x in [sl.get("title", ""), sl.get("key_message", "")] + list(sl.get("bullets") or [])
+                   if isinstance(x, str))
+    src_blob = " ".join(quotes).lower()
+    over = []
+    for m in STRONG_RE.finditer(own):
+        w = m.group(0)
+        if w.lower() in src_blob:
+            continue   # the paper's own word
+        if re.match(r"significant|显著", w, re.I) and STAT_RE.search(" ".join(quotes)):
+            continue   # backed by a reported statistic
+        if level == "strong" and not re.match(r"significant|显著|prove|证明|证实|always|never|universal|普遍|必然", w, re.I):
+            continue
+        over.append(w)
+    return dict(level=level, label_zh=STRENGTH_ZH[level], why="; ".join(x for x in why if x),
+                hedges_in_source=[HEDGE_RE.search(q).group(0) for q in hedged][:3], overclaim_words=sorted(set(over)))
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "scale":
         return scale_main(sys.argv[2:])
@@ -702,8 +764,21 @@ def main():
                 elif isinstance(x, dict):
                     srcs.append(dict(x, fact=None, quote_found=x.get("auto") or x.get("quote_found"), loc_ok=True))
             rows.append(dict(item=what, text=t, sources=srcs))
+        strength = None
+        if role in STRENGTH_ROLES or (not role and rows):
+            try:
+                strength = evidence_strength(sl, rows, num_rows)
+                if strength["overclaim_words"]:
+                    add("warn", "overclaim", "slide says %s but its sources %s (evidence %s): use the paper's own wording%s, "
+                        "or cite the statistic/figure that backs it" % (
+                            ", ".join("'%s'" % w for w in strength["overclaim_words"]),
+                            "hedge ('%s')" % "', '".join(strength["hedges_in_source"]) if strength["hedges_in_source"]
+                            else "do not use that word", strength["level"],
+                            " (e.g. '%s')" % strength["hedges_in_source"][0] if strength["hedges_in_source"] else ""), i)
+            except Exception as e:   # never let the strength label break the audit
+                strength = dict(level=None, error=repr(e)[:120])
         slide_issues = [x for x in issues if x["slide"] == i]
-        emap.append(dict(slide=i, id=sid, role=role, title=title, items=rows, numbers=num_rows,
+        emap.append(dict(slide=i, id=sid, role=role, title=title, items=rows, numbers=num_rows, evidence_strength=strength,
                          visuals=[dict(type=k, ref=v.get("ref"), page=v.get("page"), kind=v.get("kind"),
                                        file=v.get("image") or v.get("pdf") or v.get("csv")) for k, v in K.spec_visuals(sl)],
                          status="ok" if not any(x["level"] == "fail" for x in slide_issues) else "needs_fix",
@@ -832,6 +907,16 @@ def main():
                facts_not_in_materials=[k for k, s in fact_status.items() if s.get("not_in_materials")],
                numbers_checked=sum(len(e["numbers"]) for e in emap), n_fail=len(fails), n_warn=len(issues) - len(fails),
                issues=issues, timeline=timeline or None)
+    st_rows = [dict(slide=e["slide"], title=e["title"][:60], level=(e.get("evidence_strength") or {}).get("level"),
+                    why=(e.get("evidence_strength") or {}).get("why"),
+                    overclaim=(e.get("evidence_strength") or {}).get("overclaim_words") or [])
+               for e in emap if (e.get("evidence_strength") or {}).get("level")]
+    rep["evidence_strength"] = dict(rule="strong = verbatim quantitative quote found in the paper or a data figure/table on the "
+                                         "slide; moderate = verbatim qualitative quote; tentative = the source hedges or no "
+                                         "verified quote. Slide wording stronger than its source (prove/significant/first/"
+                                         "证明/显著/首次 ...) is flagged as overclaim.",
+                                    counts={k: sum(1 for r in st_rows if r["level"] == k) for k in ("strong", "moderate", "tentative")},
+                                    overclaims=sum(1 for r in st_rows if r["overclaim"]), slides=st_rows)
     if a.mode == "talk":
         rep.update(speech_fit=dict(total=speech_total, slides=speech_fit, rate="4 CJK chars/s, 2.3 English words/s"),
                    doubt_coverage=doubt_rows, selection_ledger=ledger,
@@ -858,6 +943,11 @@ def main():
     for e in emap:
         L.append("## Slide %d (%s, %s): %s" % (e["slide"], e["id"], e["role"] or "-", e["title"]))
         L.append("")
+        es = e.get("evidence_strength") or {}
+        if es.get("level"):
+            L.append("Evidence strength: **%s** (%s)%s" % (es["level"], es.get("why") or "-",
+                     ("; wording stronger than the source: %s" % ", ".join(es["overclaim_words"])) if es.get("overclaim_words") else ""))
+            L.append("")
         L.append("| item | slide text | source | quote (verbatim) | check |")
         L.append("|---|---|---|---|---|")
         for r in e["items"]:

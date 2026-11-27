@@ -222,6 +222,12 @@ def main():
             what="页级金标准 / page-level gold standard: for every slide its claim, each statement's verbatim source quote "
                  "with [page:paragraph] locator, every number with where it was found and the paper's Fig./Table numbers; "
                  "re-check any deck against it with deck_check.py --pptx")
+        cr_es = (jl("check_report.json") or {}).get("evidence_strength")
+        if cr_es:
+            verification["evidence_strength"] = dict(
+                counts=cr_es.get("counts"), overclaims=cr_es.get("overclaims"), rule=cr_es.get("rule"),
+                slides=[dict(slide=r["slide"], level=r["level"], overclaim=r.get("overclaim") or None) for r in cr_es.get("slides", [])],
+                where="per slide in evidence_map.md/.json and as a tag on the Evidence line of the speaker notes")
     ts = jl("type_scale.json")
     if ts:
         verification["type_scale"] = dict(file=os.path.join(a.outdir, "type_scale.json"), title_pt=(ts.get("title") or {}).get("size_pt"),

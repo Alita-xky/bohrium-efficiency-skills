@@ -24,10 +24,10 @@ KIND_TO_LAYOUT = {"title": "title", "section": "section", "bullets": "content", 
                   "figure": "title_only", "figures": "title_only", "chart": "title_only", "table": "title_only",
                   "blank": "blank", "cards": "title_only", "bignumber": "title_only", "statement": "title_only",
                   "quote": "title_only", "agenda": "title_only"}
-LABELS = {"en": dict(source="Source: ", time="Time", transition="Transition", key="Key message", evidence="Evidence",
+LABELS = {"en": dict(source="Source: ", time="Time", transition="Transition", key="Key message", evidence="Evidence", strength="evidence strength",
                      ifasked="If asked", missing="Figure not available", qa="Prepared Q&A (talk_plan.json)",
                      backup="backup"),
-          "zh": dict(source="来源：", time="时长", transition="过渡", key="核心信息", evidence="证据", ifasked="若被追问",
+          "zh": dict(source="来源：", time="时长", transition="过渡", key="核心信息", evidence="证据", strength="证据强度", ifasked="若被追问",
                      missing="图像不可用", qa="问答预案（talk_plan.json）", backup="备用页")}
 
 
@@ -148,8 +148,16 @@ def compose_notes(sl, lab, refs):
         parts.append("%s: ~%d:%02d" % (lab["time"], t // 60, t % 60))
     for qa in sl.get("if_asked") or []:
         parts.append("%s: %s" % (lab["ifasked"], qa))
+    es = sl.get("_strength") or {}
+    lvl = es.get("level")
+    tag = ""
+    if lvl:
+        word = (es.get("label_zh") or lvl) if lab.get("strength") == "证据强度" else lvl
+        tag = " [%s: %s]" % (lab.get("strength", "evidence strength"), word)
     if refs:
-        parts.append("%s: %s" % (lab["evidence"], "; ".join(refs)))
+        parts.append("%s: %s%s" % (lab["evidence"], "; ".join(refs), tag))
+    elif tag:
+        parts.append(tag.strip(" []"))
     return "\n".join(parts)
 
 
@@ -1662,6 +1670,15 @@ def main():
     tinfo.update(fonts=th.get("fonts"), colors=th.get("colors"),
                  layouts=[dict(index=l["gindex"], name=l["name"], kinds=l["kinds"]) for l in cat["layouts"]],
                  slide_size_in=[K.to_in(cat["slide_w"]), K.to_in(cat["slide_h"])])
+    # evidence strength per slide from deck_check (evidence_map.json next to the deck) -> one tag in the notes
+    try:
+        em = load_json(os.path.join(outdir, "evidence_map.json"))
+        st = {e.get("id"): e.get("evidence_strength") for e in em.get("slides", []) if e.get("evidence_strength")}
+        for k, sl_ in enumerate(spec.get("slides", []), 1):
+            if isinstance(sl_, dict) and st.get(sl_.get("id", "S%d" % k)):
+                sl_["_strength"] = st[sl_.get("id", "S%d" % k)]
+    except Exception:
+        pass
     ctx = make_ctx(cat, spec, outdir, generated=not tpl_in)
     lang = ctx.lang
     plan = load_json(a.plan) if a.plan and os.path.exists(a.plan) else (spec.get("plan") or {})
