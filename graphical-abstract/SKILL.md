@@ -30,7 +30,7 @@ python3 $SKILL/scripts/ga_make.py --mode graphical_abstract --name graphical_abs
 ```
 **Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help` (every
 flag you need is above), never rewrite the whole spec to fix one element, open at most one image (the PNG).
-ga_make prints `NEXT` (fix those FAILs, max 3 rounds), `POLISH` (once: fix the listed items a reader sees, run the command one more time, then end), `STOP` or `DONE` — after `DONE`, report and end.
+ga_make writes `figure_legend.md` + `REVIEW.md` next to the figure and prints `NEXT` (fix those FAILs, max 3 rounds), `POLISH` (once: fix the listed items a reader sees, run the command one more time, then end), `STOP` or `DONE` — after `DONE`, report and end.
 **Edit task** (a figure source, e.g. an .svg, is given and must be changed): step 1, then
 `svg_edit.py inventory` → `/app/work/ops.json` → `ga_make.py --edit-svg <given.svg> --ops /app/work/ops.json
 --name graphical_abstract_edited` (§4b). Step 4 always writes a complete deliverable (`result.json` with `case_id`, every
