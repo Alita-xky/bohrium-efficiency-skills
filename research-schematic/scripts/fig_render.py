@@ -1009,6 +1009,39 @@ def cvd_safe_colors(colors):
     return kept, swaps
 
 
+ERR_STATED_RE = re.compile(r"(?<![a-z])(sd|s\.d\.|sem|s\.e\.m\.|se|s\.e\.|ci|std|iqr|standard (deviation|error)|confidence|"
+                           r"error bars?|range|min.?max)(?![a-z])|±|标准差|标准误|置信|误差", re.I)
+
+
+def errbar_kind(cols):
+    """What the error column holds, read from its name only (sd / sem / ci); None when the name does not say."""
+    n = " ".join(str(c) for c in cols).lower()
+    if re.search(r"(^|[^a-z])(sd|std|stdev|stddev|standard_deviation)([^a-z]|$)", n):
+        return "SD"
+    if re.search(r"(^|[^a-z])(sem|se|stderr|std_err|standard_error)([^a-z]|$)", n):
+        return "SEM"
+    if re.search(r"(^|[^a-z])(ci|conf|confidence)", n):
+        return ("95% CI" if "95" in n else "CI")
+    return None
+
+
+def errbar_note(el):
+    """A chart with error bars must say what they are. When neither the title nor the caption/note/axis label says it,
+    append it to the chart title from the error column's name (SD / SEM / CI), or name the column when its name does
+    not tell (and report the type as not stated). "errbar_note": false on the chart turns this off."""
+    d = el.get("data", {}) or {}
+    cols = [c for c in (d.get("err") if isinstance(d.get("err"), list) else [d.get("err")]) if c]
+    if not cols or el.get("errbar_note") is False:
+        return None
+    said = " ".join(str(el.get(k) or "") for k in ("title", "caption", "note", "ylabel", "y_label", "legend_title"))
+    if ERR_STATED_RE.search(said):
+        return dict(columns=cols, type="stated in the chart text", added=None)
+    k = errbar_kind(cols)
+    add = ("error bars: %s" % k) if k else ("error bars: column %s" % ", ".join(map(str, cols[:2])))
+    el["title"] = ("%s (%s)" % (el["title"], add)) if el.get("title") else add[0].upper() + add[1:]
+    return dict(columns=cols, type=k or "not stated in the data (column name only)", added=add)
+
+
 def draw_chart(fig, el, b, base, adj):
     import textwrap
     x, y = b.mpl_xy()
@@ -1018,6 +1051,7 @@ def draw_chart(fig, el, b, base, adj):
     fs = el.get("size", max(base * 0.8, 0.72 * float(el.get("_canvas_w", 0) or 0))) * adj.get("fscale", 1.0)
     # the chart's box holds its title and legend too: reserve their height inside the box, never above it
     fig_w, fig_h = fig.get_figwidth(), fig.get_figheight()
+    errnote = errbar_note(el)
     title_lines = []
     if el.get("title"):
         per_line = max(12, int(b.w * fig_w * 72 / (fs * 1.12 * 0.56)))
@@ -1192,7 +1226,7 @@ def draw_chart(fig, el, b, base, adj):
     cax.tick_params(labelsize=fs * 0.9)
     for sp in ("top", "right"):
         cax.spines[sp].set_visible(False)
-    return cax, dict(cvd_fix=cvd_fix, data_origin=s["origin"], n_points=sum(len(sr["y"]) for sr in series), n_series=len(series),
+    return cax, dict(errbar_note=errnote, cvd_fix=cvd_fix, data_origin=s["origin"], n_points=sum(len(sr["y"]) for sr in series), n_series=len(series),
                      n_missing=n_missing, missing=missing_where[:30], horiz=(kind == "barh"), glyphs=glyphs,
                      numeric_x=s["numeric_x"], cats=list(cats), chart_kind=kind,
                      series_key=[(sr["label"], str(colors[gi % len(colors)])) for gi, sr in enumerate(series)] if multi else None)
@@ -2663,6 +2697,14 @@ def main():
         for b_ in cvd["confusable"]:
             issues.append(dict(level="warn", check="cvd_confusable", colors=[b_["a"], b_["b"]], types=b_["types"],
                                hint="these arrow colours merge for colour-blind readers; the arrow kind is still told apart by its head and line style"))
+        for k, v in registry.items():
+            en = v.get("errbar_note") if v.get("kind") == "chart" else None
+            if en and en.get("added"):
+                issues.append(dict(level="info" if not en["type"].startswith("not stated") else "warn",
+                                   check="errbar_note", id=k, added=en["added"], columns=en["columns"],
+                                   hint="the chart did not say what its error bars are; added to its title"
+                                        + ("" if not en["type"].startswith("not stated") else
+                                           " - the column name does not tell SD/SEM/CI: state it from the paper or list it in uncertainty")))
         for k, sw in cvd["chart_swaps"].items():
             issues.append(dict(level="info", check="cvd_palette_fixed", id=k, swaps=sw,
                                hint='series colours that merge for colour-blind readers were replaced (set "cvd_fix": false on the chart to keep them)'))

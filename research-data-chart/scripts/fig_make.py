@@ -265,6 +265,30 @@ def rubric_coverage(mode, lm, spec, cr, rr, data_map, glyph, exports, edit):
 BUDGET_S = 900
 
 
+POLISH_CHECKS = ("arrows_cross", "arrow_through_entity", "arrow_through_text", "label_overlap", "chart_out_of_canvas",
+                 "text_overflow", "overlap", "cvd_confusable")
+
+
+def polish_items(rr):
+    """Layout warnings a reader of the figure would notice (render_report.json), as short phrases."""
+    out = []
+    for i in (rr or {}).get("issues", []):
+        c = i.get("check", "")
+        if i.get("level") != "warn" or not any(c == k or c.startswith(k) for k in POLISH_CHECKS):
+            continue
+        what = i.get("id") or ",".join(map(str, (i.get("ids") or i.get("arrows") or i.get("colors") or [])[:3]))
+        hit = i.get("entities") or i.get("texts") or i.get("with") or ""
+        out.append(("%s %s%s" % (c, what, (" x " + ",".join(map(str, hit[:3]))) if isinstance(hit, list) and hit else "")).strip())
+    return out
+
+
+def used_s(work):
+    try:
+        return time.time() - float(open(os.path.join(work, ".t0")).read().strip())
+    except Exception:
+        return 0.0
+
+
 def budget_line(work):
     """Seconds since extract_materials started (the run's clock) and what to do with the rest of the budget."""
     try:
@@ -774,6 +798,12 @@ def main():
         print("NEXT (round %d of max 3): fix each FAIL in spec.json (see SKILL.md table), then run this same command again" % rounds)
     elif fails:
         print("STOP: round %d - leave the remaining FAILs; result.json records them as uncertainty. Report and end." % rounds)
+    elif not a.draft and rounds == 1 and polish_items(rr) and used_s(wd) < 0.55 * BUDGET_S:
+        # one polish round on what a reader of the figure sees (crossings, labels on lines/boxes, cut-off charts);
+        # the deliverable above is already complete, so this round can only improve it
+        print("POLISH (once): the figure is complete, but a reader sees: %s. Fix these in spec.json (move or reorder an "
+              "entity, \"layout\":\"auto\" on the panel, \"label_pos\" or a shorter arrow label, a larger panel) and run "
+              "this same command ONE more time; then report and end whatever it prints." % "; ".join(polish_items(rr)[:6]))
     elif not a.draft:
         print("DONE: no FAIL - the deliverable in %s is complete. Optionally look at the PNG once; then report and end "
               "(do not re-render for polish)." % od)

@@ -1,12 +1,12 @@
 # Measured gain (SYNTHETIC example, mode `graphical_abstract`)
 
-Generated 2026-11-27 12:25 by `python3 scripts/gain_check.py --mode graphical_abstract --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
+Generated 2026-11-27 12:42 by `python3 scripts/gain_check.py --mode graphical_abstract --out <dir>` on the shipped synthetic example (`examples/minimal`). It is **not** an official case result and **not** the platform's baseline-agent comparison; it measures what the pipeline adds to a general plotting library on identical input. Python 3.14.7.
 
 ## 1. Same input, same content: deliverable
 
 | measured on the output | A: matplotlib defaults | B: this Skill |
 |---|---|---|
-| editable `<text>` elements in the SVG | 0 | 43 |
+| editable `<text>` elements in the SVG | 0 | 44 |
 | spec elements addressable by id in the SVG | 0/17 | 17/17 |
 | named layers | 0 | 6 |
 | PDF fonts embedded as TrueType/OpenType | 0 | 3 |
@@ -16,7 +16,7 @@ Generated 2026-11-27 12:25 by `python3 scripts/gain_check.py --mode graphical_ab
 | contract fields filled | 0/6 | 6/6 |
 | re-run byte-identical (SVG, PDF, PNG) | False | True |
 | automatic checks | none | spec vs materials (ga_check.py), layout/export (ga_render.py), re-run hash, contract |
-| wall time (s) | 0.7 | 2.0 |
+| wall time (s) | 1.0 | 2.4 |
 
 ## 2. One injected defect per run (same spec otherwise)
 
@@ -35,7 +35,7 @@ Flagged before delivery by B: **8/8**; A: 0 flagged (1 runs crashed without a de
 
 ## 3. Source-preserving edit (svg_edit.py on B's SVG)
 
-2 ops, 2 verified on the written file; untouched elements byte-identical: 113/113; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
+2 ops, 2 verified on the written file; untouched elements byte-identical: 114/114; unexpected changes: none. A has no element ids to address: an edit means re-running the drawing script.
 
 ## 4. output_contract shapes (fields filled automatically by ga_make.py)
 
