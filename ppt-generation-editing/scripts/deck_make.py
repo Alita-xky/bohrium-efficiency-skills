@@ -191,12 +191,89 @@ def apply_defaults(a):
     return notes
 
 
+def _speak_s(t):
+    t = str(t or "")
+    cjk = len(re.findall(r"[\u3400-\u9fff\uf900-\ufaff]", t))
+    words = len(re.findall(r"[A-Za-z0-9][A-Za-z0-9.%\-]*", re.sub(r"[\u3400-\u9fff\uf900-\ufaff]", " ", t)))
+    return cjk / 4.0 + words / 2.3
+
+
+def deck_notes(pptx):
+    """[(slide title, notes text)] in slide order, read from the saved .pptx itself (what the speaker will see)."""
+    import zipfile, posixpath
+    z = zipfile.ZipFile(pptx)
+    rels = lambda part: dict(re.findall(r'Id="([^"]+)"[^>]*Target="([^"]+)"', z.read(posixpath.join(posixpath.dirname(part), "_rels",
+                                                                                                      posixpath.basename(part) + ".rels")).decode("utf-8"))) \
+        if posixpath.join(posixpath.dirname(part), "_rels", posixpath.basename(part) + ".rels") in z.namelist() else {}
+    pres = z.read("ppt/presentation.xml").decode("utf-8")
+    prel = rels("ppt/presentation.xml")
+    out = []
+    for rid in re.findall(r'<p:sldId [^>]*r:id="([^"]+)"', pres):
+        sp = posixpath.normpath(posixpath.join("ppt", prel.get(rid, "")))
+        if sp not in z.namelist():
+            continue
+        sx = z.read(sp).decode("utf-8")
+        m = re.search(r'<p:ph type="(?:title|ctrTitle)"[^>]*/>.*?</p:sp>', sx, re.S)
+        title = " ".join(re.findall(r"<a:t>([^<]*)</a:t>", m.group(0))) if m else ""
+        note = ""
+        for tgt in rels(sp).values():
+            if "notesSlide" in tgt:
+                npth = posixpath.normpath(posixpath.join(posixpath.dirname(sp), tgt))
+                nx = z.read(npth).decode("utf-8")
+                for body in re.findall(r'<p:sp>(?:(?!</p:sp>).)*?<p:ph type="body"(?:(?!</p:sp>).)*</p:sp>', nx, re.S):
+                    note = "\n".join(" ".join(re.findall(r"<a:t>([^<]*)</a:t>", para)) for para in re.findall(r"<a:p>.*?</a:p>|<a:p/>", body, re.S))
+        import html
+        out.append((html.unescape(title).strip(), html.unescape(note).strip()))
+    return out
+
+
+def write_script(outdir, spec_path):
+    """speaker_script.md: the spoken text of every slide on a clock (start time, planned seconds, estimated speaking
+    seconds at ~140 wpm / 240 Chinese characters per minute), read back from deck.pptx so it is what the deck holds."""
+    pptx = os.path.join(outdir, "deck.pptx")
+    if not os.path.exists(pptx):
+        return
+    rows = deck_notes(pptx)
+    spec, sl = {}, []
+    for k, sp_ in enumerate(spec_path if isinstance(spec_path, list) else [spec_path]):
+        d = _jload(sp_) if sp_ and os.path.exists(sp_) else None
+        if isinstance(d, dict):
+            spec = spec or d
+            sl += [x for x in (d.get("slides") or []) if isinstance(x, dict)]
+    plan = spec.get("plan") or {}
+    dur = plan.get("duration_min") or spec.get("duration_min")
+    clock, R, over = 0.0, [], []
+    for i, (title, note) in enumerate(rows, 1):
+        sd = sl[i - 1] if i - 1 < len(sl) and len(sl) == len(rows) else {}
+        backup = str(sd.get("role") or "").lower() in ("backup", "appendix") or title.lower().startswith(("backup", "备用", "附录"))
+        sp = _speak_s(note)
+        ts = float(sd.get("time_s") or 0) or None
+        t = ts or sp
+        head = "## %d. %s" % (i, title or sd.get("title") or "(no title)")
+        if backup:
+            R += [head + "  _(backup: only if asked)_", ""]
+        else:
+            R += [head + "  `%d:%02d`" % (clock // 60, clock % 60), "",
+                  "_planned %s s, speaking ~%d s_" % (int(ts) if ts else "-", round(sp)) + (" **(longer than planned)**" if ts and sp > 1.4 * ts and sp - ts > 15 else ""), ""]
+            if ts and sp > 1.4 * ts and sp - ts > 15:
+                over.append(i)
+            clock += t
+        R += [note or "_(no speaker notes on this slide)_", ""]
+    H = ["# Speaker script", "", "Read back from `deck.pptx` speaker notes (generated). Clock = start time of each slide; "
+         "speaking time estimated at ~140 words/min (English) or ~240 characters/min (Chinese).", "",
+         "Total main-slide time: **%d:%02d**%s. Slides whose notes run long: %s." % (clock // 60, clock % 60,
+                                                                                    (" (budget %s min)" % dur) if dur else "", over or "none"), ""]
+    with open(os.path.join(outdir, "speaker_script.md"), "w", encoding="utf-8") as f:
+        f.write("\n".join(H + R) + "\n")
+
+
 OUT_FILES = [("deck.pptx", "editable deck (template masters/layouts kept; speaker notes on every slide)"),
              ("deck.pdf", "rendered export (fonts embedded) - what the audience sees"),
              ("previews", "one PNG per slide"), ("contact_sheet.png", "all slides at a glance"),
              ("talk_plan.md", "goal, audience, time per slide, story order"),
              ("slides_outline.md", "per slide: claim title, bullets, figure, notes"),
              ("evidence_map.md", "per slide: source file, page, section, verbatim quote, evidence strength"),
+             ("speaker_script.md", "spoken text of every slide on a clock (start time, planned vs speaking seconds)"),
              ("qa_rehearsal.md", "likely questions, timed answers, slide to jump to"),
              ("selection_ledger.json", "what was kept / cut from the paper and why"),
              ("check_report.json", "content audit: quotes, numbers, Fig./Table refs, density, order"),
@@ -363,6 +440,10 @@ def main():
                 print(line)
         if "RESULT" not in out and '"result"' not in out:
             print("FAIL result: deck_fill/make_result did not run: " + out[-600:])
+        try:
+            write_script(a.outdir, a.spec)
+        except Exception as e:  # never block the deliverable
+            print("WARN speaker script not written: %r" % (e,))
         try:
             write_review(a.outdir)
         except Exception as e:  # never block the deliverable

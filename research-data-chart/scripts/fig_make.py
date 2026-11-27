@@ -458,6 +458,10 @@ def write_review(od, a, spec, val, status, prov_rows, data_map, rr):
     else:
         R.append("3. Run `sh reproduce.sh`: the outputs are re-created byte-identically (see version_record.json).")
     cv = (rr or {}).get("colour_vision") or {}
+    at = (rr or {}).get("alt_text") or {}
+    if at.get("description"):
+        R += ["", "Alt text (embedded in the SVG title/metadata and the PDF Title/Subject, for screen readers and journal systems):", "",
+              "> " + at["description"]]
     if cv:
         R += ["", "Colour vision: checked with protan/deutan/tritan simulation; swapped chart series: %s; confusable arrow colours: %s."
               % (cv.get("chart_swaps") or "none", cv.get("confusable") or "none")]
@@ -763,7 +767,8 @@ def main():
                                              not_reported=glyph_binding["not_reported"],
                                              mismatches=[i.get("id") for i in rr.get("issues", []) if i.get("check") == "glyph_mismatch"][:20],
                                              map=glyph_binding["glyph_map_csv"]) if glyph_binding else None,
-                         export=dict(svg_text_elements=(sf or {}).get("text_elements"), png_pixels=png_px, pdf_fonts=pf),
+                         export=dict(svg_text_elements=(sf or {}).get("text_elements"), png_pixels=png_px, pdf_fonts=pf,
+                                     alt_text=((rr or {}).get("alt_text") or {}).get("description")),
                          reproducibility=rerun)
     val["inputs"] = dict(case=a.case, files=[dict(file=x["file"], sha256=x["sha256"]) for x in inputs][:40])
     val["figure"] = dict(svg=val["editable"]["svg"], pdf=val["exports"]["pdf"], png=val["exports"]["png"],

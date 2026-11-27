@@ -2521,6 +2521,55 @@ def png_size(path):
     return struct.unpack(">II", head[16:24])
 
 
+
+def alt_description(spec):
+    """Title, alt text and keywords written into the SVG (<title>, dc:description) and PDF (Title/Subject/Keywords): a screen
+    reader or a journal system can read what the figure shows without the picture. Built from the spec only."""
+    def txt(v):
+        if isinstance(v, dict):
+            v = v.get("text") or v.get("label") or ""
+        return " ".join(str(v or "").split())
+    labels, kinds, parts = {}, [], []
+    def walk(els):
+        for e in els or []:
+            if isinstance(e, dict):
+                if e.get("id") and (e.get("label") or e.get("text")):
+                    labels[e["id"]] = txt(e.get("label") or e.get("text"))
+                walk(e.get("elements"))
+    walk(spec.get("elements"))
+    for pn in spec.get("panels") or []:
+        if isinstance(pn, dict):
+            walk(pn.get("elements"))
+    title = txt(spec.get("title")) or "Figure"
+    for i, pn in enumerate([p for p in (spec.get("panels") or []) if isinstance(p, dict)][:8]):
+        names = [txt(e.get("label") or e.get("text")) for e in (pn.get("elements") or [])
+                 if isinstance(e, dict) and e.get("type") in ("entity", "icon") and (e.get("label") or e.get("text"))]
+        parts.append("Panel %s%s%s" % (chr(65 + i), (" (" + txt(pn.get("title")) + ")") if pn.get("title") else "",
+                                        (": " + ", ".join(names[:6])) if names else ""))
+    rel = []
+    for ar in spec.get("arrows") or []:
+        if isinstance(ar, dict):
+            k = str(ar.get("kind") or "activates")
+            kinds.append(k)
+            rel.append("%s %s %s" % (labels.get(ar.get("from"), ar.get("from")), k, labels.get(ar.get("to"), ar.get("to"))))
+    if rel:
+        parts.append("Relations: " + "; ".join(rel[:12]) + (" ..." if len(rel) > 12 else ""))
+    def charts(els):
+        for e in els or []:
+            if isinstance(e, dict):
+                if e.get("type") == "chart":
+                    d = e.get("data") or {}
+                    y = d.get("y"); y = ", ".join(y) if isinstance(y, list) else y
+                    parts.append("%s chart of %s by %s" % (e.get("kind", "bar"), txt(e.get("ylabel")) or y, txt(e.get("xlabel")) or d.get("x")))
+                charts(e.get("elements"))
+    charts(spec.get("elements"))
+    for pn in spec.get("panels") or []:
+        if isinstance(pn, dict):
+            charts(pn.get("elements"))
+    alt = (title + ". " + ". ".join(parts)).strip()
+    kw = ", ".join(sorted(set(kinds))[:8] + [l for l in list(labels.values())[:8] if len(l) < 40])
+    return title[:200], alt[:1500], kw[:300]
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--spec", required=True)
@@ -2589,6 +2638,7 @@ def main():
     elif not cjk_ok:
         issues.append(dict(level="fail", check="cjk_font_missing"))
     dpi = int(spec.get("canvas", {}).get("dpi", 300))
+    alt_title, alt_text, alt_kw = alt_description(spec)
     out = {}
     for ext in ("svg", "pdf", "png"):
         p = os.path.join(args.outdir, f"{args.name}.{ext}")
@@ -2596,7 +2646,9 @@ def main():
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 # no timestamps in the files: the same spec gives byte-identical SVG/PDF/PNG (re-run check)
-                meta = {"svg": {"Date": None}, "pdf": {"CreationDate": None, "ModDate": None}}.get(ext)
+                meta = {"svg": {"Date": None, "Title": alt_title, "Description": alt_text},
+                        "pdf": {"CreationDate": None, "ModDate": None, "Title": alt_title, "Subject": alt_text[:1000],
+                                "Keywords": alt_kw}}.get(ext)
                 fig.savefig(p, dpi=dpi if ext == "png" else None, facecolor=fig.get_facecolor(), metadata=meta)
             out[ext] = dict(path=p, bytes=os.path.getsize(p), sha256=sha256(p))
             if ext == "png":
@@ -2721,7 +2773,7 @@ def main():
                   rotated_ticks={k: v["rotation"] for k, v in adj.items() if "rotation" in v},
                   auto_routing=auto, issues=issues, n_elements=len(layer_map), canvas=spec.get("canvas", {}),
                   glyph_audit=dict(charts=g_summary, map=os.path.join(args.outdir, "glyph_map.json")) if g_rows else None,
-                  journal_preset=preset_note, colour_vision=cvd, auto_tidy=registry.get("__tidy__", {}).get("fixes") or None)
+                  journal_preset=preset_note, colour_vision=cvd, alt_text=dict(title=alt_title, description=alt_text, keywords=alt_kw, where="SVG <title> + metadata dc:description, PDF Title/Subject/Keywords"), auto_tidy=registry.get("__tidy__", {}).get("fixes") or None)
     with open(os.path.join(args.outdir, "render_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     print(json.dumps(dict(status=report["status"], fails=len(fails), warns=len(warns),
