@@ -49,7 +49,7 @@ budget line says; slides after S5 go into spec_part2.json as `{"slides": [...]}`
 **Budget rules** (each model call costs 15–30 s of the 900 s): never read `scripts/*.py` or run `--help` (every
 flag you need is above), never `cat` templates/examples (the skeleton below is enough), never rewrite a whole file
 to change one slide (edit those slides only), open at most one image (`previews/contact_sheet.png`). The make
-command prints `NEXT` (fix those FAILs, max 3 rounds), `STOP` or `DONE` — after `DONE`, report and end.
+command prints `NEXT` (fix those FAILs, max 3 rounds), `POLISH` (once: fix the listed items a reader sees, run the command one more time, then end), `STOP` or `DONE` — after `DONE`, report and end.
 Every run leaves a complete, honest deliverable (deck, PDF, previews, evidence map, records, `result.json` with
 `case_id`, every contract field and status), so a run cut short still delivers.
 

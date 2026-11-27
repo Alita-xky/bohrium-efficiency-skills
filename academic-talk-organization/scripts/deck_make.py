@@ -14,10 +14,54 @@ deck_template.py audit (compliance.json); with --case also deck_fill.py (version
 and make_result.py (result.json). The deck is always built - even when the check fails - so an honest
 partial deliverable exists early. Prints every FAIL in one list; fix them in the spec and run again.
 """
-import argparse, glob, json, os, signal, subprocess, sys, time
+import argparse, glob, json, os, re, signal, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUDGET_S = 900
+
+
+DECK_POLISH = ("overclaim", "claim_title", "notes_repeat", "thin_slide", "density", "duplicate_title", "time_budget",
+               "key_message", "transitions", "story_order", "fig_ref")
+
+
+VISUAL_RE = re.compile(r"below .*pt minimum|hard to read|shrink-on-overflow|shapes overlap|"
+                       r"content fills only|outside the slide|off the slide|overflow", re.I)
+
+
+def deck_polish_items(outdir, mode="paper"):
+    """What a reviewer of the deck would notice: layout problems from render_report.json (every mode: small text,
+    overflow, overlapping shapes, mostly empty slides) and, for paper/talk decks, wording/structure warnings from
+    check_report.json. Template/edit decks keep the source content, so only layout items count there."""
+    out = []
+    try:
+        rr = json.load(open(os.path.join(outdir, "render_report.json"), encoding="utf-8"))
+    except Exception:
+        rr = {}
+    for i in rr.get("issues", []):
+        msg = str(i.get("msg", ""))
+        m = re.search(r"content fills only (\d+)%", msg)
+        if m and int(m.group(1)) > 40:
+            continue   # a half-filled slide is fine; only clearly empty ones are worth a round
+        if i.get("level") == "warn" and i.get("slide") and VISUAL_RE.search(msg):
+            out.append("slide %s %s" % (i["slide"], str(i.get("msg", "")).split(":")[0][:70]))
+    if mode not in ("paper", "talk"):
+        return out
+    try:
+        rep = json.load(open(os.path.join(outdir, "check_report.json"), encoding="utf-8"))
+    except Exception:
+        return out
+    for i in rep.get("issues", []):
+        if i.get("level") == "warn" and i.get("check") in DECK_POLISH:
+            out.append(("slide %s %s" % (i.get("slide"), i.get("check")) if i.get("slide") else i.get("check"))
+                       + (" (%s)" % str(i.get("msg", ""))[:60] if i.get("check") == "overclaim" else ""))
+    return out
+
+
+def deck_used_s(work):
+    try:
+        return time.time() - float(open(os.path.join(work, ".t0")).read().strip())
+    except Exception:
+        return 0.0
 
 
 def budget_line(work):
@@ -284,6 +328,13 @@ def main():
         print("NEXT (round %d of max 3): fix each FAIL in spec.json (only those slides), then run this same command again" % rounds)
     elif fails:
         print("STOP: round %d - leave the remaining FAILs; they are recorded in check_report.json / result.json. Report and end." % rounds)
+    elif not a.draft and rounds == 1 and deck_polish_items(a.outdir, a.mode) and deck_used_s(a.work) < 0.55 * 900:
+        # one polish round on what the audience/reviewer sees; the deck above is already complete
+        print("POLISH (once): the deck is complete, but a reviewer sees: %s. Fix only these slides in spec.json "
+              "(claim as the title, the paper's own hedge instead of a stronger word, notes that add what is not on the slide, "
+              "split or fill thin/dense slides; layout: larger text or figure, shorter bullets, a two-column or card layout; "
+              "template/edit decks: change layout only, never the source wording) and run this same command ONE more time; then report and end whatever it prints."
+              % "; ".join(deck_polish_items(a.outdir, a.mode)[:6]))
     elif not a.draft:
         print("DONE: no FAIL - the deliverable in %s is complete. Optionally look at contact_sheet.png once; then report and end "
               "(do not rebuild for polish)." % a.outdir)
